@@ -3,5 +3,5 @@ build/
 __pycache__/
 .venv/
 cmd
-*.notgit.*
-gitignore/
+*.notgit
+notgit/

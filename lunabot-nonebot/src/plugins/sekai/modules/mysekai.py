@@ -2113,6 +2113,9 @@ async def msr_auto_push():
         try:
             # upload_times: list[int] = await request_gameapi(get_upload_time_url, json=uid_modes)
             upload_times: list[int] = await get_mysekai_upload_time()
+        except ApiError as e:
+            logger.debug(f"获取{region_name}Mysekai上传时间失败: {e.msg}")
+            continue 
         except Exception as e:
             logger.warning(f"获取{region_name}Mysekai上传时间失败: {get_exc_desc(e)}")
             continue
