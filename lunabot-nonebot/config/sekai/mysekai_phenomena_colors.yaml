@@ -1,0 +1,52 @@
+1:
+  ground: '#dcdbf1'
+  sky1: '#53b6fb'
+  sky2: '#008ef9'
+2:
+  ground: '#cdaba9'
+  sky1: '#ee8c5d'
+  sky2: '#d35e85'
+3:
+  ground: '#5c5da0'
+  sky1: '#050264'
+  sky2: '#0f0b9e'
+4:
+  ground: '#ffffff'
+  sky1: '#4aaff8'
+  sky2: '#0e4cc6'
+5:
+  ground: '#676ed6'
+  sky1: '#091776'
+  sky2: '#1a73dd'
+6:
+  ground: '#a9b3ff'
+  sky1: '#6b81c5'
+  sky2: '#a9b5df'
+7:
+  ground: '#7260be'
+  sky1: '#281c72'
+  sky2: '#040e48'
+8:
+  ground: '#4943b0'
+  sky1: '#070e71'
+  sky2: '#0d0767'
+9:
+  ground: '#887fce'
+  sky1: '#0c0d5f'
+  sky2: '#4126b9'
+10:
+  ground: '#cdeaff'
+  sky1: '#63d9ff'
+  sky2: '#b1f0ff'
+11:
+  ground: '#78a3dd'
+  sky1: '#525bc5'
+  sky2: '#104aaf'
+15:
+  ground: '#b79ff2'
+  sky1: '#7471e7'
+  sky2: '#c8a3cc'
+17:
+  ground: '#dcdbf1'
+  sky1: '#14caf2'
+  sky2: '#0769f9'

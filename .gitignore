@@ -4,4 +4,4 @@ __pycache__/
 .venv/
 cmd
 *.notgit.*
-gitignore
+gitignore/
