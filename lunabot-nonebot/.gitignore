@@ -293,5 +293,5 @@ logs/
 sandbox/
 debug/
 cache/
-gitignore/
+notgit/
 *.notgit

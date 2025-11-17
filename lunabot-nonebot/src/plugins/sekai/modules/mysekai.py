@@ -2103,6 +2103,9 @@ async def msr_auto_push():
         try:
              # await request_gameapi(update_msr_sub_url, json=uid_modes, method='PUT')
             await set_msr_sub()
+        except ApiError as e:
+            logger.debug(f"更新{region_name}Mysekai订阅信息失败: {e.msg}")
+            continue 
         except Exception as e:
             logger.warning(f"更新{region_name}Mysekai订阅信息失败: {get_exc_desc(e)}")
 
