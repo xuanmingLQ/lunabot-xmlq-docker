@@ -1,0 +1,5 @@
+# 忽略 Python 缓存文件和虚拟环境
+__pycache__/
+.venv/
+*.yaml
+*.md

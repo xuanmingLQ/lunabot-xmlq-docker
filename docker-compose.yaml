@@ -1,0 +1,98 @@
+version: "3"
+
+# 声明一个名为network的networks,subnet为network的子网地址,默认网关是172.8.0.1
+networks:
+  network:
+    ipam:
+      driver: default
+      config:
+        - subnet: '172.8.0.0/16'
+# 配置各个服务
+services:
+  # lunabot本体
+  nonebot:
+    # 从本地的dockerfile构建镜像
+    build:
+      context: ./lunabot-nonebot
+      dockerfile: ./Dockerfile
+    # 容器名称
+    container_name: lunabot-nonebot
+    restart: always
+    # 配置端口映射，本地的端口多加一位防止和本地的程序冲突
+    ports:
+      - '18383:8383'
+    # 配置容器在network中的ip地址
+    networks:
+      network:
+        ipv4_address: 172.8.0.11
+    # 配置挂载卷
+    volumes:
+      - ./data:/app/data # 必须和napcat、deck-recommend挂载到同一个位置
+      - ./lunabot-nonebot/config-docker:/app/config # 配置docker的config
+      - ./lunabot-nonebot/.env.docker:/app/.env # 配置docker的环境
+  
+  # 配置napcat 如果你本身就有了napcat，可以将那个napcat关掉
+  # 然后将volume中的/app/.config/QQ和/app/napcat/config挂载到原来那个napcat的位置上
+  napcat:
+    # 使用napcat官方镜像
+    image: mlikiowa/napcat-docker:latest
+    container_name: lunabot-napcat
+    restart: always
+    ports:
+      - '13000:3000'
+      - '13001:3001'
+      - '16099:6099'
+    networks:
+      network:
+        ipv4_address: 172.8.0.12
+    # 环境，不清楚这是什么，官方是这么写的
+    # 需要在docker compose命令前加上 NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) 
+    environment:
+      - NAPCAT_UID=${NAPCAT_UID}
+      - NAPCAT_GID=${NAPCAT_GID}
+    volumes:
+      - ./napcat/QQ:/app/.config/QQ
+      - ./napcat/config:/app/napcat/config
+      - ./data:/app/data # 必须和nonebot挂载到同一位置
+  
+  # 配置后端服务，建议将gameapi和assets的服务分开
+  # 可以使用haruki的开源项目
+  # 我这里这个服务只是单纯的转发，没有什么功能
+  # 所以就随便放一起了，且没有配置数据库
+  server:
+    build:
+      context: ./lunabot-server
+      dockerfile: ./Dockerfile
+    container_name: lunabot-server
+    restart: always
+    ports:
+      - '18888:8888'
+    # 如果你有配置数据库，在这里等待数据库启动完毕之后再启动，避免不必要的连接失败
+    # depends_on:
+    #   pgsql:
+    #     condition: service_healthy
+    #   redis:
+    #     condition: service_healthy
+    networks:
+      network:
+        ipv4_address: 172.8.0.13
+    
+  # 配置组卡服务
+  deck-recommend:
+    build: 
+      context: ./deck_recommender
+      dockerfile: ./Dockerfile
+    # image: deck-recommender:latest
+    container_name: deck-recommend
+    restart: always
+    ports:
+      - '15556:45556'
+    networks:
+      network:
+        ipv4_address: 172.8.0.14
+    volumes:
+      - ./data:/app/data # 必须和nonebot挂载到同一位置
+      - ./deck_recommender/config.docker.yaml:/app/config.yaml # 单独的配置config.yaml
+  # 如果你需要数据库，自行使用官方镜像
+  # pgsql:
+  # redis:
