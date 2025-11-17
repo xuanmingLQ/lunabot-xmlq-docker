@@ -24,10 +24,12 @@ Note: This project is for reference and learning purposes only, and is **not** a
 
 - NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose -p lunabot -f docker-compose.yaml up -d
 
-#### 3. Run the Bot
+#### 4. Setup Napcat
 
-- Start the project using nonebot2 cli command: `nb run`.
-
-- Send a message `@yourbot /enable` to enable the bot in the group.
+- Run docker logs lunabot-napcat
+- Seek WebUi Token
+- Open http://127.0.0.1:16099
+- Input your WebUi Token and Login your qq
+- Network -> New -> Websocket Client -> Set Url=ws://nonebot:8383/onebot/v11/ws -> Save
 
 
