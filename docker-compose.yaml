@@ -13,7 +13,7 @@ services:
   nonebot:
     # 从本地的dockerfile构建镜像
     build:
-      context: ./lunabot-nonebot
+      context: ./lunabot_nonebot
       dockerfile: ./Dockerfile
     # 容器名称
     container_name: lunabot-nonebot
@@ -27,9 +27,9 @@ services:
         ipv4_address: 172.8.0.11
     # 配置挂载卷
     volumes:
-      - ./data:/app/data # 必须和napcat、deck-recommend挂载到同一个位置
-      - ./lunabot-nonebot/config-docker:/app/config # 配置docker的config
-      - ./lunabot-nonebot/.env.docker:/app/.env # 配置docker的环境
+      - ./data:/app/lunabot_nonebot/data # 必须和napcat、deck-recommend挂载到同一个位置
+      - ./lunabot_nonebot/config_docker:/app/lunabot_nonebot/config # 配置docker的config
+      - ./lunabot_nonebot/.env.docker:/app/lunabot_nonebot/.env # 配置docker的环境
   
   # 配置napcat 如果你本身就有了napcat，可以将那个napcat关掉
   # 然后将volume中的/app/.config/QQ和/app/napcat/config挂载到原来那个napcat的位置上
@@ -53,7 +53,7 @@ services:
     volumes:
       - ./napcat/QQ:/app/.config/QQ
       - ./napcat/config:/app/napcat/config
-      - ./data:/app/data # 必须和nonebot挂载到同一位置
+      - ./data:/app/lunabot_nonebot/data # 必须和nonebot挂载到同一位置
   
   # 配置后端服务，建议将gameapi和assets的服务分开
   # 可以使用haruki的开源项目
@@ -61,7 +61,7 @@ services:
   # 所以就随便放一起了，且没有配置数据库
   server:
     build:
-      context: ./lunabot-server
+      context: ./lunabot_server
       dockerfile: ./Dockerfile
     container_name: lunabot-server
     restart: always
@@ -78,12 +78,12 @@ services:
         ipv4_address: 172.8.0.13
     
   # 配置组卡服务
-  deck-recommend:
+  deck-recommender:
     build: 
       context: ./deck_recommender
       dockerfile: ./Dockerfile
     # image: deck-recommender:latest
-    container_name: deck-recommend
+    container_name: deck-recommender
     restart: always
     ports:
       - '15556:45556'
@@ -91,8 +91,8 @@ services:
       network:
         ipv4_address: 172.8.0.14
     volumes:
-      - ./data:/app/data # 必须和nonebot挂载到同一位置
-      - ./deck_recommender/config.docker.yaml:/app/config.yaml # 单独的配置config.yaml
+      - ./data/sekai/deckrec:/app/deck_recommender/data/sekai/deckrec # 必须和nonebot挂载到同一位置
+      - ./deck_recommender/config.docker.yaml:/app/deck_recommender/config.yaml # 单独的配置config.yaml
   # 如果你需要数据库，自行使用官方镜像
   # pgsql:
   # redis:

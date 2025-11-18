@@ -1,4 +1,4 @@
 host: 0.0.0.0
 port: 45556
-data_dir: "/app/data/sekai/deckrec"
+data_dir: "/app/deck_recommender/data/sekai/deckrec"
 worker_num: 4

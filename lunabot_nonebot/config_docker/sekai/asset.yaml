@@ -1,0 +1,16 @@
+default_masterdata_update_check_timeout: 10    # 默认MasterData数据源检查更新超时时间（秒）
+default_masterdata_download_timeout: 30       # 默认MasterData下载超时时间（秒）
+default_rip_asset_download_timeout: 60         # 默认解包资源下载超时时间（秒）
+rip_img_cache_max_res: 256*256                # 解包资源图片缓存最大分辨率
+
+# 日服
+jp:
+  masterdata:
+    sources:
+      - name: "xxx"   # MaterData数据源名称
+  rip:  # 解包资源数据源
+    sources:
+      - name: "xxx" # 数据源名称，由于各家路径格式不同，程序内置了几个预设的名称对应的路径处理，详见 src/plugins/sekai/asset.py 中的 DEFAULT_URL_MAP_METHODS
+      - name: "xxx"
+        prefixes: # 指定该数据源仅用于特定前缀
+          - "music"

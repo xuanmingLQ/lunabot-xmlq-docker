@@ -1,0 +1,53 @@
+bot_name: "lunabot-xmlq"
+log_level: "INFO"
+superuser:
+  - 123456
+
+group_member_name_cache_expire_seconds: 60  # 群成员名称缓存过期时间（秒）
+
+msg_send:
+  rate_limit:
+    second: 10  # 每秒限制发送消息的数量
+    day: 4000   # 每天限制发送消息的数量
+  failed_mail_interval: 600  # 发送消息发送异常邮件的间隔（秒）
+
+  default_fold_threshold: 25            # 默认折叠行数阈值
+  default_fold_fallback_method: "none"  # 默认发送折叠消息失败时的回退方法
+  max_fold_msg_len: 4096                # 单层折叠消息长度限制 
+  max_fold_msg_segment_count: 4096 # 最大折叠消息段数
+  tmp_img_keep_minutes: 5  # 临时图片保存时间（分钟）
+
+font:
+  path: "utils/fonts/Microsoft YaHei.ttf"  # 中文字体路径
+  name: "Microsoft YaHei"     # Matplotlib库使用的中文字体名称
+
+default_cd: 2             # 默认指令处理冷却时间（秒）
+cd_verbose_interval: 30   # 间隔多少秒输出一次"当前正在冷却"提示
+
+exception_mail:   # 发送异常消息邮件的配置
+  host: "smtp.qq.com"          # 邮箱服务器地址
+  port: 587                    # 邮箱服务器端口
+  user: ""           # 邮箱发送者用户名
+  pass: ""                  # 邮箱密码
+  receivers:                   # 邮箱接收者列表
+    - 
+
+default_thread_pool_size: 8
+
+web_driver_num: 2
+
+safety_check:
+  secret_id: xxx
+  secret_key: xxx
+  endpoint: ims.tencentcloudapi.com
+
+
+
+plot:
+  debug: False
+  log_draw_time: False
+  canvas_size_limit: [4096, 4096]
+
+painter:
+  debug: False
+  process_num: 4
