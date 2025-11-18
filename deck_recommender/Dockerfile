@@ -8,7 +8,7 @@ COPY requirements.txt .
 
 # 安装 Python 依赖
 # 使用 --no-cache-dir 减少缓存大小
-RUN pip install -i https://mirrors.aliyun.com/pypi/simple --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 FROM python:3.13-slim-bookworm AS runtime
 
