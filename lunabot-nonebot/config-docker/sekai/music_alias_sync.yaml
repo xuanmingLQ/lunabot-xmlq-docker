@@ -1,7 +1,0 @@
-regions:
-  - "jp"
-sync_times:
-  - ["*/6", "0", "0"]
-
-sync_batch_interval: 1
-sync_batch_size: 8
