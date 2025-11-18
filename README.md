@@ -27,7 +27,7 @@ Note: This project is for reference and learning purposes only, and is **not** a
 #### 4. Setup Napcat
 
 - Run docker logs lunabot-napcat
-- Seek WebUi Token
+- Search WebUi Token
 - Open http://127.0.0.1:16099
 - Input your WebUi Token and Login your qq
 - Network -> New -> Websocket Client -> Set Url=ws://nonebot:8383/onebot/v11/ws -> Save
