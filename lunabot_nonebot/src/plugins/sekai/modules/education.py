@@ -560,7 +560,7 @@ async def compose_bonds_image(ctx: SekaiHandlerContext, qid: int, cid: int) -> I
 
 # 合成队长次数图片
 async def compose_leader_count_image(ctx: SekaiHandlerContext, qid: int) -> Image.Image:
-    profile, err_msg = await get_detailed_profile(ctx, qid, raise_exc=True)
+    profile, err_msg = await get_detailed_profile(ctx, qid, raise_exc=True, filter=['userCharacterMissionV2s', 'userCharacterMissionV2Statuses', 'userGamedata', 'userDecks', 'upload_time', 'userCards'])
 
     ucms = profile.get('userCharacterMissionV2s')
     ucm_ss = profile.get('userCharacterMissionV2Statuses')
