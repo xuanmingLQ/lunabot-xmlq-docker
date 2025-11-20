@@ -3,6 +3,7 @@ from PIL import Image, ImageFont, ImageDraw, ImageFilter, ImageChops
 from PIL.ImageFont import ImageFont as Font
 from dataclasses import dataclass, is_dataclass, fields
 import os
+import emoji.unicode_codes
 import numpy as np
 from copy import deepcopy
 import math
@@ -22,7 +23,7 @@ import io
 import colour
 
 from .config import *
-from .img_utils import mix_image_by_color, adjust_image_alpha_inplace
+from .img_utils import adjust_image_alpha_inplace
 from .process_pool import *
 from .data import get_data_path
 
@@ -167,7 +168,7 @@ BLUE = (0, 0, 255, 255)
 TRANSPARENT = (0, 0, 0, 0)
 SHADOW = (0, 0, 0, 150)
 
-ROUNDRECT_ANTIALIASING_TARGET_RADIUS = 16
+ROUNDRECT_ANTIALIASING_TARGET_RADIUS_CFG = global_config.item('painter.roundrect_aa_target_radius')
 
 FONT_DIR = get_data_path("utils/fonts/")
 DEFAULT_FONT = "SourceHanSansCN-Regular"
@@ -197,6 +198,7 @@ class FontCacheEntry:
 
 FONT_CACHE_MAX_NUM = 128
 font_cache: dict[str, FontCacheEntry] = {}
+font_std_size_cache: dict[Font, Size] = {}
 
 def crop_by_align(original_size, crop_size, align):
     w, h = original_size
@@ -276,15 +278,33 @@ def get_font(path: str, size: int) -> Font:
                 break
         if font is None:
             raise FileNotFoundError(f"Font file not found: {path}")
-        font_cache[key] = FontCacheEntry(font, datetime.now())
+        font_cache[key] = FontCacheEntry(
+            font=font, 
+            last_used=datetime.now(),
+        )
         # 清理过期的字体缓存
         while len(font_cache) > FONT_CACHE_MAX_NUM:
             oldest_key = min(font_cache, key=lambda k: font_cache[k].last_used)
-            del font_cache[oldest_key]
+            removed = font_cache.pop(oldest_key)
+            font_std_size_cache.pop(removed.font, None)
     return font_cache[key].font
 
+def get_font_std_size(font: Font) -> Size:
+    global font_std_size_cache
+    if font not in font_std_size_cache:
+        std_size = get_text_size(font, "哇")
+        font_std_size_cache[font] = std_size
+        return std_size
+    return font_std_size_cache[font]
+
+def has_emoji(text: str) -> bool:
+    for c in text:
+        if c in emoji.EMOJI_DATA:
+            return True
+    return False
+
 def get_text_size(font: Font, text: str) -> Size:
-    if emoji.emoji_count(text) > 0:
+    if has_emoji(text):
         return getsize_emoji(text, font=font)
     else:
         bbox = font.getbbox(text)
@@ -383,7 +403,7 @@ class Gradient:
         if mask:
             assert mask.size == size, "Mask size must match image size"
             if mask.mode == 'RGBA':
-                mask = mask.split()[3]
+                mask = mask.getchannel('A')
             else:
                 mask = mask.convert('L')
             img.putalpha(mask)
@@ -521,6 +541,7 @@ class Painter:
         self.h = self.size[1]
         self.region_stack = []
 
+
     def _text(
         self, 
         text: str, 
@@ -529,9 +550,8 @@ class Painter:
         fill: Color = BLACK,
         align: str = "left"
     ):
-        std_size = get_text_size(font, "哇")
-        has_emoji = emoji.emoji_count(text) > 0
-        if not has_emoji:
+        std_size = get_font_std_size(font)
+        if not has_emoji(text):
             draw = ImageDraw.Draw(self.img)
             text_offset = (0, -std_size[1])
             pos = (pos[0] - text_offset[0] + self.offset[0], pos[1] - text_offset[1] + self.offset[1])
@@ -542,10 +562,100 @@ class Painter:
                 pos = (pos[0] - text_offset[0] + self.offset[0], pos[1] - text_offset[1] + self.offset[1])
                 pilmoji.text(pos, text, font=font, fill=fill, align=align, emoji_position_offset=(0, -std_size[1]), anchor='ls')
         return self
+    
+    def _get_aa_roundrect(
+        self,
+        size: Size, 
+        fill: Color,
+        radius: int, 
+        stroke: Color=None, 
+        stroke_width: int=1,
+        corners = (True, True, True, True), 
+        margin: int | tuple[int, int, int, int] = 0,    # left, top, right, bottom
+    ) -> Image.Image:
+        width, height = size
+        if isinstance(margin, int):
+            margin = (margin, margin, margin, margin)
+        ml, mt, mr, mb = margin
+
+        width, height = width - 1, height - 1
+        radius = min(radius, width // 2, height // 2)
+        realsize = (width + ml + mr + 1, height + mt + mb + 1)
+
+        def getbox(x1, y1, x2, y2):
+            return (x1 + ml, y1 + mt, x2 + ml, y2 + mt)
+        def getpos(x, y):
+            return (x + ml, y + mt)
+
+        # 特殊情况：半径为0，直接绘制矩形
+        if radius <= 0:
+            img = Image.new('RGBA', realsize, (0, 0, 0, 0))
+            draw = ImageDraw.Draw(img)
+            draw.rectangle(getbox(0, 0, width, height), fill=fill, outline=stroke, width=stroke_width)
+            return img
+
+        img = Image.new('RGBA', realsize, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        # 绘制中心矩形区域
+        if fill:
+            draw.rectangle(getbox(radius, 0, width - radius, height), fill=fill)
+            draw.rectangle(getbox(0, radius, width, height - radius), fill=fill)
+
+        # 绘制四条直边的描边
+        if stroke and stroke_width > 0:
+            draw.rectangle(getbox(radius, 0, width - radius, stroke_width), fill=stroke) # 上
+            draw.rectangle(getbox(radius, height - stroke_width, width - radius, height), fill=stroke) # 下
+            draw.rectangle(getbox(0, radius, stroke_width, height - radius), fill=stroke) # 左
+            draw.rectangle(getbox(width - stroke_width, radius, width, height - radius), fill=stroke) # 右
+
+        # 抗锯齿的缩放比例
+        aa_scale = max(1, math.ceil(ROUNDRECT_ANTIALIASING_TARGET_RADIUS_CFG.get() / radius))
+        aa_radius = radius * aa_scale
+        aa_stroke_width = stroke_width * aa_scale
+
+        # 创建一个放大的、带抗锯齿的圆角模板 (左上角)，并缩小回原始大小
+        corner_aa = None
+        if any(corners):
+            corner_canvas = Image.new('RGBA', (aa_radius * 2, aa_radius * 2), (0, 0, 0, 0))
+            corner_draw = ImageDraw.Draw(corner_canvas)
+            corner_draw.rounded_rectangle(
+                (0, 0, aa_radius * 2, aa_radius * 2),
+                radius=aa_radius,
+                fill=fill,
+                outline=stroke,
+                width=aa_stroke_width,
+                corners=(True, True, True, True)
+            )
+            corner_canvas = corner_canvas.crop((0, 0, aa_radius, aa_radius))
+            corner_aa = corner_canvas.resize((radius + 1, radius + 1), Image.Resampling.BICUBIC)
+        
+        # 创建一个普通的直角模板 (不需要圆角的角落)
+        sharp_corner = None
+        if not all(corners):
+            sharp_corner = Image.new('RGBA', (radius + 1, radius + 1), (0, 0, 0, 0))
+            sharp_draw = ImageDraw.Draw(sharp_corner)
+            if fill:
+                sharp_draw.rectangle((0, 0, radius + 1, radius + 1), fill=fill)
+            if stroke and stroke_width > 0:
+                sharp_draw.rectangle((0, 0, radius + 1, stroke_width), fill=stroke) # 上
+                sharp_draw.rectangle((0, 0, stroke_width, radius + 1), fill=stroke) # 左
+
+        tl, tr, br, bl = corners
+        corner = corner_aa if tl else sharp_corner
+        img.paste(corner, getpos(0, 0))
+        corner = (corner_aa if tr else sharp_corner).transpose(Image.FLIP_LEFT_RIGHT)
+        img.paste(corner, getpos(width - radius, 0))
+        corner = (corner_aa if br else sharp_corner).transpose(Image.ROTATE_180)
+        img.paste(corner, getpos(width - radius, height - radius))
+        corner = (corner_aa if bl else sharp_corner).transpose(Image.FLIP_TOP_BOTTOM)
+        img.paste(corner, getpos(0, height - radius))
+        return img
+
 
     @staticmethod
     def _execute(operations: List[PainterOperation], img: Image.Image, size: Tuple[int, int], image_dict: Dict[str, Image.Image]) -> Image.Image:
-        t = datetime.now()
+        start_time = datetime.now()
         debug_print(f"Sub process enter memory usage: {get_memo_usage()} MB")
         if img is None:
             img = Image.new('RGBA', size, TRANSPARENT)
@@ -561,9 +671,11 @@ class Painter:
             for key, value in get_type_hints(func).items():
                 if value == Painter:
                     kwargs[key] = p
+            t = datetime.now()
             func(*op.args, **kwargs)
-            # debug_print(f"Method {op.name} executed, current memory usage: {get_memo_usage()} MB")
-        debug_print(f"Sub process use time: {datetime.now() - t}")
+            if global_config.get('painter.log_operation', False):
+                debug_print(f"Method {op.func} executed, mem: {get_memo_usage()} MB, time: {datetime.now() - t}")
+        debug_print(f"Sub process use time: {datetime.now() - start_time}")
         return p.img
 
     async def get(self, cache_key: str=None) -> Image.Image:
@@ -592,7 +704,6 @@ class Painter:
                             print(f"Failed to remove cache file {p}: {e}")
                     debug_print(f"Cache mismatch, removed {len(paths)} files")
 
-        global _painter_pool
         debug_print(f"Main process memory usage: {get_memo_usage()} MB")
 
         # 收集所有图片对象到字典中
@@ -604,12 +715,15 @@ class Painter:
             total_img_size += img.size[0] * img.size[1] * 4
         debug_print(f"image_dict len: {len(image_dict)}, total size: {total_img_size//1024//1024} MB")
 
-        # for op in self.operations:
-        #     debug_print(f"Operation: {op.name}, args: {op.args}, offset: {op.offset}, size: {op.size}")
-
         # 执行绘图操作
         t = datetime.now()
-        self.img = await _painter_pool.submit(Painter._execute, self.operations, self.img, self.size, image_dict)
+
+        if PAINTER_PROCESS_NUM > 0:
+            global _painter_pool
+            self.img = await _painter_pool.submit(Painter._execute, self.operations, self.img, self.size, image_dict)
+        else:
+            self.img = await asyncio.to_thread(Painter._execute, self.operations, self.img, self.size, image_dict)
+
         self.operations = []
         debug_print(f"Painter executed in {datetime.now() - t}")
 
@@ -901,7 +1015,7 @@ class Painter:
         def adjust_overlay_alpha_by_color(overlay: Image.Image, color: Color):
             if len(color) < 4 or color[3] == 255:
                 return
-            overlay_alpha = overlay.split()[3]
+            overlay_alpha = overlay.getchannel('A')
             overlay_alpha = Image.eval(overlay_alpha, lambda a: int(a * color[3] / 255))
             overlay.putalpha(overlay_alpha)
 
@@ -1022,7 +1136,7 @@ class Painter:
         overlay = Image.new('RGBA', sub_img.size, (0, 0, 0, 0))
         overlay.paste(sub_img, (0, 0))
         if alpha is not None:
-            overlay_alpha = overlay.split()[3]
+            overlay_alpha = overlay.getchannel('A')
             overlay_alpha = Image.eval(overlay_alpha, lambda a: int(a * alpha))
             overlay.putalpha(overlay_alpha)
 
@@ -1102,19 +1216,12 @@ class Painter:
 
         pos = (pos[0] + self.offset[0], pos[1] + self.offset[1])
 
-        aa_scale = max(radius, ROUNDRECT_ANTIALIASING_TARGET_RADIUS) / radius if radius > 0 else 1.0
-        aa_size = (int(size[0] * aa_scale), int(size[1] * aa_scale))
-        aa_radius = radius * aa_size[0] / size[0] if size[0] > 0 else radius
+        overlay = self._get_aa_roundrect(size, fill, radius, stroke, stroke_width, corners)
 
-        overlay_size = (aa_size[0] + 1, aa_size[1] + 1)
-        overlay = Image.new('RGBA', overlay_size, (0, 0, 0, 0))
-        draw = ImageDraw.Draw(overlay)
-        draw.rounded_rectangle((0, 0, aa_size[0], aa_size[1]), fill=fill, radius=aa_radius, outline=stroke, width=stroke_width, corners=corners)
         if gradient:
-            gradient_img = gradient.get_img(overlay_size, overlay)
+            gradient_img = gradient.get_img(overlay.size, overlay)
             overlay = gradient_img
 
-        overlay = overlay.resize((size[0], size[1]), Image.Resampling.BICUBIC)
         self.img.alpha_composite(overlay, (pos[0], pos[1]))
         
         return self
@@ -1163,7 +1270,7 @@ class Painter:
         fill: Color,
         radius: int, 
         blur: float=4,
-        shaodow_width: int=6,
+        shadow_width: int=6,
         shadow_alpha: float=0.3,
         corners = (True, True, True, True),
         edge_strength: float=0.6,
@@ -1171,16 +1278,10 @@ class Painter:
         if min(size) <= 0:
             return self
 
-        sw = shaodow_width
+        sw = shadow_width
         pos = (pos[0] + self.offset[0], pos[1] + self.offset[1])
         draw_pos = (pos[0] - sw, pos[1] - sw)
         draw_size = (size[0] + sw * 2, size[1] + sw * 2)
-
-        aa_scale = max(radius, ROUNDRECT_ANTIALIASING_TARGET_RADIUS) / radius if radius > 0 else 1.0
-        aa_size = (int(draw_size[0] * aa_scale), int(draw_size[1] * aa_scale))
-        aa_sw = int(sw * aa_scale)
-        aa_r = radius * aa_size[0] / draw_size[0] if draw_size[0] > 0 else radius
-        aa_resize_method = Image.Resampling.BILINEAR if aa_scale < 2 else Image.Resampling.BICUBIC
 
         alpha = fill[3] if isinstance(fill, tuple) and len(fill) == 4 else 0
         bg_offset = int(24 * min(blur / 6, alpha / 200))
@@ -1203,14 +1304,25 @@ class Painter:
             # 复制pos位置的size大小的原图模糊并混合颜色
             bg = self.img.crop(bg_region)
             if blur > 0:
-                bg = bg.filter(ImageFilter.GaussianBlur(radius=blur))
-            bg = mix_image_by_color(bg, fill)
+                # 适当缩小背景
+                downsample = max(1, blur // 2)
+                if downsample > 1:
+                    bg = bg.resize(
+                        (bg.width // downsample, bg.height // downsample),
+                        Image.Resampling.BILINEAR
+                    )
+                blur_method = ImageFilter.GaussianBlur if downsample >= 2 else ImageFilter.BoxBlur
+                bg = bg.filter(blur_method(radius=blur / downsample))
+            bg.alpha_composite(Image.new('RGBA', bg.size, tuple(fill)))
 
-        # 超分绘制圆角矩形，缩放到目标大小
-        overlay = Image.new('RGBA', (aa_size[0], aa_size[1]), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(overlay)
-        draw.rounded_rectangle((aa_sw, aa_sw, aa_size[0] - aa_sw - 1, aa_size[1] - aa_sw - 1), fill=BLACK, radius=aa_r, corners=corners)
-        overlay = overlay.resize((draw_size[0], draw_size[1]), aa_resize_method)
+        # 超分绘制圆角矩形
+        overlay = self._get_aa_roundrect(
+            size=size,
+            fill=BLACK,
+            radius=radius,
+            corners=corners,
+            margin=sw,
+        )
 
         # 取得mask
         inner_mask = overlay.copy()
@@ -1218,12 +1330,25 @@ class Painter:
 
         # 通过模糊底图获取阴影，然后删除内部阴影
         adjust_image_alpha_inplace(overlay, shadow_alpha, method='multiply')
-        overlay = overlay.filter(ImageFilter.GaussianBlur(radius=int(sw * 0.5)))
+        # 只模糊四个边以提升性能
+        swb = int(sw * 1.5)
+        overlay_left = overlay.crop((0, 0, min(swb, overlay.width), overlay.height))
+        overlay_right = overlay.crop((overlay.width - min(swb, overlay.width), 0, overlay.width, overlay.height))
+        overlay_upper = overlay.crop((0, 0, overlay.width, min(swb, overlay.height)))
+        overlay_lower = overlay.crop((0, overlay.height - min(swb, overlay.height), overlay.width, overlay.height))
+        overlay_left = overlay_left.filter(ImageFilter.GaussianBlur(radius=sw * 0.5))
+        overlay_right = overlay_right.filter(ImageFilter.GaussianBlur(radius=sw * 0.5))
+        overlay_upper = overlay_upper.filter(ImageFilter.GaussianBlur(radius=sw * 0.5))
+        overlay_lower = overlay_lower.filter(ImageFilter.GaussianBlur(radius=sw * 0.5))
+        overlay.paste(overlay_left, (0, 0))
+        overlay.paste(overlay_right, (overlay.width - overlay_right.width, 0))
+        overlay.paste(overlay_upper, (0, 0))
+        overlay.paste(overlay_lower, (0, overlay.height - overlay_lower.height))
         overlay = ImageChops.multiply(overlay, ImageChops.invert(inner_mask))
 
         # 用圆角矩形mask裁剪并粘贴背景
         bg = bg.resize(size, Image.Resampling.BILINEAR)
-        bg.putalpha(bg_mask.split()[3]) 
+        bg.putalpha(bg_mask.getchannel('A')) 
         overlay.alpha_composite(bg, (sw, sw))
 
         # 边缘效果
@@ -1231,14 +1356,16 @@ class Painter:
             edge_width = min(4, min(draw_size) // 16, radius // 2)
             if edge_width > 0:
                 # 绘制超分圆角矩形边缘底图
-                edge_overlay = Image.new('RGBA', (aa_size[0], aa_size[1]), TRANSPARENT)
-                draw = ImageDraw.Draw(edge_overlay)
-                ew, aa_ew = edge_width, int(edge_width * aa_scale)
-                draw.rounded_rectangle(
-                    (aa_sw, aa_sw, aa_size[0] - aa_sw - 1, aa_size[1] - aa_sw - 1), 
-                    outline=WHITE, width=aa_ew, radius=aa_r, corners=corners
+                ew = edge_width
+                edge_overlay = self._get_aa_roundrect(
+                    size=size,
+                    fill=None,
+                    radius=radius,
+                    stroke=WHITE,
+                    stroke_width=ew,
+                    corners=corners,
+                    margin=sw,
                 )
-                edge_overlay = edge_overlay.resize(draw_size, aa_resize_method)
 
                 # 生成各个位置的渐变色块矩形（左上角，左边，上边，右下角，右边，下边）通过坐标换算保证渐变颜色过渡正确
                 alpha1, alpha2 = int(255 * edge_strength), int(255 * edge_strength * 0.75)
@@ -1348,7 +1475,7 @@ class Painter:
         
         # 渐变背景
         w, h = self.size
-        scale = max(1, min(w, h) // 256)
+        scale = max(1, min(w, h) // 64)
         bg = LinearGradient(
             c1=(l1, c1, h1),
             c2=(l2, c2, h2),
@@ -1409,10 +1536,11 @@ class Painter:
                 draw_tri(x, y, rot, size, alpha)
 
         rand_tri(int(20 * dense_factor), (128 * size_factor, 16 * size_factor))
-        rand_tri(int(200 * dense_factor), (64 * size_factor, 16 * size_factor))
+        rand_tri(int(100 * dense_factor), (100 * size_factor, 16 * size_factor))
 
         self.img.paste(bg, self.offset)
 
 
-_painter_pool: ProcessPool = ProcessPool(PAINTER_PROCESS_NUM, name='draw')
+if PAINTER_PROCESS_NUM > 0:
+    _painter_pool: ProcessPool = ProcessPool(PAINTER_PROCESS_NUM, name='draw')
 

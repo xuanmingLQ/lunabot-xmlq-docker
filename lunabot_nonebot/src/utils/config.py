@@ -3,10 +3,10 @@ import os.path as osp
 from os.path import join as pjoin
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Union
+from datetime import datetime
 import yaml
 from copy import deepcopy
 from .env import CONFIG_DIR
-
 
 @dataclass
 class ConfigData:
@@ -47,9 +47,10 @@ class Config:
             try:
                 with open(self.path, 'r') as f:
                     data = yaml.safe_load(f)
+                Config._data[self.name] = ConfigData(mtime=mtime, data=data)
             except Exception as e:
                 print(f"[WARNING] 读取配置文件 {self.path} 失败: {e}")
-            Config._data[self.name] = ConfigData(mtime=mtime, data=data)
+                Config._data[self.name].mtime = mtime  # 避免重复读取
 
     def get_all(self) -> dict:
         """

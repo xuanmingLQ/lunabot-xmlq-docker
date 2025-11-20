@@ -32,7 +32,7 @@ class HttpError(Exception):
         self.message = message
 
     def __str__(self):
-        return f"{self.status_code}: {self.message}"
+        return f"{self.status_code}: {truncate(self.message, 512)}"
 
 def get_exc_desc(e: Exception) -> str:
     et = f"{type(e).__name__}" if type(e).__name__ not in ['Exception', 'AssertionError', 'ReplyException'] else ''

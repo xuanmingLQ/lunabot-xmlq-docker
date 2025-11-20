@@ -19,10 +19,10 @@ from .profile import (
     get_avatar_widget_with_frame,
     process_sensitive_cmd_source,
 )
+from src.api.subscribe.pjsk import set_msr_sub
 from .music import get_music_cover_thumb
 from .card import get_character_sd_image
-from ....api.game.user import get_mysekai,get_mysekai_photo,get_mysekai_upload_time
-from ....api.subscribe.pjsk import set_msr_sub
+from src.api.game.user import get_mysekai, get_mysekai_photo, get_mysekai_upload_time
 
 MYSEKAI_REGIONS = ['jp',  'cn']
 BD_MYSEKAI_REGIONS = ['cn',]
@@ -35,6 +35,9 @@ class MsrIdNotMatchException(ReplyException):
 
 MYSEKAI_HARVEST_MAP_IMAGE_SCALE_CFG = config.item('mysekai.map_image_scale')
 MYSEKAI_HARVEST_MAP_SITE_BG_IMAGE_DOWNSAMPLE = 0.5
+
+MYSEKAI_REGIONS_CFG = config.item('mysekai.regions')
+BD_MYSEKAI_REGIONS_CFG = config.item('mysekai.bd_regions')
 
 MYSEKAI_RARE_RES_KEYS_CFG = config.item('mysekai.rare_res_keys')
 MYSEKAI_HARVEST_FIXTURE_IMAGE_NAME = {

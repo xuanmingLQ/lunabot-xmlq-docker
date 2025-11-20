@@ -816,7 +816,7 @@ async def compose_csb_image(ctx: SekaiHandlerContext, qtype: str, qval: Union[st
     if l and r:
         segs.append((l, r))
     
-    texts.append((f"{ranks[-1].name} 的停车区间", style1))
+    texts.append((f"T{ranks[-1].rank} \"{ranks[-1].name}\" 的停车区间", style1))
     for l, r in segs:
         if l == r:
             continue
@@ -848,7 +848,7 @@ async def compose_csb_image(ctx: SekaiHandlerContext, qtype: str, qval: Union[st
                     TextBox(text, style)
     
     add_watermark(canvas)
-    return await canvas.get_img(1.5)
+    return await canvas.get_img(1.5 if len(texts) < 10 else 1.0)
 
 # 合成玩家追踪图片
 async def compose_player_trace_image(ctx: SekaiHandlerContext, qtype: str, qval: Union[str, int], event: dict = None) -> Image.Image:
@@ -1147,10 +1147,10 @@ async def compose_winrate_predict_image(ctx: SekaiHandlerContext) -> Image.Image
                             TextStyle(font=DEFAULT_FONT, size=18, color=BLACK))
                     time_to_end = event_end - datetime.now()
                     if time_to_end.total_seconds() <= 0:
-                        time_to_end = "活动已结束"
+                        TextBox(f"预测的活动已结束！", TextStyle(font=DEFAULT_BOLD_FONT, size=24, color=RED))
                     else:
-                        time_to_end = f"距离活动结束还有{get_readable_timedelta(time_to_end)}"
-                    TextBox(time_to_end, TextStyle(font=DEFAULT_BOLD_FONT, size=18, color=BLACK))
+                        TextBox(f"距离活动结束还有{get_readable_timedelta(time_to_end)}", 
+                                TextStyle(font=DEFAULT_BOLD_FONT, size=18, color=BLACK))
                     TextBox(f"预测更新时间: {predict.predict_time.strftime('%m-%d %H:%M:%S')} ({get_readable_datetime(predict.predict_time, show_original_time=False)})",
                             TextStyle(font=DEFAULT_BOLD_FONT, size=18, color=BLACK))
                     TextBox("数据来源: 3-3.dev", TextStyle(font=DEFAULT_FONT, size=12, color=(50, 50, 50, 255)))
@@ -1367,7 +1367,7 @@ async def _(ctx: SekaiHandlerContext):
 # 5v5胜率预测
 pjsk_winrate = SekaiCmdHandler([
     "/pjsk winrate predict", "/pjsk_winrate_predict", 
-    "/胜率预测", "/5v5预测", "/胜率",
+    "/胜率预测", "/5v5预测", "/胜率", "/5v5胜率",
 ], regions=['jp'])
 pjsk_winrate.check_cdrate(cd).check_wblist(gbl)
 @pjsk_winrate.handle()

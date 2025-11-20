@@ -681,15 +681,19 @@ async def send_boost(ctx: SekaiHandlerContext, qid: int) -> str:
     uid = get_player_bind_id(ctx)
     event = await get_current_event(ctx)
     assert_and_reply(event and event['eventType'] == 'cheerful_carnival', "当前没有进行中的5v5活动")
+    # result = await request_gameapi(url.format(uid=uid), method='POST')
     try:
         result = await send_boost_api()
-    except Exception as e:
-        raise ReplyException(get_exc_desc(e))
+    except Exception :
+        raise
     ok_times = result['ok_times']
     failed_reason = result.get('failed_reason', '未知错误')
     ret_msg = f"成功送火{ok_times}次"
     if ok_times < 3:
-        ret_msg += f"，失败{3-ok_times}次，错误信息: {failed_reason}"
+        if 'opponent_user_receivable_count_max' in failed_reason:
+            ret_msg += f"（达到送火上限）"
+        else:
+            ret_msg += f"，失败{3-ok_times}次，错误信息: \n{failed_reason}"
     return ret_msg
 
 # 合成活动详情图片
@@ -890,7 +894,8 @@ async def compose_event_record_image(ctx: SekaiHandlerContext, qid: int) -> Imag
     with Canvas(bg=SEKAI_BLUE_BG).set_padding(BG_PADDING) as canvas:
         with VSplit().set_content_align('lt').set_item_align('lt').set_sep(16):
             await get_detailed_profile_card(ctx, profile, err_msg)
-            TextBox("每次上传时进行增量更新，未上传过的记录将会丢失", style4).set_bg(roundrect_bg()).set_padding(12)
+            TextBox("每次上传时进行增量更新，未上传过的记录将会丢失\n领取活动牌子后上传数据才能记录排名", style4, use_real_line_count=True) \
+                .set_bg(roundrect_bg()).set_padding(12)
             with HSplit().set_sep(16).set_item_align('lt').set_content_align('lt'):
                 if user_events:
                     await draw_events("活动", user_events)

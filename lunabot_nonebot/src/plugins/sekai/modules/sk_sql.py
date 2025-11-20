@@ -139,17 +139,22 @@ async def query_latest_ranking(region: str, event_id: int, ranks: List[int] = No
     if not conn:
         return []
     if ranks:
-        # 对于ranks中的每一个rank，找到最新的一条记录
-        ret = []
-        for rank in ranks:
-            cursor = await conn.execute("""
-                SELECT * FROM ranking WHERE rank = ? ORDER BY ts DESC LIMIT 1
-            """, (rank,))
-            row = await cursor.fetchone()
-            if row:
-                ret.append(Ranking.from_row(row))
-            await cursor.close()
-        return ret
+        placeholders = ", ".join("?" for _ in ranks)
+        sql = f"""
+            SELECT * FROM (
+                SELECT
+                    *,
+                    ROW_NUMBER() OVER (PARTITION BY rank ORDER BY ts DESC) as rn
+                FROM ranking
+                WHERE rank IN ({placeholders})
+            )
+            WHERE rn = 1
+            ORDER BY rank
+        """
+        cursor = await conn.execute(sql, ranks)
+        rows = await cursor.fetchall()
+        await cursor.close()
+        return [Ranking.from_row(row) for row in rows]
     else:
         # 对于表中的每一个rank，找到最新的一条记录
         cursor = await conn.execute("""
@@ -173,16 +178,23 @@ async def query_first_ranking_after(
         return []
     if ranks:
         # 对于ranks中的每一个rank，找到第一条记录
-        ret = []
-        for rank in ranks:
-            cursor = await conn.execute("""
-                SELECT * FROM ranking WHERE rank = ? AND ts > ? ORDER BY ts LIMIT 1
-            """, (rank, after_time.timestamp()))
-            row = await cursor.fetchone()
-            if row:
-                ret.append(Ranking.from_row(row))
-            await cursor.close()
-        return ret
+        placeholders = ", ".join("?" for _ in ranks)
+        sql = f"""
+            SELECT * FROM (
+                SELECT
+                    *,
+                    ROW_NUMBER() OVER (PARTITION BY rank ORDER BY ts ASC) as rn
+                FROM ranking
+                WHERE rank IN ({placeholders}) AND ts > ?
+            )
+            WHERE rn = 1
+            ORDER BY rank
+        """
+        params = ranks + [after_time.timestamp()]
+        cursor = await conn.execute(sql, params)
+        rows = await cursor.fetchall()
+        await cursor.close()
+        return [Ranking.from_row(row) for row in rows]
     else:
         # 对于表中的每一个rank，找到第一条记录
         cursor = await conn.execute("""
