@@ -829,49 +829,85 @@ def get_file_db(path: str, logger: Logger) -> FileDB:
 
 utils_file_db = get_file_db(get_data_path('utils/db.json'), utils_logger)
 
-# ============================ WebDriver ============================ #
 
-from selenium import webdriver
-from selenium.webdriver.firefox.service import Service
-from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
+
+# ============================ Playwright ============================ #
+
+from playwright.async_api import async_playwright, Browser, Playwright, BrowserType, BrowserContext, Page  # 引入 Playwright 异步 API
+
+_playwright_instance: Playwright | None = None
+_browser_type: BrowserType | None = None
+_browsers: asyncio.Queue[Browser] = None # 队列现在存放的是 Playwright 的 Browser 对象
 
 WEB_DRIVER_NUM = global_config.get('web_driver_num')
-_webdrivers: asyncio.Queue[webdriver.Firefox] = None
 
 class WebDriver:
-    def __init__(self):
-        self.driver = None
+    """
+    异步上下文管理器，用于管理 Playwright 浏览器实例队列。
+    """
+    def __init__(self, context_options: dict | None = None):
+        self.browser: Browser | None = None
+        self.context: BrowserContext | None = None
+        self.page: Page | None = None
+        self.context_options: dict = context_options if context_options is not None else { 'locale': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6' }
 
-    async def __aenter__(self) -> webdriver.Firefox:
-        global _webdrivers
-        if _webdrivers is None:
+    async def __aenter__(self) -> Page:
+        global _playwright_instance, _browser_type, _browsers
+        
+        # 1. 初始化 Playwright 实例 (只执行一次)
+        if _playwright_instance is None:
+            
+            # 启动 Playwright 驱动进程
+            _playwright_instance = await async_playwright().start()
+            
+            # 选择要使用的浏览器
+            _browser_type = _playwright_instance.chromium # 或 .firefox, .webkit
+            
             # 清空之前的tmp文件
             if os.system("rm -rf /tmp/rust_mozprofile*") != 0:
-                utils_logger.error("清空WebDriver临时文件失败")
-            _webdrivers = asyncio.Queue()
+                utils_logger.error(f"清空WebDriver临时文件失败")
+
+            _browsers = asyncio.Queue()
+            
+            # 2. 初始化 Browser 队列
             for _ in range(WEB_DRIVER_NUM):
-                options = Options()
-                options.add_argument("--headless") 
-                _webdrivers.put_nowait(webdriver.Firefox(service=Service(), options=options))
-            utils_logger.info(f"初始化 {WEB_DRIVER_NUM} 个WebDriver")
-        self.driver = await _webdrivers.get()
-        return self.driver
+                browser = await _browser_type.launch(
+                    headless=True,
+                    # 禁用沙箱模式
+                    args=['--no-sandbox', '--disable-setuid-sandbox'] 
+                )
+                _browsers.put_nowait(browser)
+            
+            utils_logger.info(f"初始化 {WEB_DRIVER_NUM} 个 Playwright Browser")
+            pass
+            
+        self.browser = await _browsers.get()
+        self.context = await self.browser.new_context(**self.context_options)
+        self.page = await self.context.new_page()
+        return self.page
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        global _webdrivers
-        if self.driver:
-            self.driver.delete_all_cookies()
-            self.driver.execute_script("window.localStorage.clear();")
-            self.driver.execute_script("window.sessionStorage.clear();")
-            self.driver.get("about:blank")
-            await _webdrivers.put(self.driver)
-            self.driver = None
+        global _browsers
+        if self.page:
+            try:
+                await self.page.close()
+                self.page = None
+            except Exception as e:
+                utils_logger.error(f"关闭 Playwright Page 失败 {get_exc_desc(e)}")
+                pass
+        if self.context:
+            try:
+                await self.context.close()
+                self.context = None
+            except Exception as e:
+                utils_logger.error(f"关闭 Playwright Context 失败 {get_exc_desc(e)}")
+                pass
+        if self.browser:    
+            await _browsers.put(self.browser)
+            self.browser = None
         else:
-            raise Exception("WebDriver not initialized")
-        return False
-
+            raise Exception("Playwright Browser not initialized")
+        return False # 传播异常
 
 # ============================ 图片处理 ============================ #
 
@@ -935,57 +971,69 @@ async def download_and_convert_svg(svg_url: str) -> Image.Image:
     """
     下载SVG图片并转换为PIL.Image对象
     """
-    async with WebDriver() as driver:
-        def download():
-            try:
-                driver.get(svg_url)
-                svg = WebDriverWait(driver, 10).until(lambda d: d.find_element(By.TAG_NAME, 'svg'))
-                width = svg.size['width']
-                height = svg.size['height']
-                driver.set_window_size(width, height)
-                with TempFilePath('png') as path:
-                    if not driver.save_full_page_screenshot(path):
-                        raise Exception("保存截图失败")
-                    return open_image(path)
-            except:
-                utils_logger.print_exc(f'下载SVG图片失败')
-        return await run_in_pool(download)
+    async with WebDriver() as page: # WebDriver 返回 Playwright Page
+        try:
+            await page.goto(svg_url, wait_until="domcontentloaded")
+            svg_locator = page.locator('svg').nth(0)
+
+            bounding_box = await svg_locator.bounding_box()
+            if not bounding_box:
+                raise Exception("未找到SVG元素或元素不可见")
+            
+            width = int(bounding_box['width'])
+            height = int(bounding_box['height'])
+
+            await page.set_viewport_size({"width": width, "height": height})
+            
+            with TempFilePath('png') as path:
+                await svg_locator.screenshot(path=path)
+                return open_image(path)
+        except Exception:
+            utils_logger.print_exc(f'下载SVG图片失败')
+            return None 
 
 async def markdown_to_image(markdown_text: str, width: int = 600) -> Image.Image:
     """
     将markdown文本转换为图片
     """
-    async with WebDriver() as driver:
-        def draw():
-            css_content = Path(get_data_path("utils/m2i/m2i.css")).read_text()
-            try:
-                import mistune
-                md_renderer = mistune.create_markdown()
-                html = md_renderer(markdown_text)
-                # 插入css
-                full_html = f"""
-                    <html>
-                        <head><style>
-                            {css_content}
-                            .markdown-body {{
-                                padding: 32px;
-                            }}
-                        </style></head>
-                        <body class="markdown-body">{html}</body>
-                    </html>
-                """
-                driver.set_window_size(width, width)
-                with TempFilePath('html') as html_path:
-                    with open(html_path, 'w') as f:
-                        f.write(full_html)
-                    driver.get(f"file://{osp.abspath(html_path)}")
-                    time.sleep(0.1)
-                    with TempFilePath('png') as img_path:
-                        driver.save_full_page_screenshot(img_path)
-                        return open_image(img_path)
-            except:
-                utils_logger.print_exc(f'markdown转图片失败')
-        return await run_in_pool(draw)
+    async with WebDriver() as page: # WebDriver 返回 Playwright Page
+        css_content = Path(get_data_path("utils/m2i/m2i.css")).read_text()
+        try:
+            import mistune
+            md_renderer = mistune.create_markdown()
+            html = md_renderer(markdown_text)
+            
+            # 插入css
+            full_html = f"""
+<html>
+    <head><style>
+        {css_content}
+        .markdown-body {{
+            padding: 32px;
+        }}
+    </style></head>
+    <body class="markdown-body">{html}</body>
+</html>"""
+
+            with TempFilePath('html') as html_path:
+                # 写入完整的 HTML 内容
+                with open(html_path, 'w', encoding='utf-8') as f:
+                    f.write(full_html)
+                
+                # Playwright 导航到本地文件路径
+                await page.goto(f"file://{osp.abspath(html_path)}", wait_until="load")
+                
+                #  调整视口大小
+                await page.set_viewport_size({"width": width, "height": width})
+                
+                with TempFilePath('png') as img_path:
+                    # Playwright 截图，full_page=True 截取整个 body 内容
+                    await page.screenshot(path=img_path, full_page=True)
+                    return open_image(img_path)
+
+        except Exception:
+            utils_logger.print_exc(f'markdown转图片失败')
+            return None
 
 def convert_video_to_gif(video_path: str, save_path: str, max_fps=10, max_size=256, max_frame_num=200):
     """

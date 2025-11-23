@@ -17,6 +17,11 @@ msg_send:
   max_fold_msg_segment_count: 4096 # 最大折叠消息段数
   tmp_img_keep_minutes: 5  # 临时图片保存时间（分钟）
 
+  low_quality_image:
+    default_quality: 75
+    default_subsampling: 2
+    default_optimize: True
+    
 font:
   path: "utils/fonts/Microsoft YaHei.ttf"  # 中文字体路径
   name: "Microsoft YaHei"     # Matplotlib库使用的中文字体名称

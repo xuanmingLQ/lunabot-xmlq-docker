@@ -300,6 +300,7 @@ def remove_player_bind_id(ctx: SekaiHandlerContext, qid: str, index: int | None)
 
     uids = to_list(all_bind_list[region].get(qid, []))
     assert_and_reply(uids, f"你还没有绑定任何{region_name}账号")
+    assert_and_reply(index < 1e9, f"需要指定账号序号（按绑定时间顺序）而不是账号ID")
 
     if index is not None:
         assert_and_reply(0 <= index < len(uids), f"指定的账号序号大于已绑定的{region_name}账号数量({len(uids)})")
@@ -343,6 +344,7 @@ def set_player_main_bind_id(ctx: SekaiHandlerContext, qid: str, index: int) -> s
 
     uids = to_list(all_bind_list[region].get(qid, []))
     assert_and_reply(uids, f"你还没有绑定任何{region_name}账号")
+    assert_and_reply(index < 1e9, f"需要指定账号序号（按绑定时间顺序）而不是账号ID")
     assert_and_reply(0 <= index < len(uids), f"指定的账号序号大于已绑定的{region_name}账号数量({len(uids)})")
 
     new_main_uid = uids[index]
@@ -363,6 +365,8 @@ def swap_player_bind_id(ctx: SekaiHandlerContext, qid: str, index1: int, index2:
 
     uids = to_list(all_bind_list[region].get(qid, []))
     assert_and_reply(uids, f"你还没有绑定任何{region_name}账号")
+    assert_and_reply(index1 < 1e9, f"需要指定账号序号（按绑定时间顺序）而不是账号ID")
+    assert_and_reply(index2 < 1e9, f"需要指定账号序号（按绑定时间顺序）而不是账号ID")
     assert_and_reply(0 <= index1 < len(uids), f"指定的账号序号1大于已绑定的{region_name}账号数量({len(uids)})")
     assert_and_reply(0 <= index2 < len(uids), f"指定的账号序号2大于已绑定的{region_name}账号数量({len(uids)})")
 
@@ -370,7 +374,10 @@ def swap_player_bind_id(ctx: SekaiHandlerContext, qid: str, index1: int, index2:
     all_bind_list[region][qid] = uids
     profile_db.set("bind_list", all_bind_list)
 
-    return f"已将你绑定的{region_name}第{index1 + 1}个账号序号和第{index2 + 1}个账号交换顺序"
+    return f"""
+已将你绑定的{region_name}第{index1 + 1}个账号序号和第{index2 + 1}个账号交换顺序
+该指令仅影响索引查询(u{index1 + 1}、u{index2 + 1})，修改默认查询账号请使用"/主账号"
+""".strip()
 
 
 # 验证用户游戏帐号

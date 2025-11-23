@@ -20,6 +20,9 @@ from .data import get_data_path
 SUPERUSER_CFG = global_config.item('superuser')
 GROUP_MEMBER_NAME_CACHE_EXPIRE_SECONDS_CFG = global_config.item('group_member_name_cache_expire_seconds')
 
+DEFAULT_LQ_IMAGE_QUALITY_CFG = global_config.item('msg_send.low_quality_image.default_quality')
+DEFAULT_LQ_IMAGE_SUBSAMPLING_CFG = global_config.item('msg_send.low_quality_image.default_subsampling')
+DEFAULT_LQ_IMAGE_OPTIMIZE_CFG = global_config.item('msg_send.low_quality_image.default_optimize')
 
 # ============================ MonkeyPatch ============================ #
 
@@ -248,7 +251,9 @@ async def get_image_cq(
     allow_error: bool = False, 
     logger: Logger = None, 
     low_quality: bool = False, 
-    quality: int = 75,
+    quality: int | ConfigItem = DEFAULT_LQ_IMAGE_QUALITY_CFG,
+    subsampling: int | ConfigItem = DEFAULT_LQ_IMAGE_SUBSAMPLING_CFG,
+    optimize: bool | ConfigItem = DEFAULT_LQ_IMAGE_OPTIMIZE_CFG,
     send_local_file_as_is: bool = False,
 ):
     """
@@ -280,7 +285,13 @@ async def get_image_cq(
                 save_transparent_gif(gif_to_frames(image), get_gif_duration(image), tmp_path)
             elif ext == 'jpg':
                 image = image.convert('RGB')
-                image.save(tmp_path, format='JPEG', quality=quality, optimize=True, subsampling=2, progressive=False)
+                image.save(
+                    tmp_path, format='JPEG', 
+                    quality=get_cfg_or_value(quality), 
+                    optimize=get_cfg_or_value(optimize),
+                    subsampling=get_cfg_or_value(subsampling), 
+                    progressive=False
+                )
             else:
                 image.save(tmp_path)
             return f'[CQ:image,file=file://{os.path.abspath(tmp_path)}]'

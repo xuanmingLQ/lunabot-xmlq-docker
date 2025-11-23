@@ -21,7 +21,6 @@ PyYAML
 RapidFuzz
 requests
 sekaiworld.scores
-selenium
 setproctitle
 tenacity
 uvloop

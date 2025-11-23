@@ -1,9 +1,8 @@
 from utils import *
 from process_pool import *
-import yaml
 from os.path import join as pjoin
 from typing import List
-
+import yaml
 from fastapi import FastAPI, HTTPException, Request
 import uvicorn
 from sekai_deck_recommend import (
@@ -22,7 +21,7 @@ except ImportError:
 
 
 CONFIG = {}
-CONFIG_PATH = pjoin(os.path.dirname(os.path.abspath(__file__)), 'config.yaml')
+CONFIG_PATH = os.getenv("CONFIG_PATH") or pjoin(os.path.dirname(os.path.abspath(__file__)), 'config.yaml')
 if os.path.exists(CONFIG_PATH):
     with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
         CONFIG = yaml.safe_load(f)
@@ -116,37 +115,45 @@ def update_data(
         })
         
 def do_recommend(region: str, options: dict) -> dict:
-    start_time = datetime.now()
-    db = load_json(DB_PATH, default={})
+    try:
+        start_time = datetime.now()
+        db = load_json(DB_PATH, default={})
+        
+        masterdata_version = db.get('masterdata_version', {}).get(region)
+        if worker_masterdata_version.get(region) != masterdata_version:
+            local_md_dir = pjoin(DATA_DIR, 'masterdata', region)
+            worker_recommender.update_masterdata(local_md_dir, region)
+            worker_masterdata_version[region] = masterdata_version
+            log(f"加载 {region} MasterData: v{masterdata_version}")
 
-    masterdata_version = db.get('masterdata_version', {}).get(region)
-    if worker_masterdata_version.get(region) != masterdata_version:
-        local_md_dir = pjoin(DATA_DIR, 'masterdata', region)
-        worker_recommender.update_masterdata(local_md_dir, region)
-        worker_masterdata_version[region] = masterdata_version
-        log(f"加载 {region} MasterData: v{masterdata_version}")
+        musicmetas_update_ts = db.get('musicmetas_update_ts', {}).get(region)
+        if worker_musicmetas_update_ts.get(region) != musicmetas_update_ts:
+            local_mm_path = pjoin(DATA_DIR, f'musicmetas_{region}.json')
+            worker_recommender.update_musicmetas(local_mm_path, region)
+            worker_musicmetas_update_ts[region] = musicmetas_update_ts
+            log(f"加载 {region} MusicMetas: {datetime.fromtimestamp(musicmetas_update_ts).strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        if not worker_masterdata_version.get(region) or not worker_musicmetas_update_ts.get(region):
+            return {
+                'status': 'error',
+                'message': '组卡服务端数据未初始化完成，请稍后再试'
+            }
+        
+        options = DeckRecommendOptions.from_dict(options)
+        res =  worker_recommender.recommend(options)
+        cost_time = datetime.now() - start_time
 
-    musicmetas_update_ts = db.get('musicmetas_update_ts', {}).get(region)
-    if worker_musicmetas_update_ts.get(region) != musicmetas_update_ts:
-        local_mm_path = pjoin(DATA_DIR, f'musicmetas_{region}.json')
-        worker_recommender.update_musicmetas(local_mm_path, region)
-        worker_musicmetas_update_ts[region] = musicmetas_update_ts
-        log(f"加载 {region} MusicMetas: {datetime.fromtimestamp(musicmetas_update_ts).strftime('%Y-%m-%d %H:%M:%S')}")
-    
-    if not worker_masterdata_version.get(region) or not worker_musicmetas_update_ts.get(region):
-        return HTTPException(status_code=500, detail={
+        return {
+            'status': 'success',
+            'result': res.to_dict(),
+            'cost_time': cost_time.total_seconds(),
+        }
+
+    except BaseException as e:
+        return {
             'status': 'error',
-            'message': f'组卡服务端数据未初始化完成，请稍后再试',
-        })
-
-    options = DeckRecommendOptions.from_dict(options)
-    res =  worker_recommender.recommend(options)
-    cost_time = datetime.now() - start_time
-
-    return {
-        'result': res.to_dict(),
-        'cost_time': cost_time.total_seconds(),
-    }
+            'message': get_exc_desc(e),
+        }
 
 
 # =========================== API =========================== #
@@ -196,9 +203,10 @@ async def _(request: Request):
 
     except Exception as e:
         error("更新数据失败")
-        raise HTTPException(status_code=500, detail={
-            'exception': get_exc_desc(e),
-        })
+        raise HTTPException(
+            status_code=500, 
+            detail=get_exc_desc(e),
+        )
 
 
 deckrec_id = 0
@@ -226,8 +234,11 @@ async def _(request: Request):
         start_time = datetime.now()
 
         result: DeckRecommendResult = await process_pool.submit(do_recommend, region, options)
-        if isinstance(result, BaseException):
-            raise result
+        if result['status'] != 'success':
+            raise HTTPException(
+                status_code=500, 
+                detail=result.get('message', '内部错误'),
+            )
 
         total_time = (datetime.now() - start_time).total_seconds()
         wait_time = total_time - result['cost_time']
@@ -240,15 +251,15 @@ async def _(request: Request):
             "cost_time": result['cost_time'],
             "wait_time": wait_time,
         }
-    
-    except HTTPException as he:
-        raise he
 
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
         error("组卡请求处理失败")
-        raise HTTPException(status_code=500, detail={
-            'exception': get_exc_desc(e),
-        })
+        raise HTTPException(
+            status_code=500, 
+            detail=get_exc_desc(e),
+        )
 
 if __name__ == "__main__":
     uvicorn.run(
@@ -256,6 +267,6 @@ if __name__ == "__main__":
         host=HOST,
         port=PORT,
         log_level="warning",
-        workers=1,
+        workers=None,
         timeout_keep_alive=60,
     )

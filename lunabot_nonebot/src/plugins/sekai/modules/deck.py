@@ -946,6 +946,7 @@ async def do_deck_recommend_batch(
             raise ReplyException("未配置可用的组卡服务")
         server_urls = [s['url'] for s in servers]
         server_weights = [s['weight'] for s in servers]
+        server_url_indices = list(range(len(server_urls)))
         min_weight = min([w for w in server_weights if w > 0], default=0)
         if min_weight <= 0:
             raise ReplyException("未配置可用的组卡服务")
@@ -957,15 +958,16 @@ async def do_deck_recommend_batch(
         server_order = [idx for sublist in server_order for idx in sublist]
         select_idx = server_order[_deckrec_request_id % len(server_order)]
         urls = server_urls[select_idx:] + server_urls[:select_idx]
+        url_indices = server_url_indices[select_idx:] + server_url_indices[:select_idx]
         
         async def req(index: int, payload: bytes, url: str) -> dict:
             async with aiohttp.ClientSession() as session:
                 async with session.post(url + "/recommend", data=payload) as resp:
                     if resp.status != 200:
-                        msg = f"HTTP {resp.status}: "
+                        msg = f"{resp.status}: "
                         try:
                             err_data = await resp.json()
-                            msg += err_data.get('message', '')
+                            msg += err_data.get('detail', '')
                         except:
                             try:
                                 msg += await resp.text()
@@ -976,12 +978,12 @@ async def do_deck_recommend_batch(
                     return index, data
         
         errors = []
-        for url in urls:
+        for url, url_index in zip(urls, url_indices):
             try:
                 return await req(index, payload, url)
             except Exception as e:
                 logger.warning(f"组卡请求 {url} 失败: {get_exc_desc(e)}")
-                errors.append(get_exc_desc(e))
+                errors.append(f"[{url_index+1}] " + get_exc_desc(e))
 
         raise ReplyException(f"请求所有可用的组卡服务失败:\n" + "\n".join(errors))
 
@@ -1877,10 +1879,10 @@ async def deckrec_update_data():
                             logger.info(f"{region} 组卡数据更新完成")
                             return
                         elif resp.status != 200:
-                            msg = f"更新组卡数据失败 ({resp.status}): "
+                            msg = f"更新 {url} 组卡数据失败 ({resp.status}): "
                             try:
                                 err_data = await resp.json()
-                                msg += err_data.get('message', '')
+                                msg += err_data.get('detail', '')
                             except:
                                 try:
                                     msg += await resp.text()

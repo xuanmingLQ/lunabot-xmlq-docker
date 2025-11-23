@@ -566,8 +566,9 @@ async def compose_mysekai_harvest_map_image(ctx: SekaiHandlerContext, harvest_ma
             with Frame().set_offset((call.x, call.z)).set_content_align('c'):
                 ImageBox(call.image, size=(call.size, call.size), use_alphablend=True, alpha_adjust=0.8)
                 if call.outline:
-                    Frame().set_bg(FillBg(stroke=call.outline[0], stroke_width=call.outline[1], fill=TRANSPARENT)) \
-                        .set_size((call.size+2, call.size+2))
+                    stroke, stroke_w = call.outline
+                    Frame().set_bg(FillBg(stroke=stroke, stroke_width=stroke_w, fill=TRANSPARENT)) \
+                        .set_size((call.size+stroke_w*2, call.size+stroke_w*2))
 
         # 绘制资源数量
         for call in res_draw_calls:
