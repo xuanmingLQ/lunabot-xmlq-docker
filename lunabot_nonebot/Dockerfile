@@ -25,32 +25,11 @@ WORKDIR /app/lunabot_nonebot
 RUN apt-get update && apt-get install -y --no-install-recommends \
     -o Acquire::http::Timeout="120" \
     -o Acquire::http::Max-Retries="5" \
+    libgl1 \
     libglib2.0-0 \
-    libnss3 \
-    libx11-xcb1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    libxss1 \
-    libxtst6 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libgbm1 \
-    libasound2 \
-    libxshmfence1 \
-    libpango-1.0-0 \
-    libpangocairo-1.0-0 \
-    libcairo2 \
-    libxkbcommon0 \
-    libx11-6 \
-    libfontconfig1 \
-    libfreetype6 \
-    libharfbuzz0b \
-    libgtk-3-0 \
-    libgconf-2-4 \
-    libgl1-mesa-glx \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
     fonts-noto-color-emoji \
     # 设置时区
     tzdata \
