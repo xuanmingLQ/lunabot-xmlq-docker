@@ -21,10 +21,8 @@ ENV TZ=Asia/Shanghai
 
 WORKDIR /app/lunabot_nonebot
 
-# 安装 运行所需库
+# 安装 opencv 所需库
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    -o Acquire::http::Timeout="120" \
-    -o Acquire::http::Max-Retries="5" \
     libgl1 \
     libglib2.0-0 \
     libsm6 \
@@ -43,8 +41,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 复制 Python 依赖
 COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
-# Playwright 安装（仅在运行镜像中执行）
-RUN  playwright install chromium
+# Playwright 安装（仅在运行镜像中执行），它会自己下载所需的库
+RUN playwright install --only-shell --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
 
 # 复制项目代码
 COPY . .

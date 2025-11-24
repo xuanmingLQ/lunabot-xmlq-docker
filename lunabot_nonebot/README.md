@@ -16,6 +16,8 @@ Note: This project is for reference and learning purposes only, and is **not** a
 
 - Install playwright browsers by running the command: ```playwright install```
 
+- Install system emoji fonts if emojis fail to render for commands such as `/help`
+
 - Replace the line in `{your_python_dir}/site-packages/pilmoji/helpers.py`:
 
     ```python

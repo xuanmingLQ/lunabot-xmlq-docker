@@ -830,18 +830,24 @@ def get_file_db(path: str, logger: Logger) -> FileDB:
 utils_file_db = get_file_db(get_data_path('utils/db.json'), utils_logger)
 
 
-
 # ============================ Playwright ============================ #
 
-from playwright.async_api import async_playwright, Browser, Playwright, BrowserType, BrowserContext, Page  # 引入 Playwright 异步 API
+from playwright.async_api import (
+    async_playwright, 
+    Browser, 
+    Playwright, 
+    BrowserType, 
+    BrowserContext, 
+    Page,
+)
 
 _playwright_instance: Playwright | None = None
 _browser_type: BrowserType | None = None
-_browsers: asyncio.Queue[Browser] = None # 队列现在存放的是 Playwright 的 Browser 对象
+_browsers: asyncio.Queue[Browser] = None
 
 WEB_DRIVER_NUM = global_config.get('web_driver_num')
 
-class WebDriver:
+class PlaywrightPage:
     """
     异步上下文管理器，用于管理 Playwright 浏览器实例队列。
     """
@@ -849,35 +855,27 @@ class WebDriver:
         self.browser: Browser | None = None
         self.context: BrowserContext | None = None
         self.page: Page | None = None
-        self.context_options: dict = context_options if context_options is not None else { 'locale': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6' }
+        self.context_options: dict = context_options if context_options is not None else { 
+            'locale': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
+        }
 
     async def __aenter__(self) -> Page:
         global _playwright_instance, _browser_type, _browsers
         
-        # 1. 初始化 Playwright 实例 (只执行一次)
         if _playwright_instance is None:
-            
-            # 启动 Playwright 驱动进程
             _playwright_instance = await async_playwright().start()
+            _browser_type = _playwright_instance.chromium
             
-            # 选择要使用的浏览器
-            _browser_type = _playwright_instance.chromium # 或 .firefox, .webkit
-            
-            # 清空之前的tmp文件
             if os.system("rm -rf /tmp/rust_mozprofile*") != 0:
                 utils_logger.error(f"清空WebDriver临时文件失败")
-
             _browsers = asyncio.Queue()
             
-            # 2. 初始化 Browser 队列
             for _ in range(WEB_DRIVER_NUM):
                 browser = await _browser_type.launch(
                     headless=True,
-                    # 禁用沙箱模式
                     args=['--no-sandbox', '--disable-setuid-sandbox'] 
                 )
                 _browsers.put_nowait(browser)
-            
             utils_logger.info(f"初始化 {WEB_DRIVER_NUM} 个 Playwright Browser")
             pass
             
@@ -888,26 +886,26 @@ class WebDriver:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         global _browsers
+        # 关闭上下文，自动清理
         if self.page:
             try:
                 await self.page.close()
-                self.page = None
             except Exception as e:
                 utils_logger.error(f"关闭 Playwright Page 失败 {get_exc_desc(e)}")
-                pass
         if self.context:
             try:
                 await self.context.close()
-                self.context = None
             except Exception as e:
                 utils_logger.error(f"关闭 Playwright Context 失败 {get_exc_desc(e)}")
-                pass
         if self.browser:    
             await _browsers.put(self.browser)
-            self.browser = None
         else:
             raise Exception("Playwright Browser not initialized")
-        return False # 传播异常
+        self.page = None
+        self.context = None
+        self.browser = None
+        return False
+
 
 # ============================ 图片处理 ============================ #
 
@@ -971,7 +969,7 @@ async def download_and_convert_svg(svg_url: str) -> Image.Image:
     """
     下载SVG图片并转换为PIL.Image对象
     """
-    async with WebDriver() as page: # WebDriver 返回 Playwright Page
+    async with PlaywrightPage() as page: # Playwright Page 对象
         try:
             await page.goto(svg_url, wait_until="domcontentloaded")
             svg_locator = page.locator('svg').nth(0)
@@ -982,7 +980,6 @@ async def download_and_convert_svg(svg_url: str) -> Image.Image:
             
             width = int(bounding_box['width'])
             height = int(bounding_box['height'])
-
             await page.set_viewport_size({"width": width, "height": height})
             
             with TempFilePath('png') as path:
@@ -996,14 +993,12 @@ async def markdown_to_image(markdown_text: str, width: int = 600) -> Image.Image
     """
     将markdown文本转换为图片
     """
-    async with WebDriver() as page: # WebDriver 返回 Playwright Page
+    async with PlaywrightPage() as page: # Playwright Page 对象
         css_content = Path(get_data_path("utils/m2i/m2i.css")).read_text()
         try:
             import mistune
             md_renderer = mistune.create_markdown()
             html = md_renderer(markdown_text)
-            
-            # 插入css
             full_html = f"""
 <html>
     <head><style>
@@ -1016,18 +1011,13 @@ async def markdown_to_image(markdown_text: str, width: int = 600) -> Image.Image
 </html>"""
 
             with TempFilePath('html') as html_path:
-                # 写入完整的 HTML 内容
                 with open(html_path, 'w', encoding='utf-8') as f:
                     f.write(full_html)
                 
-                # Playwright 导航到本地文件路径
                 await page.goto(f"file://{osp.abspath(html_path)}", wait_until="load")
-                
-                #  调整视口大小
-                await page.set_viewport_size({"width": width, "height": width})
+                await page.set_viewport_size({"width": width, "height": 1})
                 
                 with TempFilePath('png') as img_path:
-                    # Playwright 截图，full_page=True 截取整个 body 内容
                     await page.screenshot(path=img_path, full_page=True)
                     return open_image(img_path)
 
