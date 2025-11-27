@@ -78,6 +78,15 @@ class EventListFilter:
 
 # ======================= 处理逻辑 ======================= #
 
+# 获取图片左侧全透明部分宽度（用于裁剪活动详情角色特写）
+def get_left_transparent_width(img: Image.Image) -> int:
+    alpha = np.array(img.getchannel('A'))
+    col_has_pixel = np.any(alpha > 0, axis=0)
+    if not np.any(col_has_pixel):
+        return img.shape[1]
+    left_width = np.argmax(col_has_pixel)
+    return left_width
+
 # 判断某个卡牌id的限定类型
 async def get_card_supply_type(ctx: SekaiHandlerContext, cid: int) -> str:
     ctx = SekaiHandlerContext.from_region("jp")
@@ -722,7 +731,9 @@ async def compose_event_detail_image(ctx: SekaiHandlerContext, event: dict) -> I
         with Canvas(bg=bg, w=w, h=h).set_padding(BG_PADDING).set_content_align('r') as canvas:
             with Frame().set_size((w-BG_PADDING*2, h-BG_PADDING*2)).set_content_align('lb').set_padding((64, 0)):
                 if use_story_bg:
-                    ImageBox(detail.event_ban_chara_img, size=(None, int(h * 0.9)), use_alphablend=True).set_offset((0, BG_PADDING))
+                    chara_img = detail.event_ban_chara_img
+                    chara_img = chara_img.crop((get_left_transparent_width(chara_img), 0, chara_img.width, chara_img.height))
+                    ImageBox(chara_img, size=(None, int(h * 0.9)), use_alphablend=True).set_offset((0, BG_PADDING))
 
             with VSplit().set_padding(16).set_sep(16).set_item_align('t').set_content_align('t').set_item_bg(roundrect_bg()):
                 # logo

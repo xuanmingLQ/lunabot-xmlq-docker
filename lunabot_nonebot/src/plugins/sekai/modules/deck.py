@@ -178,20 +178,21 @@ async def extract_target_event(
             args = args.replace(keyword, " event180 " if match_full else " 180 ").strip()
 
     # 解析成功后需要移除的文本
-    matched_texts: list[str] = []
+    event_matched_texts: list[str] = []
+    wl_matched_texts: list[str] = []
 
     # 解析WL 章节序号或角色名
     chapter_id, chapter_nickname = None, None
     for i in range(1, 10):
         if f"wl{i}" in args:
             chapter_id = i
-            matched_texts.append(f"wl{i}")
+            wl_matched_texts.append(f"wl{i}")
             break
     for item in get_character_nickname_data():
         for nickname in item.nicknames:
             if nickname in args:
                 chapter_nickname = nickname
-                matched_texts.append(nickname)
+                wl_matched_texts.append(nickname)
                 break
     
     # 解析活动id
@@ -200,15 +201,19 @@ async def extract_target_event(
         simple_match = re.search(r"\b(\d{1,3})\b", args)
         if simple_match:
             event_id = int(simple_match.group(1))
-            matched_texts.append(simple_match.group(0))
+            event_matched_texts.append(simple_match.group(0))
     if match_full:
         full_match = re.search(r"活动(\d+)|event(\d+)", args)
         if full_match:
             event_id = int(full_match.group(1) or full_match.group(2))
-            matched_texts.append(full_match.group(0))
+            event_matched_texts.append(full_match.group(0))
+
+    if event_id == 0:
+        event_id = None
+        event_matched_texts = []
 
     # 获取活动
-    if not event_id:
+    if event_id is None:
         # 没有指定活动的情况：寻找当前活动，如果没有就下一个活动
         if not default_return_current:
             assert_and_reply_or_return(False, "请指定一个要查询的活动，例如\"event140\"或\"活动140\"")
@@ -268,11 +273,17 @@ async def extract_target_event(
         wl_cid = chapter['wl_cid']
 
     else:
+        # 指定 wlx 的情况报错
         assert_and_reply_or_return(not chapter_id, f"活动 {ctx.region}-{event['id']} 不是WL活动，无法指定章节")
+        # 指定角色昵称的情况不报错，直接忽略
+        wl_matched_texts = []
 
     # 确认匹配到活动
-    for text in matched_texts:
-        args = args.replace(text, "").strip()
+    for text in event_matched_texts:
+        args = args.replace(text, "", 1).strip()
+    for text in wl_matched_texts:
+        args = args.replace(text, "", 1).strip()
+    
     return event, wl_cid, args
 
 # 从args同时获取组卡目标活动或者指定属性&团模拟活动 返回 (活动, cid, unit, attr, 剩余参数)

@@ -1421,7 +1421,7 @@ async def _(ctx: SekaiHandlerContext):
 # 查询抓包数据
 pjsk_check_data = SekaiCmdHandler([
     "/pjsk check data", "/pjsk_check_data",
-    "/pjsk抓包", "/pjsk抓包状态", "/pjsk抓包数据", "/pjsk抓包查询", "/抓包数据", "/抓包状态",
+    "/pjsk抓包", "/pjsk抓包状态", "/pjsk抓包数据", "/pjsk抓包查询", "/抓包数据", "/抓包状态", "/抓包消息",
 ])
 pjsk_check_data.check_cdrate(cd).check_wblist(gbl)
 @pjsk_check_data.handle()

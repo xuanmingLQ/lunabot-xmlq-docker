@@ -117,16 +117,16 @@ class SekaiCmdHandler(CmdHandler):
         args = context.get_args()
         uid_arg = None
         if self.parse_uid_arg:
-            # 匹配 u数字
-            index_match = re.search(r'u(\d{1,2})', args)
+            # 匹配 u数字 并且前一个字母不能是m
+            index_match = re.search(r'(?<!m)u(\d{1,2})', args)
             if index_match:
                 uid_arg = f"u{index_match.group(1)}"
-                args = args.replace(index_match.group(0), '').strip()
+                args = args.replace(index_match.group(0), '', 1).strip()
             # 匹配游戏id
             uid_match = re.search(r'(\d{14,20})', args)
             if uid_match:
                 uid_arg = uid_match.group(1)
-                args = args.replace(uid_match.group(0), '').strip()
+                args = args.replace(uid_match.group(0), '', 1).strip()
         
         # 构造新的上下文
         params = context.__dict__.copy()

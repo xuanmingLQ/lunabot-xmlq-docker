@@ -1127,13 +1127,13 @@ async def compose_play_progress_image(ctx: SekaiHandlerContext, diff: str, qid: 
                         clear   = c.clear - c.fc
                         total   = c.total - c.clear
                         style = TextStyle(DEFAULT_BOLD_FONT, font_sz, color, use_shadow=False)
-                        TextBox(f"{total}", style).set_size((w, item_h)).set_content_align('c').set_bg(roundrect_bg())
+                        TextBox(f"{total}", style, overflow='clip').set_size((w, item_h)).set_content_align('c').set_bg(roundrect_bg())
                         style = TextStyle(DEFAULT_BOLD_FONT, font_sz, color, use_shadow=True, shadow_color=PLAY_RESULT_COLORS['clear'], shadow_offset=2)
-                        TextBox(f"{clear}", style).set_size((w, item_h)).set_content_align('c').set_bg(roundrect_bg())
+                        TextBox(f"{clear}", style, overflow='clip').set_size((w, item_h)).set_content_align('c').set_bg(roundrect_bg())
                         style = TextStyle(DEFAULT_BOLD_FONT, font_sz, color, use_shadow=True, shadow_color=PLAY_RESULT_COLORS['fc'], shadow_offset=2)
-                        TextBox(f"{fc}",    style).set_size((w, item_h)).set_content_align('c').set_bg(roundrect_bg())
+                        TextBox(f"{fc}",    style, overflow='clip').set_size((w, item_h)).set_content_align('c').set_bg(roundrect_bg())
                         style = TextStyle(DEFAULT_BOLD_FONT, font_sz, color, use_shadow=True, shadow_color=PLAY_RESULT_COLORS['ap'], shadow_offset=2)
-                        TextBox(f"{ap}",    style).set_size((w, item_h)).set_content_align('c').set_bg(roundrect_bg())
+                        TextBox(f"{ap}",    style, overflow='clip').set_size((w, item_h)).set_content_align('c').set_bg(roundrect_bg())
 
     add_watermark(canvas)
     return await canvas.get_img()
