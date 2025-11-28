@@ -188,12 +188,12 @@ async def extract_target_event(
             chapter_id = i
             wl_matched_texts.append(f"wl{i}")
             break
-    for item in get_character_nickname_data():
-        for nickname in item.nicknames:
-            if nickname in args:
-                chapter_nickname = nickname
-                wl_matched_texts.append(nickname)
-                break
+        
+    for nickname, cid in get_character_nickname_data().nickname_ids:
+        if nickname in args:
+            chapter_nickname = nickname
+            wl_matched_texts.append(nickname)
+            break
     
     # 解析活动id
     event_id = None
@@ -703,13 +703,11 @@ async def extract_challenge_options(ctx: SekaiHandlerContext, args: str) -> Dict
     
     # 指定角色
     options.challenge_live_character_id = None
-    for item in get_character_nickname_data():
-        for nickname in item.nicknames:
-            if nickname in args:
-                options.challenge_live_character_id = item.id
-                args = args.replace(nickname, "").strip()
-                break
-    # 不指定角色情况下每个角色都组1个最强卡
+    nickname, args = extract_nickname_from_args(args)
+    if nickname:
+        options.challenge_live_character_id = get_cid_by_nickname(nickname)
+
+    ## 不指定角色情况下每个角色都组1个最强卡
 
     # 歌曲id和难度
     args = await extract_music_and_diff(ctx, args, options, "challenge", options.live_type)

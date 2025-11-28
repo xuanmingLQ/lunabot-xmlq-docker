@@ -149,10 +149,10 @@ class MasterDataManager:
 
     def _build_indices(self, region: str):
         try:
-            if not self.data[region]:
+            if self.data.get(region, None) is None:
                 logger.warning(f"MasterData [{region}.{self.name}] 构建索引发生在数据加载前")
                 return
-            if not isinstance(self.data[region], list):
+            if not self.data[region] or not isinstance(self.data[region], list):
                 return
             logger.debug(f"MasterData [{region}.{self.name}] 开始构建索引")
             self.indices[region] = {}

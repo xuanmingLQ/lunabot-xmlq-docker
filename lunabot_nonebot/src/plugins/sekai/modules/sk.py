@@ -106,14 +106,13 @@ async def extract_wl_event(ctx: SekaiHandlerContext, args: str) -> Tuple[dict, s
             return None, None
         # 通过"wl角色昵称"查询章节
         def query_by_nickname() -> Tuple[Optional[int], Optional[str]]:
-            for item in get_character_nickname_data():
-                for nickname in item.nicknames:
-                    for carg in (f"wl{nickname}", f"-c {nickname}", f"{nickname}"):
-                        if carg in args:
-                            chapter = find_by(chapters, "gameCharacterId", item.id)
-                            assert_and_reply(chapter, f"当期活动{ctx.region.upper()}-{event['id']}并没有角色{nickname}的章节")
-                            chapter_id = chapter['chapterNo']
-                            return chapter_id, carg
+            for nickname, cid in get_character_nickname_data().nickname_ids:
+                for carg in (f"wl{nickname}", f"-c {nickname}", f"{nickname}"):
+                    if carg in args:
+                        chapter = find_by(chapters, "gameCharacterId", cid)
+                        assert_and_reply(chapter, f"当期活动{ctx.region.upper()}-{event['id']}并没有角色{nickname}的章节")
+                        chapter_id = chapter['chapterNo']
+                        return chapter_id, carg
             return None, None
         # 查询当前章节
         def query_current() -> Tuple[Optional[int], Optional[str]]:
