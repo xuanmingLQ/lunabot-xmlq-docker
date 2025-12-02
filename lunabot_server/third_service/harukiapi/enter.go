@@ -23,23 +23,20 @@ const (
 	DataTypeBytes
 )
 
-var hc *http.Client
-
 // DataTypeNone 返回Response
 // DataTypeJson 返回json.Decode的结果
 // DataTypeBytes 返回[]byte
 func hcDo(Req *http.Request, DataType int, Timeout time.Duration) (interface{}, error) {
-	if hc == nil {
-		hc = &http.Client{
-			Transport: &http.Transport{
-				// 	Proxy: func(r *http.Request) (*url.URL, error) {
-				// 		return url.Parse("http://192.168.1.102:7890")
-				// 	},
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
-				}},
-		}
+	hc := &http.Client{
+		Transport: &http.Transport{
+			// 	Proxy: func(r *http.Request) (*url.URL, error) {
+			// 		return url.Parse("http://192.168.1.102:7890")
+			// 	},
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			}},
 	}
+
 	hc.Timeout = Timeout
 	resp, err := hc.Do(Req)
 	if err != nil {

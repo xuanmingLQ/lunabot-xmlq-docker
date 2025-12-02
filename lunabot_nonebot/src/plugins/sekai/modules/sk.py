@@ -20,16 +20,23 @@ from .sk_sql import (
     query_latest_ranking, 
     query_first_ranking_after,
 )
+from .sk_forecast import (
+    get_forecast_data,
+    save_rankings_to_csv,
+    get_local_forecast_history_csv_path,
+)
 import zipfile
 from matplotlib import pyplot as plt
 import matplotlib.dates as mdates
+import matplotlib.colors as mcolors
 import matplotlib
 import matplotlib.cm as cm
 import numpy as np
-from src.api.game.event import get_ranking
-from src.utils.request import ApiError
-
 import subprocess
+from src.api.game.event import get_ranking
+import pytz
+# 导入国服预测
+from .sekairanking import get_sekairanking_history
 
 FONT_NAME = "Source Han Sans CN"
 plt.switch_backend('agg')
@@ -56,17 +63,6 @@ ALL_RANKS = [
 
 # latest_rankings[region][event_id] = rankings
 latest_rankings_cache: Dict[str, Dict[int, List[Ranking]]] = {}
-
-@dataclass
-class PredictRankings:
-    event_id: int
-    event_name: str
-    event_start: datetime
-    event_end: datetime
-    predict_time: datetime
-    ranks: List[int]
-    current: Dict[int, int]
-    final: Dict[int, int]
 
 @dataclass
 class PredictWinrate:
@@ -144,8 +140,10 @@ async def extract_wl_event(ctx: SekaiHandlerContext, args: str) -> Tuple[dict, s
         event['aggregateAt'] = chapter['aggregateAt']
         event['wl_cid'] = chapter.get('gameCharacterId', None)
         args = args.replace(carg, "").replace("wl", "")
+
         logger.info(f"查询WL活动章节: chapter_arg={carg} wl_id={event['id']}")
         return event, args
+
 # 给图表绘制一个昼夜颜色背景
 def draw_daynight_bg(ax, start_time: datetime, end_time: datetime):
     def get_time_bg_color(time: datetime) -> str:
@@ -164,6 +162,7 @@ def draw_daynight_bg(ax, start_time: datetime, end_time: datetime):
         start = bg_times[i]
         end = bg_times[i] + interval
         ax.axvspan(start, end, facecolor=bg_colors[i], edgecolor=None, zorder=0)
+
 # 从榜线列表中找到最近的前一个榜线
 def find_prev_ranking(ranks: List[Ranking], rank: int) -> Optional[Ranking]:
     most_prev = None
@@ -173,6 +172,7 @@ def find_prev_ranking(ranks: List[Ranking], rank: int) -> Optional[Ranking]:
         if not most_prev or r.rank > most_prev.rank:
             most_prev = r
     return most_prev
+
 # 从榜线列表中找到最近的后一个榜线
 def find_next_ranking(ranks: List[Ranking], rank: int) -> Optional[Ranking]:
     most_next = None
@@ -182,12 +182,14 @@ def find_next_ranking(ranks: List[Ranking], rank: int) -> Optional[Ranking]:
         if not most_next or r.rank < most_next.rank:
             most_next = r
     return most_next
+
 # 从榜线数据解析Rankings
 async def parse_rankings(ctx: SekaiHandlerContext, event_id: int, data: dict, ignore_no_update: bool) -> List[Ranking]:
     # 普通活动
     if event_id < 1000:
         top100 = [Ranking.from_sk(item) for item in data['top100']['rankings']]
         border = [Ranking.from_sk(item) for item in data['border']['borderRankings'] if item['rank'] != 100]
+    
     # WL活动
     else:
         cid = await get_wl_chapter_cid(ctx, event_id)
@@ -195,10 +197,12 @@ async def parse_rankings(ctx: SekaiHandlerContext, event_id: int, data: dict, ig
         top100 = [Ranking.from_sk(item) for item in top100_rankings['rankings']]
         border_rankings = find_by(data['border'].get('userWorldBloomChapterRankingBorders', []), 'gameCharacterId', cid)
         border = [Ranking.from_sk(item) for item in border_rankings['borderRankings'] if item['rank'] != 100]
+
     for item in top100:
         item.uid = str(item.uid)
     for item in border:
         item.uid = str(item.uid)
+
     if ignore_no_update:
         # 过滤掉没有更新的border榜线
         border_has_diff = False
@@ -249,78 +253,102 @@ def get_board_rank_str(rank: int) -> str:
     # 每3位加一个逗号
     return "{:,}".format(rank)
 
-# 获取榜线预测数据
-async def get_predict_ranks(ctx: SekaiHandlerContext) -> PredictRankings:
-    assert ctx.region == 'jp', "榜线预测仅支持日服"
-    predict_data = await download_json("https://sekai-data.3-3.dev/predict.json")
-    if predict_data['status'] != "success":
-        raise Exception(f"下载榜线数据失败: {predict_data['message']}")
-    try:
-        event_id    = predict_data['event']['id']
-        event_name  = predict_data['event']['name']
-        event_start = datetime.fromtimestamp(predict_data['event']['startAt'] / 1000)
-        event_end   = datetime.fromtimestamp(predict_data['event']['aggregateAt'] / 1000 + 1)
-        predict_time = datetime.fromtimestamp(predict_data['data']['ts'] / 1000)
-        predict_current = { int(r): s for r, s in predict_data['rank'].items() if r != 'ts' }
-        predict_final = { int(r): s for r, s in predict_data['data'].items() if r != 'ts' }
-        ranks = set(predict_current.keys()) | set(predict_final.keys())
-        ranks = sorted(ranks)
-        return PredictRankings(
-            event_id=event_id,
-            event_name=event_name,
-            event_start=event_start,
-            event_end=event_end,
-            predict_time=predict_time,
-            current=predict_current,
-            final=predict_final,
-            ranks=ranks,
-        )
-    except Exception as e:
-        raise Exception(f"解析榜线数据失败: {get_exc_desc(e)}")
-
 # 合成榜线预测图片
 async def compose_skp_image(ctx: SekaiHandlerContext) -> Image.Image:
-    predict = await get_predict_ranks(ctx)
-
-    event = await ctx.md.events.find_by_id(predict.event_id)
+    event = await get_current_event(ctx, fallback="prev")
+    assert_and_reply(event, "未找到当前活动")
+    event_id, event_name = event['id'], event['name']
+    event_start = datetime.fromtimestamp(event['startAt'] / 1000)
+    event_end = datetime.fromtimestamp(event['aggregateAt'] / 1000 + 1)
     banner_img = await get_event_banner_img(ctx, event)
+    chapter_id = event_id // 1000
+
+    forecasts = await get_forecast_data(ctx.region, event['id'])
+    sources = {}
+    for key, cfg in config.get('sk.forecast').items():
+        if not cfg.get('enabled'):
+            continue
+        if ctx.region not in cfg.get('regions'):
+            continue
+        if chapter_id and not cfg.get('support_wl'):
+            continue
+        sources[key] = cfg
+    
+    ranks = set()
+    for forecast in forecasts:
+        if forecast.rank_data:
+            ranks.update(forecast.rank_data.keys())
+    ranks = sorted(ranks)
+
+    latest_rankings = await get_latest_ranking(ctx, event_id, ranks)
 
     with Canvas(bg=SEKAI_BLUE_BG).set_padding(BG_PADDING) as canvas:
         with VSplit().set_content_align('lt').set_item_align('lt').set_sep(16).set_item_bg(roundrect_bg()):
             with HSplit().set_content_align('rt').set_item_align('rt').set_padding(16).set_sep(7):
                 with VSplit().set_content_align('lt').set_item_align('lt').set_sep(5):
-                    TextBox(f"【{ctx.region.upper()}-{predict.event_id}】{truncate(predict.event_name, 20)}", TextStyle(font=DEFAULT_BOLD_FONT, size=18, color=BLACK))
-                    TextBox(f"{predict.event_start.strftime('%Y-%m-%d %H:%M')} ~ {predict.event_end.strftime('%Y-%m-%d %H:%M')}", 
+                    TextBox(f"【{ctx.region.upper()}-{event_id}】{truncate(event_name, 20)}", TextStyle(font=DEFAULT_BOLD_FONT, size=18, color=BLACK))
+                    TextBox(f"{event_start.strftime('%Y-%m-%d %H:%M')} ~ {event_end.strftime('%Y-%m-%d %H:%M')}", 
                             TextStyle(font=DEFAULT_FONT, size=18, color=BLACK))
-                    time_to_end = predict.event_end - datetime.now()
+                    time_to_end = event_end - datetime.now()
                     if time_to_end.total_seconds() <= 0:
                         time_to_end = "活动已结束"
                     else:
                         time_to_end = f"距离活动结束还有{get_readable_timedelta(time_to_end)}"
                     TextBox(time_to_end, TextStyle(font=DEFAULT_BOLD_FONT, size=18, color=BLACK))
-                    TextBox(f"预测更新时间: {predict.predict_time.strftime('%m-%d %H:%M:%S')} ({get_readable_datetime(predict.predict_time, show_original_time=False)})",
-                            TextStyle(font=DEFAULT_BOLD_FONT, size=18, color=BLACK))
-                    TextBox("数据来源: 3-3.dev", TextStyle(font=DEFAULT_FONT, size=12, color=(50, 50, 50, 255)))
                 if banner_img:
                     ImageBox(banner_img, size=(140, None))
 
             gh = 30
-            with Grid(col_count=3).set_content_align('c').set_sep(hsep=8, vsep=5).set_padding(16):
+            with Grid(col_count=len(sources)+2).set_content_align('c').set_sep(hsep=8, vsep=5).set_padding(16):
                 bg1 = FillBg((255, 255, 255, 200))
                 bg2 = FillBg((255, 255, 255, 100))
                 title_style = TextStyle(font=DEFAULT_BOLD_FONT, size=18, color=BLACK)
                 item_style  = TextStyle(font=DEFAULT_FONT,      size=20, color=BLACK)
-                TextBox("排名",    title_style).set_bg(bg1).set_size((160, gh)).set_content_align('c')
-                TextBox("预测当前", title_style).set_bg(bg1).set_size((160, gh)).set_content_align('c')
-                TextBox("预测最终", title_style).set_bg(bg1).set_size((160, gh)).set_content_align('c')
-                for i, rank in enumerate(predict.ranks):
-                    bg = bg2 if i % 2 == 0 else bg1
-                    current_score = get_board_score_str(predict.current.get(rank))
-                    final_score = get_board_score_str(predict.final.get(rank))
-                    rank = get_board_rank_str(int(rank))
-                    TextBox(rank,          item_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('r')
-                    TextBox(current_score, item_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('r').set_padding((16, 0))
-                    TextBox(final_score,   item_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('r').set_padding((16, 0))
+
+                TextBox("排名", title_style).set_bg(bg1).set_size((160, gh)).set_content_align('c')
+                TextBox("当前榜线", title_style).set_bg(bg1).set_size((160, gh)).set_content_align('c')
+                for source in sources.keys():
+                    TextBox(sources[source]['name'], title_style).set_bg(bg1).set_size((160, gh)).set_content_align('c')
+
+                bg = bg1
+                for i, rank in enumerate(ranks):
+                    bg = bg2 if bg == bg1 else bg1
+
+                    TextBox(get_board_rank_str(rank), item_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('c')
+
+                    cur_text = "-"
+                    if cur_rank := find_by_predicate(latest_rankings, lambda x: x.rank == rank):
+                       cur_text = get_board_score_str(cur_rank.score)
+                    TextBox(cur_text, item_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('r').set_padding((16, 0))
+
+                    for source in sources.keys():
+                        forecast_final = "-"
+                        if forecast := find_by_predicate(forecasts, lambda x: x.source == source):
+                            if rank_data := forecast.rank_data.get(rank, None):
+                                if rank_data.final_score is not None:
+                                    forecast_final = get_board_score_str(rank_data.final_score)
+                        TextBox(forecast_final, item_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('r').set_padding((16, 0))
+
+                bg = bg2 if bg == bg1 else bg1
+                TextBox("预测时间", title_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('c')
+                TextBox('-', item_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('c').set_padding((0, 0))
+                for source in sources.keys():
+                    forcast_time_text = "-"
+                    if forecast := find_by_predicate(forecasts, lambda x: x.source == source):
+                        if forecast.forecast_ts:
+                            forcast_time_text = get_readable_datetime(datetime.fromtimestamp(forecast.forecast_ts), show_original_time=False)
+                    TextBox(forcast_time_text, item_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('c').set_padding((0, 0))
+
+                bg = bg2 if bg == bg1 else bg1
+                TextBox("获取时间", title_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('c')
+                update_time = get_readable_datetime(latest_rankings[0].time, show_original_time=False) if latest_rankings else "-"
+                TextBox(update_time, item_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('c').set_padding((0, 0))
+                for source in sources.keys():
+                    update_time_text = "-"
+                    if forecast := find_by_predicate(forecasts, lambda x: x.source == source):
+                        if forecast.mtime:
+                            update_time_text = get_readable_datetime(datetime.fromtimestamp(forecast.mtime), show_original_time=False)
+                    TextBox(update_time_text, item_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('c').set_padding((0, 0))
 
     add_watermark(canvas)
     return await canvas.get_img()
@@ -1010,20 +1038,37 @@ async def compose_rank_trace_image(ctx: SekaiHandlerContext, rank: int, event: d
             speeds.append(-1)
     
     # 附加排名预测
-    final_score = None
+    forecasts = await get_forecast_data(ctx.region, eid % 1000, eid // 1000)
+    forecasts = {
+        f.source: f.rank_data[rank] 
+        for f in forecasts 
+        if f and f.rank_data and rank in f.rank_data
+    }
+
+    def get_unique_colors(n: int) -> list:
+        num_part1 = n // 2
+        num_part2 = n - num_part1
+        colors1 = cm.nipy_spectral(np.linspace(0.0, 0.3, num_part1))
+        colors2 = cm.nipy_spectral(np.linspace(0.75, 0.95, num_part2))
+        if n > 0:
+            combined_colors = np.vstack((colors1, colors2))
+            np.random.shuffle(combined_colors)
+        else:
+            combined_colors = []
+        return combined_colors
+    # 从SnowyBot直接获取历史预测，由于方法是异步的，从这里提前获取
     try:
-        predict = await get_predict_ranks(ctx)
-        if predict.event_id == eid:
-            final_score = predict.final.get(rank)
-    except Exception as e:
-        logger.warning(f"获取榜线预测失败: {get_exc_desc(e)}")
+        sekairanking_history, _ = await get_sekairanking_history(ctx.region, event_id=eid, rank=rank)
+        predictions_data = sekairanking_history['predictions']
+        snowy_history_times = [ datetime.fromtimestamp(datetime.fromisoformat(item['t']).timestamp()) for item in predictions_data]
+        snowy_history_preds = [item['y'] for item in predictions_data]
+    except:
+        snowy_history_times = None
+        snowy_history_preds = None
 
     def draw_graph() -> Image.Image:
-        max_score = max(scores + pred_scores)
-        min_score = min(scores + pred_scores)
-        if final_score:
-            max_score = max(max_score, final_score)
-            min_score = min(min_score, final_score)
+        # 所有分数，用于设置上界
+        all_scores = scores
 
         fig, ax = plt.subplots()
         fig.set_size_inches(12, 8)
@@ -1038,16 +1083,8 @@ async def compose_rank_trace_image(ctx: SekaiHandlerContext, rank: int, event: d
             point_colors = ['blue' for _ in uids]
         else:
             # 为每个uid分配一个独特的、非绿色的深色
-            num_part1 = num_unique_uids // 2
-            num_part2 = num_unique_uids - num_part1
-            colors1 = cm.nipy_spectral(np.linspace(0.0, 0.3, num_part1))
-            colors2 = cm.nipy_spectral(np.linspace(0.75, 0.95, num_part2))
-            if num_unique_uids > 0:
-                combined_colors = np.vstack((colors1, colors2))
-                np.random.shuffle(combined_colors)
-            else:
-                combined_colors = []
-            uid_to_color = {uid: color for uid, color in zip(unique_uids, combined_colors)}
+            unique_colors = get_unique_colors(num_unique_uids)
+            uid_to_color = {uid: color for uid, color in zip(unique_uids, unique_colors)}
             point_colors = [uid_to_color.get(uid) for uid in uids]
 
         # 绘制分数，为不同uid的数据点使用不同颜色
@@ -1056,11 +1093,37 @@ async def compose_rank_trace_image(ctx: SekaiHandlerContext, rank: int, event: d
             plt.annotate(f"{get_board_score_str(scores[-1])}", xy=(times[-1], scores[-1]), xytext=(times[-1], scores[-1]),
                         color=point_colors[-1], fontsize=12, ha='right')
 
-        # 绘制预测线
-        if final_score:
-            ax.axhline(y=final_score, color='red', linestyle='--', linewidth=0.5)
-            ax.text(times[-1], final_score * 1.02, f"预测最终: {get_board_score_str(final_score)}", color='red', fontsize=12, ha='right')
-
+        # 绘制预测
+        line_histories = []
+        colors = list(mcolors.TABLEAU_COLORS.values())
+        for i, (source, f) in enumerate(forecasts.items()):
+            name = config.get(f'sk.forecast.{source}.name')
+            color = colors[i % len(colors)]
+            # 最终预测线
+            if f.final_score:
+                ax.axhline(y=f.final_score, color=color, linestyle='--', linewidth=1.0)
+                x_pos = 0.9 - (i * 0.175)
+                text_str = f"{name}: {get_board_score_str(f.final_score)}"
+                ax.text(x_pos, f.final_score, text_str, 
+                        color=color, fontsize=10, 
+                        ha='right', va='bottom', transform=ax.get_yaxis_transform())
+            # 预测历史
+            if config.get(f'sk.forecast.{source}.show_history') and f.history_final_score:
+                if source == 'snowy' and snowy_history_times is not None and snowy_history_preds is not None:
+                    history_times = snowy_history_times
+                    history_preds = snowy_history_preds
+                else:
+                    history = [(datetime.fromtimestamp(x.ts), x.score) for x in f.history_final_score]
+                    history_times = [x[0] for x in history]
+                    history_preds = [x[1] for x in history]
+                # 记录所有分数，用于设置上界
+                all_scores += history_preds
+                line, = ax.plot(history_times, history_preds, label=f'{name}历史', color=color, 
+                                linestyle=':', linewidth=1.0)
+                line_histories.append(line)
+        # 用np库计算上界
+        all_scores = np.array(all_scores)
+        ax.set_ylim(0, np.percentile(all_scores, 99.9)*1.05)
         # 绘制时速
         ax2 = ax.twinx()
         line_speeds, = ax2.plot(times, speeds, 'o', label='时速', color='green', markersize=0.5, linewidth=0.5)
@@ -1071,8 +1134,7 @@ async def compose_rank_trace_image(ctx: SekaiHandlerContext, rank: int, event: d
         ax.xaxis.set_major_locator(mdates.AutoDateLocator())
         fig.autofmt_xdate()
         plt.title(f"{get_event_id_and_name_text(ctx.region, eid, '')} T{rank} 分数线")
-
-        lines = [line_speeds]
+        lines = [line_speeds] + line_histories
         labels = [l.get_label() for l in lines]
         ax.legend(lines, labels, loc='upper left')
 
@@ -1179,7 +1241,7 @@ async def compose_winrate_predict_image(ctx: SekaiHandlerContext) -> Image.Image
 pjsk_skp = SekaiCmdHandler([
     "/pjsk sk predict", "/pjsk_sk_predict", "/pjsk board predict", "/pjsk_board_predict",
     "/sk预测", "/榜线预测", "/skp",
-], regions=['jp'], prefix_args=['', 'wl'])
+], prefix_args=['', 'wl'])
 pjsk_skp.check_cdrate(cd).check_wblist(gbl)
 @pjsk_skp.handle()
 async def _(ctx: SekaiHandlerContext):
@@ -1375,6 +1437,8 @@ async def _(ctx: SekaiHandlerContext):
         await compose_winrate_predict_image(ctx),
         low_quality=True,
     ))
+
+
 # ======================= 定时任务 ======================= #
 
 UPDATE_RANKING_LOG_INTERVAL_CFG = config.item('sk.update_ranking_log_interval')
@@ -1386,14 +1450,17 @@ ranking_update_failures = { region: 0 for region in ALL_SERVER_REGIONS }
 async def update_ranking():
     tasks = []
     region_failed = {}
+    
     # 获取所有服务器的榜线数据
     for region in ALL_SERVER_REGIONS:
         ctx = SekaiHandlerContext.from_region(region)
+        
         # 获取当前运行中的活动
         if not (event := await get_current_event(ctx, fallback="prev")):
             continue
         if datetime.now() > datetime.fromtimestamp(event['aggregateAt'] / 1000 + RECORD_TIME_AFTER_EVENT_END_CFG.get() * 60):
             continue
+
         # 获取榜线数据
         @retry(wait=wait_fixed(3), stop=stop_after_attempt(3), reraise=True)
         async def _get_ranking(ctx: SekaiHandlerContext, eid: int):
@@ -1486,17 +1553,21 @@ async def compress_ranking_data():
                 event = await ctx.md.events.find_by_id(event_id)
                 assert event, f"未找到活动 {event_id}"
                 end_time = datetime.fromtimestamp(event['aggregateAt'] / 1000)
-                if datetime.now() - end_time < timedelta(days=SK_COMPRESS_THRESHOLD_CFG.get()):
-                    continue
 
-                def do_zip():
-                    with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
-                        zf.write(db_file, arcname=Path(db_file).name)
+                # 保存已完成的榜线数据供本地预测
+                if datetime.now() > end_time:
+                    csv_path = get_local_forecast_history_csv_path(ctx.region, event_id)
+                    if not os.path.exists(csv_path):
+                        await save_rankings_to_csv(ctx.region, event_id, csv_path)
 
-                await run_in_pool(do_zip)
-                os.remove(db_file)
-
-                logger.info(f"已压缩榜线数据库 {db_file}")
+                # 压缩
+                if datetime.now() - end_time > timedelta(days=SK_COMPRESS_THRESHOLD_CFG.get()):
+                    def do_zip():
+                        with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+                            zf.write(db_file, arcname=Path(db_file).name)
+                    await run_in_pool(do_zip)
+                    os.remove(db_file)
+                    logger.info(f"已压缩榜线数据库 {db_file}")
                 
             except Exception as e:
                 logger.warning(f"尝试检查压缩 {db_file} 失败: {get_exc_desc(e)}")

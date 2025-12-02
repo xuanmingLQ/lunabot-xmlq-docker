@@ -1,0 +1,3 @@
+base_url: https://sekairanking.exmeaning.com/api/v1
+token: xxx
+cache_duration: 300

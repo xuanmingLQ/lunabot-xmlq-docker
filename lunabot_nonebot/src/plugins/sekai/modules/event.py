@@ -10,7 +10,7 @@ from .profile import (
     get_detailed_profile_card,
     get_player_avatar_info_by_detailed_profile,
 )
-from ....api.game.event import send_boost as send_boost_api
+from src.api.game.event import send_boost as send_boost_api
 QUERY_SINGLE_EVENT_HELP = """
 【查单个活动格式】
 1. 活动ID：123

@@ -1786,7 +1786,26 @@ async def _(ctx: HandlerContext):
                     msg += f"[{time}] {qid}"
     else:
         # QQ号查游戏ID
-        msg = f"用户{qid}的绑定历史:\n"
+        has_any = False
+        msg = f"用户{qid}当前绑定:\n"
+        for region in ALL_SERVER_REGIONS:
+            region_ctx = SekaiHandlerContext.from_region(region)
+            main_uid = get_player_bind_id(region_ctx, ctx.user_id, check_bind=False)
+            lines = []
+            for i in range(get_player_bind_count(region_ctx, ctx.user_id)):
+                uid = get_player_bind_id(region_ctx, ctx.user_id, index=i)
+                is_main = (uid == main_uid)
+                line = f"[{i+1}] {uid}"
+                if is_main:
+                    line = "*" + line
+                lines.append(line)
+            if lines:
+                has_any = True
+                msg += f"【{get_region_name(region)}】\n" + '\n'.join(lines) + '\n'
+        if not has_any:
+            msg += "当前没有绑定任何游戏ID\n"
+
+        msg += f"用户{qid}的绑定历史:\n"
         items = bind_history.get(qid, [])
         for item in items:
             time = datetime.fromtimestamp(item['time'] / 1000).strftime('%Y-%m-%d %H:%M:%S')

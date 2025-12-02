@@ -205,3 +205,29 @@ async def query_first_ranking_after(
         rows = await cursor.fetchall()
         await cursor.close()
         return [Ranking.from_row(row) for row in rows]
+    
+
+async def query_ranks_with_interval(region: str, event_id: int, ranks: list[int], sample_interval_seconds: int):
+    """
+    以一定间隔采样ranks的记录
+    """
+    if not ranks:
+        return {}
+    conn = await get_conn(region, event_id, create=False)
+    if not conn:
+        return {}
+    
+    placeholders = ','.join('?' for _ in ranks)
+    sql = f"""
+        SELECT id, uid, name, score, rank, MIN(ts) as ts
+        FROM ranking
+        WHERE rank IN ({placeholders})
+        GROUP BY rank, (ts / ?)
+        ORDER BY ts ASC
+    """
+    
+    args = list(ranks) + [sample_interval_seconds]
+    
+    async with conn.execute(sql, args) as cursor:
+        rows = await cursor.fetchall()
+        return [Ranking.from_row(row) for row in rows]

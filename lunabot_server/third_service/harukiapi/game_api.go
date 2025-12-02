@@ -36,8 +36,12 @@ func (hrk *GameApiService) GetProfile(ctx context.Context, Region string, UserId
 	return
 }
 
-var lastRecordRanking map[string]interface{}
-var lastRecordTime time.Time
+type lastRecordRanking struct {
+	ranking    map[string]interface{}
+	updateTime time.Time
+}
+
+var rankingCaches map[string]lastRecordRanking = make(map[string]lastRecordRanking)
 
 func (hrk *GameApiService) GetRanking(ctx context.Context, Region, EventId string) (result map[string]interface{}, err error) {
 	if global.CONFIG.HarukiApi.PublicApi.Endpoint == "" ||
@@ -48,10 +52,11 @@ func (hrk *GameApiService) GetRanking(ctx context.Context, Region, EventId strin
 	if !slices.Contains(global.CONFIG.HarukiApi.PublicApi.AllowRegions, Region) {
 		return nil, fmt.Errorf("区域 %s 不在 Haruki Public Api 允许的区域中", Region)
 	}
+	rankingCache, ok := rankingCaches[Region]
 	now := time.Now()
-	if now.Before(lastRecordTime.Add(time.Duration(global.CONFIG.HarukiApi.PublicApi.RankingRecordInterval) * time.Second)) {
+	if ok && now.Before(rankingCache.updateTime.Add(time.Duration(global.CONFIG.HarukiApi.PublicApi.RankingRecordInterval)*time.Second)) {
 		//如果当前时间在计时器记录的时间之前，返回上一次记录的结果
-		return lastRecordRanking, nil
+		return rankingCache.ranking, nil
 	}
 	Url := global.CONFIG.HarukiApi.PublicApi.Endpoint + strings.Replace(strings.Replace(global.CONFIG.HarukiApi.PublicApi.RankingBorder, "{region}", Region, 1), "{event_id}", EventId, 1)
 	_, err = url.Parse(Url)
@@ -81,8 +86,9 @@ func (hrk *GameApiService) GetRanking(ctx context.Context, Region, EventId strin
 		"border": vBorder,
 		"top100": vTop100,
 	}
-	lastRecordTime = now
-	lastRecordRanking = result
+	rankingCache.updateTime = now
+	rankingCache.ranking = result
+	rankingCaches[Region] = rankingCache
 	return
 }
 func (hrk *GameApiService) GetSuiteInfo(ctx context.Context, Region, UserId string, filter []string) (v interface{}, err error) {

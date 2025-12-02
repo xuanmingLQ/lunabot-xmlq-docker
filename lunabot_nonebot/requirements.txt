@@ -28,3 +28,4 @@ zhconv
 zhon
 zstandard
 colour-science
+pandas

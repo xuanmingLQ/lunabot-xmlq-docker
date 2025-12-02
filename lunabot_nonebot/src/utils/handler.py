@@ -327,6 +327,8 @@ class TempBotOrInternetFilePath:
     async def __aenter__(self) -> str:
         if self.file.startswith('http'):
             self.ext = {
+                'html': 'html',
+                'text': 'txt',
                 'image': 'png',
                 'record': 'wav',
                 'video': 'mp4',

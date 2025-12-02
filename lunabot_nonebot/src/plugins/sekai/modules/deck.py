@@ -986,15 +986,18 @@ async def do_deck_recommend_batch(
                     data = await resp.json()
                     return index, data
         
-        errors = []
+        errors = {}
         for url, url_index in zip(urls, url_indices):
             try:
                 return await req(index, payload, url)
             except Exception as e:
                 logger.warning(f"组卡请求 {url} 失败: {get_exc_desc(e)}")
-                errors.append(f"[{url_index+1}] " + get_exc_desc(e))
+                errors.setdefault(get_exc_desc(e), []).append(url_index+1)
 
-        raise ReplyException(f"请求所有可用的组卡服务失败:\n" + "\n".join(errors))
+        error_text = ""
+        for err_msg, url_idxs in errors.items():
+            error_text += "".join([f"[{url_index}]" for url_index in url_idxs]) + f" {err_msg}\n"
+        raise ReplyException(f"请求所有可用的组卡服务失败:\n" + error_text.strip())
 
     tasks = []
     for i, options in enumerate(options_list):

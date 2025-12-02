@@ -16,13 +16,13 @@ Project Sekai（世界计划）游戏多区服服务
 - 发送 `/抓包` 可以获取抓包教程
 
 #### 📊 数据来源 & 鸣谢
-- MasterData: **Sekai Viewer** & **Haruki Master DB**
-- 游戏资源: **Sekai Viewer** & **Haruki Assets** & **pjsekai.moe** & **Unipjsk**
-- 抓包数据: **自建抓包工具** & **Haruki工具箱**
-- 榜线预测: **33Kit**
-- 烤森地图俯视图: **MiddleRed**
-- 烤森家具好友码: **8823**
-- 部分代码参考: **Unibot**
+- MasterData: **[Sekai Viewer](https://sekai.best/)** & **[Haruki Master DB](https://haruki.seiunx.com/)** & **[8823](https://github.com/kotori8823)**
+- 游戏资源: **[Sekai Viewer](https://sekai.best/)** & **[Haruki Assets](https://haruki.seiunx.com/)** & **[pjsekai.moe](pjsekai.moe)** & **[Unipjsk](https://github.com/watagashi-uni)**
+- 抓包数据: **[Haruki工具箱](https://haruki.seiunx.com/)**
+- 榜线预测: **[33Kit](https://3-3.dev/pjsk-predict)** & **[SnowyBot](https://sekairanking.exmeaning.com/)** & **[SekaRun](https://jiiku831.github.io/)**
+- 烤森地图俯视图: **[MiddleRed](https://github.com/MiddleRed)**
+- 烤森家具好友码: **[8823](https://github.com/kotori8823)**
+- 部分代码参考: **[Unibot](https://github.com/watagashi-uni/Unibot)**
 
 ---
 
@@ -938,8 +938,9 @@ mnr1箱对应的卡池: `eventmnr1`
 
 ### 榜线预测
 `/skp` `/sk预测`
-> 查询当期活动榜线预测  
-支持服务器: `jp`
+> 查询当期活动榜线预测   
+也可通过 `/rtr` 指令查询指定排名的预测和预测历史记录 
+支持服务器: `所有`
 
 - `/skp`
 
