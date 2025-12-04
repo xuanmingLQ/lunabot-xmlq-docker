@@ -938,12 +938,15 @@ async def download_image_to_b64(image_path) -> str:
     img = (await download_image(image_path))
     return get_image_b64(img)
 
-def plt_fig_to_image(fig, transparent=True) -> Image.Image:
+def plt_fig_to_image(fig, transparent=True, tight=False) -> Image.Image:
     """
     matplot图像转换为PIL.Image对象
     """
     buf = io.BytesIO()
-    fig.savefig(buf, transparent=transparent, format='png')
+    if tight:
+        fig.savefig(buf, transparent=transparent, format='png', bbox_inches='tight', pad_inches=0.1)
+    else:
+        fig.savefig(buf, transparent=transparent, format='png')
     buf.seek(0)
     img = Image.open(buf)
     img.load()

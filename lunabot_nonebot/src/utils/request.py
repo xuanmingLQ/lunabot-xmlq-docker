@@ -12,7 +12,7 @@ class ApiError(Exception):
         super().__init__(*args)
     pass
 # Api请求
-async def server(path:str, method:str, json:dict|None=None, query:dict|None=None)->dict:
+async def server(path:str, method:str, json:dict|None=None, query:dict|None=None)->any:
     url = f"{SEKAI_API_BASE_PATH}{path}"
     if query:
         url = f"{url}?{parse_query(query)}"

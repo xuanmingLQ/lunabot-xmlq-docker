@@ -13,7 +13,7 @@ from .sk_sql import (
 import pandas as pd
 import sys
 
-from .sekairanking import  get_sekairanking_predictions
+from .snowy import get_sekairanking_latest_event_id, get_sekairanking_predictions, get_sekairanking_history
 
 # ============================= 数据获取 ============================= #
 

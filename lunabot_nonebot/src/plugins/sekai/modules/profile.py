@@ -9,6 +9,9 @@ from src.api.game.user import get_suite, get_profile, create_account
 from src.api.game.misc import get_service_status
 from src.utils.request import ApiError
 
+# 导入snowy的个人信息页面
+from .snowy import get_sekaiprofile_image
+
 SEKAI_PROFILE_DIR = f"{SEKAI_DATA_DIR}/profile"
 profile_db = get_file_db(f"{SEKAI_PROFILE_DIR}/db.json", logger)
 bind_history_db = get_file_db(f"{SEKAI_PROFILE_DIR}/bind_history.json", logger)
@@ -619,6 +622,10 @@ async def get_detailed_profile(
             return None, str(e)
         
     return profile, ""
+# 获取玩家详细信息的简单卡片控件所需要的filter
+def get_detailed_profile_card_filter(filter: list[str] = []) -> list[str]:
+    return filter + ['userGamedata', 'userDecks', 'upload_time', 'userCards']
+
 # 从玩家详细信息获取该玩家头像的PlayerAvatarInfo
 async def get_player_avatar_info_by_detailed_profile(ctx: SekaiHandlerContext, detail_profile: dict) -> PlayerAvatarInfo:
     deck_id = detail_profile['userGamedata']['deck']
@@ -631,6 +638,8 @@ async def get_player_avatar_info_by_detailed_profile(ctx: SekaiHandlerContext, d
     cid = (await ctx.md.cards.find_by_id(card_id))['characterId']
     unit = await get_unit_by_card_id(ctx, card_id)
     return PlayerAvatarInfo(card_id, cid, unit, avatar_img)
+
+
 
 # 获取玩家详细信息的简单卡片控件，返回Frame
 async def get_detailed_profile_card(ctx: SekaiHandlerContext, profile: dict, err_msg: str, mode=None) -> Frame:
@@ -1329,6 +1338,15 @@ pjsk_info.check_cdrate(cd).check_wblist(gbl)
 @pjsk_info.handle()
 async def _(ctx: SekaiHandlerContext):
     args = ctx.get_args().strip()
+    uid = get_player_bind_id(ctx)
+    if 'snowy' in args:
+        if ctx.region == 'cn':
+            return await ctx.asend_reply_msg(await get_image_cq(
+                await get_sekaiprofile_image(ctx.region, uid),
+                low_quality=True, quality=95,
+            ))
+        else:
+            return await ctx.asend_reply_msg("snowy 目前只支持cn服")
     vertical = None
     if '横屏' in args:
         vertical = False
@@ -1336,7 +1354,6 @@ async def _(ctx: SekaiHandlerContext):
     elif '竖屏' in args:
         vertical = True
         args = args.replace('竖屏', '').strip()
-    uid = get_player_bind_id(ctx)
     profile = await get_basic_profile(ctx, uid, use_cache=True, use_remote_cache=False)
     logger.info(f"绘制名片 region={ctx.region} uid={uid}")
     return await ctx.asend_reply_msg(await get_image_cq(
@@ -1438,6 +1455,7 @@ async def _(ctx: SekaiHandlerContext):
     msg = f"{process_hide_uid(ctx, uid, keep=6)}({ctx.region.upper()}) Suite数据\n"
     try:
         upload_time = await get_suite(region=ctx.region,user_id=uid, filter='upload_time')
+        upload_time = datetime.fromtimestamp(upload_time)
         upload_time_text = upload_time.strftime('%m-%d %H:%M:%S')+ f"({get_readable_datetime(upload_time, show_original_time=False)})"
         msg += f"{upload_time_text}\n" 
     except ApiError as e:

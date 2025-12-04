@@ -5,6 +5,7 @@ from matplotlib import pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib
 import aiohttp
+from playwright.async_api import TimeoutError
 # 字体
 FONT_NAME = "Source Han Sans CN"
 plt.switch_backend('agg')
@@ -24,11 +25,11 @@ _sekairanking_cache: Dict[str, Dict] = {
     'index': {}
 }
 # 配置
-sekairanking_config = Config("sekai.sekairanking")
+snowy_config = Config("sekai.snowy")
 # 请求sekariranking api
 async def request_sekairanking(path: str)->Tuple[Any, int]:
-    base_url = sekairanking_config.get("base_url")
-    token = sekairanking_config.get("token")
+    base_url = snowy_config.get("sekairanking.base_url")
+    token = snowy_config.get("sekairanking.token")
     url = f"{base_url}{path}"
     headers = {
         "X-API-Token": token
@@ -74,7 +75,7 @@ def get_board_score_str(score: int, width: int = None) -> str:
 async def get_sekairanking_events(region: str)->Tuple[Any, datetime]:
     assert_and_reply(region == "cn", "只能获取简中服活动列表")
     # 先从缓存中获取
-    duration = sekairanking_config.get("cache_duration", 300)
+    duration = snowy_config.get("sekairanking.cache_duration", 300)
     try:
         events_cache = _sekairanking_cache['events']
         if datetime.now() < events_cache['update_time'] + timedelta(seconds=duration):
@@ -102,7 +103,7 @@ async def get_sekairanking_predictions(region: str, event_id: int) -> Tuple[Dict
     events, _ = await get_sekairanking_events(region)
     assert_and_reply(any(event['id'] == event_id for event in events), f"活动：{event_id}的数据不存在，请使用\"/cnske\"来查找有数据的活动")
     # 先从缓存中获取
-    duration = sekairanking_config.get("cache_duration", 300)
+    duration = snowy_config.get("sekairanking.cache_duration", 300)
     try:
         predictions_cache = _sekairanking_cache['predictions'][event_id]
         if datetime.now() < predictions_cache['update_time'] + timedelta(seconds=duration):
@@ -126,7 +127,7 @@ async def get_sekairanking_history(region: str, event_id: int, rank: int) -> Tup
     events, _ = await get_sekairanking_events(region)
     assert_and_reply(any(event['id'] == event_id for event in events), f"活动：{event_id}的数据不存在，请使用\"/cnske\"来查找有数据的活动")
     # 先从缓存中获取
-    duration = sekairanking_config.get("cache_duration", 300)
+    duration = snowy_config.get("sekairanking.cache_duration", 300)
     try:
         history_cache = _sekairanking_cache['history'][event_id][rank]
         if datetime.now() < history_cache['update_time'] + timedelta(seconds=duration):
@@ -265,8 +266,6 @@ async def get_cnskp_msg(ctx: SekaiHandlerContext, args: str) -> str:
 
         for ranking in predictions['rankings']:
             msg += f"排名：{ranking['rank']} 当前：{get_board_score_str(ranking['current_score'])} 预测：{get_board_score_str(ranking['predicted_score'])}\n" #  预测时间：{datetime.fromisoformat(ranking['update_time']).strftime('%m-%d %H:%M:%S')}
-    
-    
     msg += f"\n更新时间：{update_time.strftime('%m-%d %H:%M:%S')} （{get_readable_datetime(update_time, show_original_time=False)}）\n"
     msg += "数据来源：SnowyBot"
     return msg
@@ -296,3 +295,34 @@ async def get_cnskp_msg(ctx: SekaiHandlerContext, args: str) -> str:
 #     msg += f"\n更新时间：{update_time.strftime('%m-%d %H:%M:%S')} （{get_readable_datetime(update_time, show_original_time=False)}）\n"
 #     msg += "数据来源：SnowyBot"
 #     return await ctx.asend_msg(msg)
+
+
+
+# 获取个人信息截图
+async def get_sekaiprofile_image(region: str, uid: str) -> Image.Image:
+    assert_and_reply(region == 'cn', f"不支持的服务器 {region}，当前支持的服务器：cn")
+    base_url:str = snowy_config.get("sekaiprofile.base_url")
+    assert_and_reply(base_url, "缺少sekaiprofile.base_url")
+    token:str = snowy_config.get("sekaiprofile.token")
+    assert_and_reply(token, "缺少sekaiprofile.token")
+    url = base_url.format(user_id=uid, token=token)
+    async with PlaywrightPage() as page:
+        try:
+            await page.goto(url, wait_until='networkidle', timeout=60000)
+            # 等待加载遮罩消失
+            await page.wait_for_selector(
+                "#loadingOverlay.hidden",
+                state="attached",  
+                timeout=60000 
+            )
+            await page.set_viewport_size({"width": 1000, "height": 1000})
+            main_container_locator = page.locator("#mainContainer")
+            with TempFilePath('png') as path:
+                await main_container_locator.screenshot(path=path)
+                return open_image(path)
+        except TimeoutError as e:
+            raise ReplyException(f"下载个人信息页面失败：连接超时")
+        except Exception as e:
+            logger.error(f"下载个人信息页面失败: {get_exc_desc(e)}")
+            raise ReplyException(f"下载个人信息页面失败")
+    pass

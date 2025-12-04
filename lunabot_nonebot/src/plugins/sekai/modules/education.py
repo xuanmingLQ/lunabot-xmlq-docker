@@ -8,6 +8,7 @@ from .profile import (
     get_detailed_profile,
     get_detailed_profile_card,
     get_player_avatar_info_by_detailed_profile,
+    get_detailed_profile_card_filter,
 )
 
 @dataclass
@@ -443,9 +444,8 @@ async def compose_area_item_upgrade_materials_image(ctx: SekaiHandlerContext, qi
     return await canvas.get_img(scale=0.75, cache_key=cache_key)
 
 # 合成羁绊等级图片
-async def compose_bonds_image(ctx: SekaiHandlerContext, qid: int, cid: int) -> Image.Image:
-    profile, err_msg = await get_detailed_profile(ctx, qid, raise_exc=True)
-
+async def compose_bonds_image(ctx: SekaiHandlerContext, qid: int, cid: int | None) -> Image.Image:
+    profile, err_msg = await get_detailed_profile(ctx, qid, raise_exc=True, filter=get_detailed_profile_card_filter(['userBonds']))
     user_bonds = profile.get('userBonds')
     assert_and_reply(user_bonds, "你的Suite数据来源没有提供userBonds数据")
 
@@ -460,22 +460,30 @@ async def compose_bonds_image(ctx: SekaiHandlerContext, qid: int, cid: int) -> I
         bond_level_exps[lv] = exp
         max_level = max(max_level, lv)
     
-    # 收集cid所有可能的羁绊角色
-    bonds: dict[int, dict] = {}
+    # 收集所有的羁绊角色
+    bonds: dict[tuple[int, int], dict] = {}
     for item in await ctx.md.bonds.get():
         c1, c2 = extract_cid_from_bgid(item['groupId'])
-        if c1 == cid or c2 == cid:
-            if c2 == cid:
-                c1, c2 = c2, c1
-            bonds[c2] = {}
-
+        bonds[(c1, c2)] = {}
+    
     # 收集用户的羁绊等级
     for item in user_bonds:
         c1, c2 = extract_cid_from_bgid(item['bondsGroupId'])
-        if c1 == cid or c2 == cid:
-            if c2 == cid:
-                c1, c2 = c2, c1
-            bonds[c2] = item
+        bonds[(c1, c2)] = item
+
+    if cid is not None:
+        # 只保留与cid相关的羁绊，并且调整cid在前
+        for c1, c2 in list(bonds.keys()):
+            if c1 != cid and c2 != cid:
+                bonds.pop((c1, c2))
+            elif c1 != cid:
+                bonds[(cid, c1)] = bonds.pop((c1, c2))
+        bond_keys = [(cid, i) for i in range(1, 27) if i != cid]
+    else:
+        # 保留羁绊等级前topk的角色
+        TOPK = 25
+        bond_keys = sorted(bonds.keys(), key=lambda k: bonds[k]['rank'] if bonds[k] else 0, reverse=True)[:TOPK]
+        bonds = { k: bonds[k] for k in bond_keys }
         
     header_h, row_h = 56, 48
     header_style = TextStyle(font=DEFAULT_BOLD_FONT, size=24, color=(25, 25, 25, 255))
@@ -490,7 +498,6 @@ async def compose_bonds_image(ctx: SekaiHandlerContext, qid: int, cid: int) -> I
         with VSplit().set_content_align('lt').set_item_align('lt').set_sep(16):
             await get_detailed_profile_card(ctx, profile, err_msg)
             with VSplit().set_content_align('l').set_item_align('l').set_sep(8).set_padding(16).set_bg(roundrect_bg()):
-
                 # 标题
                 with HSplit().set_content_align('c').set_item_align('c').set_sep(8).set_h(header_h).set_padding(4).set_bg(roundrect_bg()):
                     TextBox("角色", header_style).set_w(w1).set_content_align('c')
@@ -498,35 +505,34 @@ async def compose_bonds_image(ctx: SekaiHandlerContext, qid: int, cid: int) -> I
                     TextBox(f"进度(上限{max_level}级)", header_style).set_w(w3).set_content_align('c')
                     TextBox("升级经验", header_style).set_w(w4).set_content_align('c')
 
-                color1 = await get_chara_color(cid)
-
                 # 项目
                 index = 0
-                for c2 in range(1, 27):
-                    if c2 == cid: continue 
+                for key in bond_keys:
+                    c1, c2 = key
                     bg_color = (255, 255, 255, 150) if index % 2 == 0 else (255, 255, 255, 100)
                     index += 1
 
-                    has_bond = c2 in bonds
+                    has_bond = key in bonds
                     
                     level = 0
-                    if has_bond and bonds[c2]:
-                        level = bonds[c2]['rank']
+                    if has_bond and bonds[key]:
+                        level = bonds[key]['rank']
 
                     level_text, need_exp_text = "-", "-"
                     if has_bond:
                         if level:
                             level_text = str(level)
-                        exp = bonds[c2]['exp'] if bonds[c2] else 0
+                        exp = bonds[key]['exp'] if bonds[key] else 0
                         if exp:
                             next_level = level + 1
                             need_exp_text = str(bond_level_exps[next_level] - exp) if next_level <= max_level else "MAX"
 
+                    color1 = await get_chara_color(c1)
                     color2 = await get_chara_color(c2)
 
                     with HSplit().set_content_align('c').set_item_align('c').set_sep(8).set_h(row_h).set_padding(4).set_bg(roundrect_bg(fill=bg_color)):
                         with Frame().set_w(w1).set_content_align('c'):
-                            ImageBox(get_chara_icon_by_chara_id(cid),   size=(None, 40)).set_offset((-13, 0))
+                            ImageBox(get_chara_icon_by_chara_id(c1),   size=(None, 40)).set_offset((-13, 0))
                             ImageBox(get_chara_icon_by_chara_id(c2),    size=(None, 40)).set_offset((13, 0))
 
                         TextBox(level_text, text_style.replace(font=DEFAULT_BOLD_FONT)).set_w(w2).set_content_align('c')
@@ -764,8 +770,12 @@ pjsk_bonds.check_cdrate(cd).check_wblist(gbl)
 @pjsk_bonds.handle()
 async def _(ctx: SekaiHandlerContext):
     args = ctx.get_args().strip()
-    cid = get_cid_by_nickname(args)
-    assert_and_reply(cid is not None, f"请指定其中一个角色名称")
+
+    if args:
+        cid = get_cid_by_nickname(args)
+        assert_and_reply(cid is not None, f"请指定其中一个角色名称")
+    else:
+        cid = None
 
     return await ctx.asend_reply_msg(await get_image_cq(
         await compose_bonds_image(ctx, ctx.user_id, cid),
