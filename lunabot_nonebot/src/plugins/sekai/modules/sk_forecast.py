@@ -160,6 +160,10 @@ class ForecastData:
 
 
 
+class GetForecastException(Exception):
+    pass
+
+
 async def get_local_forecast_data(region: str, event_id: int, chapter_id: int) -> ForecastData:
     return await run_local_forecast(region, event_id)
 
@@ -173,7 +177,7 @@ async def get_33kit_forecast_data(region: str, event_id: int, chapter_id: int) -
     predict_data = await download_json(cfg['url'])
     event_id = predict_data['event']['id']
     if event_id != data.event_id:
-        raise Exception("最新活动预测未更新")
+        raise GetForecastException("最新活动预测未更新")
     data.forecast_ts = int(predict_data['data']['ts'] / 1000)
     for rank, score in predict_data['data'].items():
         if rank != 'ts':
@@ -228,7 +232,7 @@ async def get_sekarun_forecast_data(region: str, event_id: int, chapter_id: int 
                     data.rank_data[rank].final_score = max(data.rank_data[rank].final_score, predict)
             cur = stop + 4
     if not data.forecast_ts:
-        raise Exception("最新活动预测未更新")
+        raise GetForecastException("最新活动预测未更新")
     return data
 
 
@@ -289,6 +293,13 @@ async def get_forecast_data(region: str, event_id: int, chapter_id: int | None =
                 data.load_and_update_history()
                 data.save_to_local()
                 return data
+
+            except GetForecastException as e:
+                logger.warning(f"获取 {source} {region} 预测数据失败: {str(e)}")
+                _forecast_last_error_time[sr] = datetime.now()
+                if data.load_from_local():
+                    return data
+                return None
 
             except Exception as e:
                 logger.print_exc(f"获取 {source} {region} 预测数据失败: {get_exc_desc(e)}")

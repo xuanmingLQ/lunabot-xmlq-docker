@@ -1199,16 +1199,12 @@ async def _(ctx: SekaiHandlerContext):
     args = ctx.get_args().strip().lower()
     qid = ctx.user_id
     try:
-        if not args:
-            index = None
-        else:
-            args = args.replace('u', '')
-            index = int(args) - 1
+        args = args.replace('u', '')
+        index = int(args) - 1
     except:
         raise ReplyException(f"""
-使用方式:
-解除当前主账号绑定: {ctx.original_trigger_cmd}
-解除第x个账号绑定: {ctx.original_trigger_cmd} x
+解除第x个账号绑定:"{ctx.original_trigger_cmd} x"
+发送"/绑定"查询已绑定的账号
 """.strip())
     
     msg = remove_player_bind_id(ctx, qid, index=index)

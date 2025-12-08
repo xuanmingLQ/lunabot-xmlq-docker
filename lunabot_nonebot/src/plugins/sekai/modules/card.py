@@ -109,9 +109,15 @@ async def search_single_card(ctx: SekaiHandlerContext, args: str) -> dict:
     return card
 
 # 解析查多张卡的参数 返回筛选后的cards列表和剩余参数
-async def search_multi_cards(ctx: SekaiHandlerContext, args: str, cards: List[dict]=None, leak=True) -> Tuple[List[dict], str]:
+async def search_multi_cards(ctx: SekaiHandlerContext, args: str, cards: List[dict]=None, contain_leak=True) -> Tuple[List[dict], str]:
     if cards is None:
         cards = await ctx.md.cards.get()
+
+    # 筛选leak
+    only_leak = False
+    if 'leak' in args:
+        only_leak = True
+        args = args.replace('leak', '', 1).strip()
 
     year, args = extract_year(args)
 
@@ -173,7 +179,11 @@ async def search_multi_cards(ctx: SekaiHandlerContext, args: str, cards: List[di
         card_support_unit = card['supportUnit']
         release_time = datetime.fromtimestamp(card["releaseAt"] / 1000)
 
-        if not leak and release_time > datetime.now(): continue
+        if contain_leak:
+            if only_leak and release_time <= datetime.now(): 
+                continue
+        elif release_time > datetime.now():
+                continue
 
         if event_card_ids is not None and card_id not in event_card_ids: continue
         if skill_ids is not None and card_sid not in skill_ids: continue
@@ -968,12 +978,12 @@ async def _(ctx: SekaiHandlerContext):
         ))
         
     ## 尝试解析：查多张卡
-    res, args = await search_multi_cards(ctx, args, cards)
-
+    res, args = await search_multi_cards(ctx, args, cards, contain_leak=True)
     box = False
     if 'box' in args:
         args = args.replace('box', '').strip()
         box = True
+    assert_and_reply(not args, f"无法解析的参数:\"{args}\"")
 
     logger.info(f"搜索到{len(res)}个卡牌")
 
@@ -1040,8 +1050,7 @@ pjsk_box.check_cdrate(cd).check_wblist(gbl)
 @pjsk_box.handle()
 async def _(ctx: SekaiHandlerContext):
     args = ctx.get_args().strip()
-    cards, args = await search_multi_cards(ctx, args, leak=False)
-    assert_and_reply(cards, "没有找到符合条件的卡牌")
+    cards, args = await search_multi_cards(ctx, args, contain_leak=False)
 
     show_id = False
     if 'id' in args:
@@ -1057,6 +1066,9 @@ async def _(ctx: SekaiHandlerContext):
     if 'before' in args:
         use_after_training = False
         args = args.replace('before', '').strip()
+
+    assert_and_reply(not args, f"无法解析的参数:\"{args}\"")
+    assert_and_reply(cards, "没有找到符合条件的卡牌")
     
     await ctx.asend_reply_msg(await get_image_cq(
         await compose_box_image(ctx, ctx.user_id, cards, show_id, show_box, use_after_training),

@@ -1,8 +1,5 @@
 from typing import Optional, Dict, Any, List, Union
 
-def get_value_or_none_from_dict(data: Dict[str, Any], key: str)->Any:
-    return data[key] if key in data else None
-
 class DeckRecommendCardConfig:
     """
     Card config for a specific rarity
@@ -35,12 +32,12 @@ class DeckRecommendCardConfig:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'DeckRecommendCardConfig':
         config:DeckRecommendCardConfig = DeckRecommendCardConfig()
-        config.disable = get_value_or_none_from_dict(data, 'disable')
-        config.level_max = get_value_or_none_from_dict(data, 'level_max')
-        config.episode_read = get_value_or_none_from_dict(data, 'episode_read')
-        config.master_max = get_value_or_none_from_dict(data, 'master_max')
-        config.skill_max = get_value_or_none_from_dict(data, 'skill_max')
-        config.canvas = get_value_or_none_from_dict(data, 'canvas')
+        config.disable = data.get('disable')
+        config.level_max = data.get('level_max')
+        config.episode_read = data.get('episode_read')
+        config.master_max = data.get('master_max')
+        config.skill_max = data.get('skill_max')
+        config.canvas = data.get('canvas')
         return config
 
 
@@ -79,13 +76,13 @@ class DeckRecommendSingleCardConfig:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'DeckRecommendSingleCardConfig':
         config:DeckRecommendSingleCardConfig = DeckRecommendSingleCardConfig()
-        config.card_id = get_value_or_none_from_dict(data, 'card_id')
-        config.disable = get_value_or_none_from_dict(data, 'disable')
-        config.level_max = get_value_or_none_from_dict(data, 'level_max')
-        config.episode_read = get_value_or_none_from_dict(data, 'episode_read')
-        config.master_max = get_value_or_none_from_dict(data, 'master_max')
-        config.skill_max = get_value_or_none_from_dict(data, 'skill_max')
-        config.canvas = get_value_or_none_from_dict(data, 'canvas')
+        config.card_id = data.get('card_id')
+        config.disable = data.get('disable')
+        config.level_max = data.get('level_max')
+        config.episode_read = data.get('episode_read')
+        config.master_max = data.get('master_max')
+        config.skill_max = data.get('skill_max')
+        config.canvas = data.get('canvas')
         return config
 
 
@@ -126,14 +123,14 @@ class DeckRecommendSaOptions:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'DeckRecommendSaOptions':
         options: DeckRecommendSaOptions = DeckRecommendSaOptions()
-        options.run_num = get_value_or_none_from_dict(data, 'run_num')
-        options.seed = get_value_or_none_from_dict(data, 'seed')
-        options.max_iter = get_value_or_none_from_dict(data, 'max_iter')
-        options.max_no_improve_iter = get_value_or_none_from_dict(data, 'max_no_improve_iter')
-        options.time_limit_ms = get_value_or_none_from_dict(data, 'time_limit_ms')
-        options.start_temprature = get_value_or_none_from_dict(data, 'start_temprature')
-        options.cooling_rate = get_value_or_none_from_dict(data, 'cooling_rate')
-        options.debug = get_value_or_none_from_dict(data, 'debug')
+        options.run_num = data.get('run_num')
+        options.seed = data.get('seed')
+        options.max_iter = data.get('max_iter')
+        options.max_no_improve_iter = data.get('max_no_improve_iter')
+        options.time_limit_ms = data.get('time_limit_ms')
+        options.start_temprature = data.get('start_temprature')
+        options.cooling_rate = data.get('cooling_rate')
+        options.debug = data.get('debug')
         return options
 
 
@@ -180,16 +177,16 @@ class DeckRecommendGaOptions:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'DeckRecommendGaOptions':
         options: DeckRecommendGaOptions = DeckRecommendGaOptions()
-        options.seed = get_value_or_none_from_dict(data, 'seed')
-        options.debug = get_value_or_none_from_dict(data, 'debug')
-        options.max_iter = get_value_or_none_from_dict(data, 'max_iter')
-        options.max_no_improve_iter = get_value_or_none_from_dict(data, 'max_no_improve_iter')
-        options.pop_size = get_value_or_none_from_dict(data, 'pop_size')
-        options.parent_size = get_value_or_none_from_dict(data, 'parent_size')
-        options.elite_size = get_value_or_none_from_dict(data, 'elite_size')
-        options.crossover_rate = get_value_or_none_from_dict(data, 'crossover_rate')
-        options.base_mutation_rate = get_value_or_none_from_dict(data, 'base_mutation_rate')
-        options.no_improve_iter_to_mutation_rate = get_value_or_none_from_dict(data, 'no_improve_iter_to_mutation_rate')
+        options.seed = data.get('seed')
+        options.debug = data.get('debug')
+        options.max_iter = data.get('max_iter')
+        options.max_no_improve_iter = data.get('max_no_improve_iter')
+        options.pop_size = data.get('pop_size')
+        options.parent_size = data.get('parent_size')
+        options.elite_size = data.get('elite_size')
+        options.crossover_rate = data.get('crossover_rate')
+        options.base_mutation_rate = data.get('base_mutation_rate')
+        options.no_improve_iter_to_mutation_rate = data.get('no_improve_iter_to_mutation_rate')
         return options
 
 
@@ -202,15 +199,15 @@ class DeckRecommendOptions:
         region (str): Region in ["jp", "en", "tw", "kr", "cn"]
         user_data_file_path (str): File path of user suite json
         user_data_str (str | bytes): String or bytes of user suite json
-        live_type (str): Live type in ["multi", "solo", "auto", "challenge", "mysekai"]
+        live_type (str): Live type in ["multi", "solo", "auto", "challenge", "challenge_auto", "mysekai"]
         music_id (int): Music ID
         music_diff (str): Music difficulty in ["easy", "normal", "hard", "expert", "master", "append"]
-        event_id (int): Event ID, only required when live_type is not "challenge". leave it None to use no-event or unit-attr-specificed recommendation
+        event_id (int): Event ID, leave it None to use no-event or unit-attr-specificed recommendation
         event_attr (str): Attribute of unit-attr-specificed recommendation, only available when event_id is None. In ["mysterious", "cute", "cool", "pure", "happy"]
         event_unit (str): Unit of unit-attr-specificed recommendation, only available when event_id is None. In ["light_sound", "idol", "street", "theme_park", "school_refusal", "piapro"]
         event_type (str): Event type of unit-attr-specificed/no-event recommendation, only available when event_id is None. In ["marathon", "cheerful_carnival"]
         world_bloom_character_id (int): World bloom character ID, only required when event is world bloom
-        challenge_live_character_id (int): Challenge live character ID, only required when live_type is "challenge"
+        challenge_live_character_id (int): Challenge live character ID, only required when live is challenge live
         limit (int): Limit of returned decks, default is 10. No guarantee to return this number of decks if not enough cards
         member (int): Number of members in the deck, default is 5
         timeout_ms (int): Timeout in milliseconds, default is None
@@ -230,6 +227,8 @@ class DeckRecommendOptions:
         multi_live_teammate_power (int): Power of single multi-live teammate, default is None (None means copying self power)
         best_skill_as_leader (bool): Whether to use the best skill card as leader, default is True
         multi_live_score_up_lower_bound (float): Lower bound of multi live score up, only available when live_type is "multi", default is 0
+        skill_order_choose_strategy (str): Strategy for skill order choose in ["average", "max", "min", "specific"], default is "average"
+        specific_skill_order (List[int]): Specific skill order starting from 0, only required when skill_order_choose_strategy is "specific", default is None
         sa_options (DeckRecommendSaOptions): Simulated annealing options
         ga_options (DeckRecommendGaOptions): Genetic algorithm options
     """
@@ -266,6 +265,8 @@ class DeckRecommendOptions:
     multi_live_teammate_power: Optional[int] = None
     best_skill_as_leader: Optional[bool] = None
     multi_live_score_up_lower_bound: Optional[float] = None
+    skill_order_choose_strategy: Optional[str] = None
+    specific_skill_order: Optional[List[int]] = None
     sa_options: Optional[DeckRecommendSaOptions] = None
     ga_options: Optional[DeckRecommendGaOptions] = None
     def __init__(self, options: Optional['DeckRecommendOptions'] = None):
@@ -304,6 +305,8 @@ class DeckRecommendOptions:
         self.multi_live_teammate_power = options.multi_live_teammate_power
         self.best_skill_as_leader = options.best_skill_as_leader
         self.multi_live_score_up_lower_bound = options.multi_live_score_up_lower_bound
+        self.skill_order_choose_strategy = options.skill_order_choose_strategy
+        self.specific_skill_order = options.specific_skill_order
         self.sa_options = options.sa_options
         self.ga_options = options.ga_options
         pass
@@ -347,6 +350,8 @@ class DeckRecommendOptions:
             'multi_live_teammate_power': self.multi_live_teammate_power,
             'best_skill_as_leader': self.best_skill_as_leader,
             'multi_live_score_up_lower_bound': self.multi_live_score_up_lower_bound,
+            'skill_order_choose_strategy': self.skill_order_choose_strategy,
+            'specific_skill_order': self.specific_skill_order,
             'sa_options': self.sa_options.to_dict() \
                         if self.sa_options is not None \
                         else None,
@@ -358,60 +363,61 @@ class DeckRecommendOptions:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'DeckRecommendOptions':
         options: DeckRecommendOptions = DeckRecommendOptions()
-        options.target = get_value_or_none_from_dict(data, 'target')
-        options.algorithm = get_value_or_none_from_dict(data, 'algorithm')
-        options.region = get_value_or_none_from_dict(data, 'region')
-        options.user_data_file_path = get_value_or_none_from_dict(data, 'user_data_file_path')
-        options.user_data_str = get_value_or_none_from_dict(data, 'user_data_str')
-        options.live_type = get_value_or_none_from_dict(data, 'live_type')
-        options.music_id = get_value_or_none_from_dict(data, 'music_id')
-        options.music_diff = get_value_or_none_from_dict(data, 'music_diff')
-        options.event_id = get_value_or_none_from_dict(data, 'event_id')
-        options.event_attr = get_value_or_none_from_dict(data, 'event_attr')
-        options.event_unit = get_value_or_none_from_dict(data, 'event_unit')
-        options.event_type = get_value_or_none_from_dict(data, 'event_type')
-        options.world_bloom_character_id = get_value_or_none_from_dict(data, 'world_bloom_character_id')
-        options.challenge_live_character_id = get_value_or_none_from_dict(data, 'challenge_live_character_id')
-        options.limit = get_value_or_none_from_dict(data, 'limit')
-        options.member = get_value_or_none_from_dict(data, 'member')
-        options.timeout_ms = get_value_or_none_from_dict(data, 'timeout_ms')
+        options.target = data.get('target')
+        options.algorithm = data.get('algorithm')
+        options.region = data.get('region')
+        options.user_data_file_path = data.get('user_data_file_path')
+        options.user_data_str = data.get('user_data_str')
+        options.live_type = data.get('live_type')
+        options.music_id = data.get('music_id')
+        options.music_diff = data.get('music_diff')
+        options.event_id = data.get('event_id')
+        options.event_attr = data.get('event_attr')
+        options.event_unit = data.get('event_unit')
+        options.event_type = data.get('event_type')
+        options.world_bloom_character_id = data.get('world_bloom_character_id')
+        options.challenge_live_character_id = data.get('challenge_live_character_id')
+        options.limit = data.get('limit')
+        options.member = data.get('member')
+        options.timeout_ms = data.get('timeout_ms')
         options.rarity_1_config = DeckRecommendCardConfig.from_dict(config) \
-                                if (config := get_value_or_none_from_dict(data, 'rarity_1_config')) is not None \
+                                if (config := data.get('rarity_1_config')) is not None \
                                 else None
         options.rarity_2_config = DeckRecommendCardConfig.from_dict(config) \
-                                if (config := get_value_or_none_from_dict(data, 'rarity_2_config')) is not None \
+                                if (config := data.get('rarity_2_config')) is not None \
                                 else None
         options.rarity_3_config = DeckRecommendCardConfig.from_dict(config) \
-                                if (config := get_value_or_none_from_dict(data, 'rarity_3_config')) is not None \
+                                if (config := data.get('rarity_3_config')) is not None \
                                 else None
         options.rarity_birthday_config = DeckRecommendCardConfig.from_dict(config) \
-                                    if (config := get_value_or_none_from_dict(data, 'rarity_birthday_config')) is not None \
+                                    if (config := data.get('rarity_birthday_config')) is not None \
                                     else None
         options.rarity_4_config = DeckRecommendCardConfig.from_dict(config) \
-                                if (config := get_value_or_none_from_dict(data, 'rarity_4_config')) is not None \
+                                if (config := data.get('rarity_4_config')) is not None \
                                 else None
         options.single_card_configs = [ DeckRecommendSingleCardConfig.from_dict(config) for config in configs ] \
-                                 if ((configs := get_value_or_none_from_dict(data, 'single_card_configs')) is not None) \
+                                 if ((configs := data.get('single_card_configs')) is not None) \
                                     and (len(configs) > 0) \
                                  else None
-        options.filter_other_unit = get_value_or_none_from_dict(data, 'filter_other_unit')
-        options.fixed_cards = get_value_or_none_from_dict(data, 'fixed_cards')
-        options.fixed_characters = get_value_or_none_from_dict(data, 'fixed_characters')
-        options.target_bonus_list = get_value_or_none_from_dict(data, 'target_bonus_list')
-        options.skill_reference_choose_strategy = get_value_or_none_from_dict(data, 'skill_reference_choose_strategy')
-        options.keep_after_training_state = get_value_or_none_from_dict(data, 'keep_after_training_state')
-        options.multi_live_teammate_score_up = get_value_or_none_from_dict(data, 'multi_live_teammate_score_up')
-        options.multi_live_teammate_power = get_value_or_none_from_dict(data, 'multi_live_teammate_power')
-        options.best_skill_as_leader = get_value_or_none_from_dict(data, 'best_skill_as_leader')
-        options.multi_live_score_up_lower_bound = get_value_or_none_from_dict(data, 'multi_live_score_up_lower_bound')
+        options.filter_other_unit = data.get('filter_other_unit')
+        options.fixed_cards = data.get('fixed_cards')
+        options.fixed_characters = data.get('fixed_characters')
+        options.target_bonus_list = data.get('target_bonus_list')
+        options.skill_reference_choose_strategy = data.get('skill_reference_choose_strategy')
+        options.keep_after_training_state = data.get('keep_after_training_state')
+        options.multi_live_teammate_score_up = data.get('multi_live_teammate_score_up')
+        options.multi_live_teammate_power = data.get('multi_live_teammate_power')
+        options.best_skill_as_leader = data.get('best_skill_as_leader')
+        options.multi_live_score_up_lower_bound = data.get('multi_live_score_up_lower_bound')
+        options.skill_order_choose_strategy = data.get('skill_order_choose_strategy')
+        options.specific_skill_order = data.get('skill_order_choose_strategy')
         options.sa_options = DeckRecommendSaOptions.from_dict(config) \
-                            if (config := get_value_or_none_from_dict(data, 'sa_options')) is not None \
+                            if (config := data.get('sa_options')) is not None \
                             else None
         options.ga_options = DeckRecommendGaOptions.from_dict(config) \
-                            if (config := get_value_or_none_from_dict(data, 'ga_options')) is not None \
+                            if (config := data.get('ga_options')) is not None \
                             else None
         return options
-
 
 class RecommendCard:
     """
@@ -540,20 +546,20 @@ class RecommendDeck:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'RecommendDeck':
         deck: RecommendDeck = RecommendDeck()
-        deck.score = get_value_or_none_from_dict(data, 'score')
-        deck.live_score = get_value_or_none_from_dict(data, 'live_score')
-        deck.mysekai_event_point = get_value_or_none_from_dict(data, 'mysekai_event_point')
-        deck.total_power = get_value_or_none_from_dict(data, 'total_power')
-        deck.base_power = get_value_or_none_from_dict(data, 'base_power')
-        deck.area_item_bonus_power = get_value_or_none_from_dict(data, 'area_item_bonus_power')
-        deck.character_bonus_power = get_value_or_none_from_dict(data, 'character_bonus_power')
-        deck.honor_bonus_power = get_value_or_none_from_dict(data, 'honor_bonus_power')
-        deck.fixture_bonus_power = get_value_or_none_from_dict(data, 'fixture_bonus_power')
-        deck.gate_bonus_power = get_value_or_none_from_dict(data, 'gate_bonus_power')
-        deck.event_bonus_rate = get_value_or_none_from_dict(data, 'event_bonus_rate')
-        deck.support_deck_bonus_rate = get_value_or_none_from_dict(data, 'support_deck_bonus_rate')
-        deck.multi_live_score_up = get_value_or_none_from_dict(data, 'multi_live_score_up')
-        deck.cards = [RecommendCard.from_dict(card) for card in get_value_or_none_from_dict(data, 'cards')]
+        deck.score = data.get('score')
+        deck.live_score = data.get('live_score')
+        deck.mysekai_event_point = data.get('mysekai_event_point')
+        deck.total_power = data.get('total_power')
+        deck.base_power = data.get('base_power')
+        deck.area_item_bonus_power = data.get('area_item_bonus_power')
+        deck.character_bonus_power = data.get('character_bonus_power')
+        deck.honor_bonus_power = data.get('honor_bonus_power')
+        deck.fixture_bonus_power = data.get('fixture_bonus_power')
+        deck.gate_bonus_power = data.get('gate_bonus_power')
+        deck.event_bonus_rate = data.get('event_bonus_rate')
+        deck.support_deck_bonus_rate = data.get('support_deck_bonus_rate')
+        deck.multi_live_score_up = data.get('multi_live_score_up')
+        deck.cards = [RecommendCard.from_dict(card) for card in data.get('cards')]
         return deck
 
 
@@ -572,7 +578,7 @@ class DeckRecommendResult:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'DeckRecommendResult':
         result: DeckRecommendResult = DeckRecommendResult()
-        result.decks = [ RecommendDeck.from_dict(deck) for deck in get_value_or_none_from_dict(data, 'decks') ]
+        result.decks = [ RecommendDeck.from_dict(deck) for deck in data.get('decks') ]
         return result
 
 

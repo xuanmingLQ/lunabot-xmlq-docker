@@ -641,7 +641,7 @@ async def get_music_limited_times(ctx: SekaiHandlerContext, mid: int) -> list[tu
     return ret
 
 # 检查是否有效歌曲
-async def is_valid_music(ctx: SekaiHandlerContext, mid: int, leak=False) -> bool:
+async def is_valid_music(ctx: SekaiHandlerContext, mid: int, leak=False, diff: str = None) -> bool:
     m = await ctx.md.musics.find_by_id(mid)
     now = datetime.now()
     if not m:
@@ -653,6 +653,10 @@ async def is_valid_music(ctx: SekaiHandlerContext, mid: int, leak=False) -> bool
             return False
     if m['id'] in (241, 290):
         return False
+    if diff:
+        diff_info = await get_music_diff_info(ctx, mid)
+        if diff not in diff_info.level:
+            return False
     return True
 
 # 获取有效歌曲列表
