@@ -561,8 +561,8 @@ async def get_sk_query_params(ctx: SekaiHandlerContext, args: str) -> Tuple[str,
             assert_and_reply(end in ALL_RANKS, f"不支持的结束排名: {end}")
             return 'ranks', list(range(start, end + 1))
         elif is_rank_text(args):
-            if is_rank_text(args) in ALL_RANKS:
-                return 'rank', is_rank_text(args)
+            if (rank:=get_rank_from_text(args)) in ALL_RANKS:
+                return 'rank', rank
             else:
                 return 'uid', int(args)
     raise ReplyException(f"""
