@@ -127,6 +127,7 @@ welcome_info.check_wblist(gwl).check_superuser().check_cdrate(cd)
 @welcome_info.handle()
 async def _(ctx: HandlerContext):
     text = ctx.get_args().strip()
+    gwl.add(ctx.group_id)
     group_id = str(ctx.group_id)
     if not text:
         welcome_infos = file_db.get(f'welcome_infos', {})

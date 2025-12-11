@@ -471,17 +471,6 @@ def extract_fixed_cards_and_characters(args: str, options: DeckRecommendOptions)
             options.fixed_characters = fixed_characters
 
     return args.strip()
-# 从args中提取排除卡牌设置
-# TODO
-def extract_exclude_cards(args:str, options: DeckRecommendOptions)->str:
-    
-    exclude_card_id_pattern = re.compile(r"-\d+")
-    exclude_card_ids = exclude_card_id_pattern.findall(args)
-    if len(exclude_card_ids)>0:
-        options.exclude_cards = list(map(lambda x: int(x[1:]),exclude_card_ids))
-        for exclude_card_id in exclude_card_ids:
-            args = args.replace(exclude_card_id, "").strip()
-    return args
 
 # 从args中提取卡牌设置
 def extract_card_config(args: str, options: DeckRecommendOptions, default_nochange=False) -> str:
@@ -749,7 +738,6 @@ async def extract_event_options(ctx: SekaiHandlerContext, args: str) -> Dict:
     args = extract_random_strategy(args, options, "average", "average")
     args = extract_multilive_options(args, options)
     args = extract_fixed_cards_and_characters(args, options)
-    args = extract_exclude_cards(args,options)
     args = extract_card_config(args, options)
     args = extract_target(args, options)
 
@@ -795,7 +783,6 @@ async def extract_challenge_options(ctx: SekaiHandlerContext, args: str) -> Dict
     random_strategy = 'average' if 'auto' in options.live_type else 'max'
     args = extract_random_strategy(args, options, random_strategy, random_strategy)
     args = extract_fixed_cards_and_characters(args, options)
-    args = extract_exclude_cards(args,options)
     args = extract_card_config(args, options)
     args = extract_target(args, options)
 
@@ -843,7 +830,6 @@ async def extract_no_event_options(ctx: SekaiHandlerContext, args: str) -> Dict:
     args = extract_random_strategy(args, options, "average", "average")
     args = extract_multilive_options(args, options)
     args = extract_fixed_cards_and_characters(args, options)
-    args = extract_exclude_cards(args,options)
     args = extract_card_config(args, options)
     args = extract_target(args, options)
 
@@ -1045,6 +1031,7 @@ async def do_deck_recommend_batch(
     ctx: SekaiHandlerContext, 
     options_list: list[DeckRecommendOptions],
     user_data: bytes,
+    timeout_ms: int=60000
 ) -> list[Tuple[DeckRecommendResult, List[str], Dict[str, Tuple[timedelta, timedelta]]]]:
     # 请求组卡函数（负载均衡）
     async def request_recommend(index: int, payload: bytes) -> dict:
@@ -1072,7 +1059,7 @@ async def do_deck_recommend_batch(
         
         async def req(index: int, payload: bytes, url: str) -> dict:
             async with aiohttp.ClientSession() as session:
-                async with session.post(url + "/recommend", data=payload) as resp:
+                async with session.post(url + "/recommend", data=payload, timeout=timeout_ms/1000) as resp:
                     if resp.status != 200:
                         msg = f"{resp.status}: "
                         try:
@@ -1287,7 +1274,7 @@ async def compose_deck_recommend_image(
     last_args: str,
     additional: dict,
 ) -> Image.Image:
-    
+    timeout_ms = options.timeout_ms
     # ---------------------------- 判断组卡类型方便后续处理 ---------------------------- #
 
     NO_MUSIC_TYPES = ["bonus", "wl_bonus", "mysekai"]
@@ -1473,7 +1460,7 @@ async def compose_deck_recommend_image(
     cost_times, wait_times = {}, {}
     result_decks = []
     result_algs = []
-    for res, algs, cost_and_wait_times in await do_deck_recommend_batch(ctx, all_options, user_data):
+    for res, algs, cost_and_wait_times in await do_deck_recommend_batch(ctx, all_options, user_data, timeout_ms):
         result_decks.extend(res.decks)
         result_algs.extend(algs)
         for alg, (cost, wait) in cost_and_wait_times.items():
