@@ -247,10 +247,9 @@ async def extract_target_event(
         if not default_return_current:
             assert_and_reply_or_return(False, "请指定一个要查询的活动，例如\"event140\"或\"活动140\"")
 
-        event = await get_current_event(ctx, "next_first")
+        event = await get_current_event(ctx, "next")
         assert_and_reply_or_return(event, """
-找不到正在进行的/即将开始的活动
-指定团队+颜色进行模拟活动组卡，或使用\"/活动组卡help\"查看如何组往期活动
+找不到正在进行或即将开始的活动，指定团队+颜色进行模拟活动组卡，或使用\"/组卡help\"查看如何组往期活动
 """.strip())
     else:
         event = await ctx.md.events.find_by_id(event_id)

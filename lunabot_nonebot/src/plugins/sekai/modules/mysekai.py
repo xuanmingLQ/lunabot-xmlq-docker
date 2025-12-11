@@ -20,7 +20,7 @@ from .profile import (
     process_sensitive_cmd_source,
 )
 from src.api.subscribe.pjsk import set_msr_sub
-from .music import get_music_cover_thumb
+from .music import get_music_cover_thumb, is_valid_music
 from .card import get_character_sd_image
 from src.api.game.user import get_mysekai,get_mysekai_photo,get_mysekai_upload_time
 
@@ -1463,6 +1463,7 @@ async def compose_mysekai_musicrecord_image(ctx: SekaiHandlerContext, qid: int, 
     for record in await ctx.md.mysekai_musicrecords.get():
         if record['mysekaiMusicTrackType'] != 'music': continue
         rid, mid = record['id'], record['externalId']
+        if not await is_valid_music(ctx, mid, leak=False): continue
         user_record = find_by(user_records, 'mysekaiMusicRecordId', rid)
         if user_record:
             mid_obtained_at[mid] = user_record['obtainedAt']

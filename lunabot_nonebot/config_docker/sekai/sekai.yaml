@@ -51,10 +51,13 @@ stamp:
   cutout:
     enable: false
     daily_limit: 5
-    tolerance: 200
+    tolerance: 50
     edge: 20
+    max_transparent_ratio: 0.5
     prompt: |
-      请你将第一张图片的文字去掉，保留其他部分内容和大小比例严格不变（其他图片用于被文字遮挡部分的角色外观的参考）
+      请你将第一张图片的文字去掉，保留其他部分内容、大小比例严格不变
+      注意需要保留完整闭合的白色边缘（如果原图的白色边缘没有完整闭合，你需要额外补上白色边界）
+      第二张图片仅用于被文字遮挡部分的角色外观的参考，但仍然需要优先保留第一张图片的外观
 
 deck:
   servers:
@@ -128,6 +131,8 @@ sk:
     pybd_remote_dir: "LunabotSekaiRankingData"
     pybd_verbose: true
 
+  start_forecast_hours_after_event_start: 2 
+  stop_forecast_hours_before_event_end: 2
   forecast:
     local:
       name: "本地预测"

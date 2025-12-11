@@ -39,7 +39,7 @@ exception_mail:   # 发送异常消息邮件的配置
 
 default_thread_pool_size: 8
 
-web_driver_num: 2
+max_playwright_contexts: 2 # 同时运行的浏览器context数量
 
 safety_check:
   secret_id: xxx

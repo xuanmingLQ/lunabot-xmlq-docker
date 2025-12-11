@@ -843,16 +843,18 @@ from playwright.async_api import (
 
 _playwright_instance: Playwright | None = None
 _browser_type: BrowserType | None = None
-_browsers: asyncio.Queue[Browser] = None
-
-WEB_DRIVER_NUM = global_config.get('web_driver_num')
+# 只启动一个浏览器实例，降低开销
+_playwright_browser: Browser | None = None
+# 使用playwright的context隔离浏览器
+MAX_CONTEXTS = global_config.get('max_playwright_contexts')
+# 使用asyncio.Semaphore限制同时运行的context数量
+_context_semaphore = asyncio.Semaphore(MAX_CONTEXTS)
 
 class PlaywrightPage:
     """
     异步上下文管理器，用于管理 Playwright 浏览器实例队列。
     """
     def __init__(self, context_options: dict | None = None):
-        self.browser: Browser | None = None
         self.context: BrowserContext | None = None
         self.page: Page | None = None
         self.context_options: dict = context_options if context_options is not None else { 
@@ -860,7 +862,7 @@ class PlaywrightPage:
         }
 
     async def __aenter__(self) -> Page:
-        global _playwright_instance, _browser_type, _browsers
+        global _playwright_instance, _browser_type, _playwright_browser
         
         if _playwright_instance is None:
             _playwright_instance = await async_playwright().start()
@@ -868,24 +870,23 @@ class PlaywrightPage:
             
             if os.system("rm -rf /tmp/rust_mozprofile*") != 0:
                 utils_logger.error(f"清空WebDriver临时文件失败")
-            _browsers = asyncio.Queue()
             
-            for _ in range(WEB_DRIVER_NUM):
-                browser = await _browser_type.launch(
-                    headless=True,
-                    args=['--no-sandbox', '--disable-setuid-sandbox'] 
-                )
-                _browsers.put_nowait(browser)
-            utils_logger.info(f"初始化 {WEB_DRIVER_NUM} 个 Playwright Browser")
+            _playwright_browser = await _browser_type.launch(
+                headless=True,
+                args=['--no-sandbox', '--disable-setuid-sandbox'] 
+            )
+            utils_logger.info(f"初始化 Playwright Browser")
             pass
-            
-        self.browser = await _browsers.get()
-        self.context = await self.browser.new_context(**self.context_options)
+        await _context_semaphore.acquire()
+        try:
+            self.context = await _playwright_browser.new_context(**self.context_options)
+        except: # 出现异常时释放新号
+            _context_semaphore.release()
+            raise
         self.page = await self.context.new_page()
         return self.page
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        global _browsers
         # 关闭上下文，自动清理
         if self.page:
             try:
@@ -897,13 +898,10 @@ class PlaywrightPage:
                 await self.context.close()
             except Exception as e:
                 utils_logger.error(f"关闭 Playwright Context 失败 {get_exc_desc(e)}")
-        if self.browser:    
-            await _browsers.put(self.browser)
-        else:
-            raise Exception("Playwright Browser not initialized")
+            finally:
+                _context_semaphore.release()
         self.page = None
         self.context = None
-        self.browser = None
         return False
 
 
