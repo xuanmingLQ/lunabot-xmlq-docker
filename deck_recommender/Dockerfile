@@ -20,12 +20,13 @@ COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/pytho
 
 # 复制应用程序代码
 COPY . .
-
+# 配置环境变量
+ENV CONFIG_PATH=/app/deck_recommender/config.docker.yaml
 # 暴露应用程序运行的端口
 EXPOSE 45556
 
-# 挂载卷
-VOLUME ["/app/deck_recommender/data/sekai/deckrec", "/app/deck_recommender/config.yaml"]
+# 挂载卷 docker run -d -v /home/xmlq/codes/pycodes/nonebot/lunabot-sekai/data:/app/deck_recommender/data -p 45556:45556 --name deck-recommender deck-recommender:latest
+VOLUME ["/app/deck_recommender/data/sekai/deckrec"]
 
 # 启动服务
 CMD ["python", "serve.py"]

@@ -6,6 +6,7 @@ import asyncio
 import asyncio
 import zstandard
 import shutil
+import traceback
 
 
 def write_file(file_path: str, data: bytes) -> None:
@@ -53,14 +54,14 @@ def get_exc_desc(e: Exception) -> str:
     return et or e
 
 def log(*args, **kwargs):
-    time_str = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
-    pname = f"[{os.getpid()}]"
-    print(time_str, pname, *args, **kwargs, flush=True)
+    time_str = datetime.now().strftime("[%Y-%m-%d %H:%M:%S] [INFO]")
+    print(time_str, *args, **kwargs, flush=True)
 
-def error(*args, **kwargs):
-    log(*args, **kwargs)
-    import traceback
-    print(traceback.format_exc(), flush=True)
+def error(*args, print_trace: bool = True, **kwargs):
+    time_str = datetime.now().strftime("[%Y-%m-%d %H:%M:%S] [ERROR]")
+    print(time_str, *args, **kwargs, flush=True)
+    if print_trace:
+     print(traceback.format_exc(), flush=True)
 
 def print_headers(headers: Dict[str, str]):
     headers = dict(headers)
