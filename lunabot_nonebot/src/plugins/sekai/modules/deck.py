@@ -22,7 +22,7 @@ from .music import (
     get_music_cover_thumb,
 )
 from .mysekai import MYSEKAI_REGIONS
-from src.sekai_deck_recommend import (
+from sekai_deck_recommend import (
     DeckRecommendOptions, 
     DeckRecommendCardConfig, 
     DeckRecommendSingleCardConfig,
@@ -1026,96 +1026,104 @@ def log_options(ctx: SekaiHandlerContext, user_id: int, options: DeckRecommendOp
     log += f"fixed_cards={options.fixed_cards}"
     logger.info(log)
 
-# 自动组卡实现(批量提交) 返回 [Tuple[结果，结果算法来源，Dict[算法: Tuple[耗时，等待时间]]], ...]
+# 自动组卡实现（批量提交），每批会发送到同一个后端，返回 [Tuple[结果，结果算法来源，Dict[算法: Tuple[耗时，等待时间]]], ...]
 async def do_deck_recommend_batch(
     ctx: SekaiHandlerContext, 
     options_list: list[DeckRecommendOptions],
-    user_data: bytes,
-    timeout_ms: int=60000
+    user_data: bytes
 ) -> list[Tuple[DeckRecommendResult, List[str], Dict[str, Tuple[timedelta, timedelta]]]]:
-    # 请求组卡函数（负载均衡）
-    async def request_recommend(index: int, payload: bytes) -> dict:
-        global _deckrec_request_id
-        _deckrec_request_id += 1
+    # 获取组卡后端相关信息
+    servers = RECOMMEND_SERVERS_CFG.get()
+    if not servers:
+        raise ReplyException("未配置可用的组卡服务")
+    server_urls = [s['url'] for s in servers]
+    server_weights = [s['weight'] for s in servers]
+    server_url_indices = list(range(len(server_urls)))
+    server_min_weight = min([w for w in server_weights if w > 0], default=0)
+    if server_min_weight <= 0:
+        raise ReplyException("未配置可用的组卡服务")
+    
+    # 负载均衡决定请求后端优先级
+    global _deckrec_request_id
+    _deckrec_request_id += 1
+    server_order = [[] for _ in range(server_min_weight)]
+    for i, w in enumerate(server_weights):
+        for j in range(w):
+            server_order[j % len(server_order)].append(i)
+    server_order = [idx for sublist in server_order for idx in sublist]
+    select_idx = server_order[_deckrec_request_id % len(server_order)]
+    urls = server_urls[select_idx:] + server_urls[:select_idx]
+    url_indices = server_url_indices[select_idx:] + server_url_indices[:select_idx]
 
-        servers = RECOMMEND_SERVERS_CFG.get()
-        if not servers:
-            raise ReplyException("未配置可用的组卡服务")
-        server_urls = [s['url'] for s in servers]
-        server_weights = [s['weight'] for s in servers]
-        server_url_indices = list(range(len(server_urls)))
-        min_weight = min([w for w in server_weights if w > 0], default=0)
-        if min_weight <= 0:
-            raise ReplyException("未配置可用的组卡服务")
+    # 通用请求函数
+    async def req(payload: bytes, url: str) -> dict:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, data=payload) as resp:
+                if resp.status != 200:
+                    msg = f"{resp.status}: "
+                    try:
+                        err_data = await resp.json()
+                        msg += err_data.get('detail', '')
+                    except:
+                        try: msg += await resp.text()
+                        except: pass
+                    raise ReplyException(msg)
+                return await resp.json()
 
-        server_order = [[] for _ in range(min_weight)]
-        for i, w in enumerate(server_weights):
-            for j in range(w):
-                server_order[j % len(server_order)].append(i)
-        server_order = [idx for sublist in server_order for idx in sublist]
-        select_idx = server_order[_deckrec_request_id % len(server_order)]
-        urls = server_urls[select_idx:] + server_urls[:select_idx]
-        url_indices = server_url_indices[select_idx:] + server_url_indices[:select_idx]
-        
-        async def req(index: int, payload: bytes, url: str) -> dict:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url + "/recommend", data=payload, timeout=timeout_ms/1000) as resp:
-                    if resp.status != 200:
-                        msg = f"{resp.status}: "
-                        try:
-                            err_data = await resp.json()
-                            msg += err_data.get('detail', '')
-                        except:
-                            try:
-                                msg += await resp.text()
-                            except:
-                                pass
-                        raise ReplyException(msg)
-                    data = await resp.json()
-                    return index, data
-        
-        errors = {}
-        for url, url_index in zip(urls, url_indices):
-            try:
-                return await req(index, payload, url)
-            except Exception as e:
-                logger.warning(f"组卡请求 {url} 失败: {get_exc_desc(e)}")
-                errors.setdefault(get_exc_desc(e), []).append(url_index+1)
+    # 用户数据负载
+    userdata_payload = []
+    add_payload_segment(userdata_payload, user_data)
+    userdata_payload = build_multiparts_payload(userdata_payload)
 
+    # 组卡请求数据，以及原始options_list的索引映射（用于结果归类）
+    recommend_data = { 'region': ctx.region, 'batch_options': [] }
+    original_indices = []
+    for i, options in enumerate(options_list):
+        if options.algorithm == "all": 
+            algs = RECOMMEND_ALGS_CFG.get()
+        else:
+            algs = [options.algorithm]
+        for alg in algs:
+            opt = options.to_dict()
+            opt['algorithm'] = alg
+            recommend_data['batch_options'].append(opt)
+            original_indices.append(i)
+    
+    # 按后端优先级进行组卡请求
+    errors = {}
+    result_list = None
+    for url, url_index in zip(urls, url_indices):
+        # 向该后端缓存用户数据段
+        try:
+            res = await req(userdata_payload, url + "/cache_userdata")
+            userdata_hash = res.get('userdata_hash')
+        except Exception as e:
+            logger.warning(f"组卡用户数据缓存请求 {url} 失败: {get_exc_desc(e)}")
+            return url, None
+    
+        # 向该后端发送组卡请求
+        try:
+            recommend_data['userdata_hash'] = userdata_hash
+            payload = []
+            add_payload_segment(payload, dumps_json(recommend_data, indent=False).encode('utf-8'))
+            with Timer("deckrec:request", logger):
+                result_list = await req(build_multiparts_payload(payload), url + "/recommend")
+            break
+        except Exception as e:
+            logger.warning(f"组卡请求 {url} 失败: {get_exc_desc(e)}")
+            errors.setdefault(get_exc_desc(e), []).append(url_index+1)
+    
+    # 所有后端请求均失败
+    if result_list is None:
         error_text = ""
         for err_msg, url_idxs in errors.items():
             error_text += "".join([f"[{url_index}]" for url_index in url_idxs]) + f" {err_msg}\n"
         raise ReplyException(f"请求所有可用的组卡服务失败:\n" + error_text.strip())
 
-    tasks = []
-    for i, options in enumerate(options_list):
-        # 算法选择
-        if options.algorithm == "all": 
-            algs = RECOMMEND_ALGS_CFG.get()
-        else:
-            algs = [options.algorithm]
-
-        opt = options.to_dict()
-        payloads_userdata = []
-        add_payload_segment(payloads_userdata, user_data)
-
-        for alg in algs:
-            payloads = []
-            opt['algorithm'] = alg
-            data = {
-                'region': opt['region'],
-                'options': opt,
-            }
-            add_payload_segment(payloads, dumps_json(data).encode('utf-8'))
-            payload = build_multiparts_payload(payloads + payloads_userdata)
-
-            tasks.append(request_recommend(i, payload))
-
-    with Timer("deckrec:request", logger):
-        results_list: list[tuple[int, dict]] = await asyncio.gather(*tasks)
+    # 结果归类整理
     result_dict = {}
-    for index, data in results_list:
-        result_dict.setdefault(index, []).append(data)
+    for original_index, result in zip(original_indices, result_list):
+        result_dict.setdefault(original_index, []).append(result)
     
     ret = []
     for index in range(len(options_list)):
@@ -1274,7 +1282,6 @@ async def compose_deck_recommend_image(
     last_args: str,
     additional: dict,
 ) -> Image.Image:
-    timeout_ms = options.timeout_ms
     # ---------------------------- 判断组卡类型方便后续处理 ---------------------------- #
 
     NO_MUSIC_TYPES = ["bonus", "wl_bonus", "mysekai"]
@@ -1460,15 +1467,15 @@ async def compose_deck_recommend_image(
     cost_times, wait_times = {}, {}
     result_decks = []
     result_algs = []
-    for res, algs, cost_and_wait_times in await do_deck_recommend_batch(ctx, all_options, user_data, timeout_ms):
+    for res, algs, cost_and_wait_times in await do_deck_recommend_batch(ctx, all_options, user_data):
         result_decks.extend(res.decks)
         result_algs.extend(algs)
         for alg, (cost, wait) in cost_and_wait_times.items():
-            if alg not in cost_times:
-                cost_times[alg] = 0
-                wait_times[alg] = 0
-            cost_times[alg] += cost
-            wait_times[alg] = max(wait_times[alg], wait)
+            cost_times.setdefault(alg, []).append(cost)
+            wait_times.setdefault(alg, []).append(wait)
+    for alg in cost_and_wait_times:
+        cost_times[alg] = sum(cost_times[alg]) / len(cost_times[alg])
+        wait_times[alg] = sum(wait_times[alg]) / len(wait_times[alg])
 
     # 歌曲比较模式还要额外进行排序
     if music_compare:
@@ -1883,12 +1890,11 @@ async def compose_deck_recommend_image(
                 with VSplit().set_content_align('lt').set_item_align('lt').set_sep(4):
                     tip_style = TextStyle(font=DEFAULT_FONT, size=16, color=(20, 20, 20))
                     TextBox(f"功能移植并修改自33Kit https://3-3.dev/sekai/deck-recommend 算错概不负责", tip_style)
+                    def tt(t: float) -> str:
+                        return f"{t*1000:.0f}ms" if t < 1 else f"{t:.2f}s"
                     alg_and_cost_text = "本次组卡使用算法: "
-                    for alg, cost in cost_times.items():
-                        alg_name = RECOMMEND_ALG_NAMES[alg]
-                        cost_time = f"{cost:.2f}s"
-                        wait_time = f"{wait_times[alg]:.2f}s"
-                        alg_and_cost_text += f"{alg.upper()}-{alg_name} (等待{wait_time}/耗时{cost_time}) + "
+                    for alg in cost_times:
+                        alg_and_cost_text += f"{alg.upper()}-{RECOMMEND_ALG_NAMES[alg]} (等待{tt(wait_times[alg])}/耗时{tt(cost_times[alg])}) + "
                     alg_and_cost_text = alg_and_cost_text[:-3]
                     TextBox(alg_and_cost_text, tip_style)
                     TextBox(f"若发现组卡漏掉最优解可指定固定卡牌再尝试，发送\"{ctx.original_trigger_cmd}help\"获取详细帮助", tip_style)

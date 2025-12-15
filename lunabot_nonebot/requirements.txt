@@ -29,3 +29,4 @@ zhon
 zstandard
 colour-science
 pandas
+sekai-deck-recommend-cpp

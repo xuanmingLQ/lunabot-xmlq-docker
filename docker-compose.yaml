@@ -92,7 +92,6 @@ services:
         ipv4_address: 172.8.0.14
     volumes:
       - ./data/sekai/deckrec:/app/deck_recommender/data/sekai/deckrec # 必须和nonebot挂载到同一位置
-      - ./deck_recommender/config.docker.yaml:/app/deck_recommender/config.yaml # 单独的配置config.yaml
   # 如果你需要数据库，自行使用官方镜像
   # pgsql:
   # redis:
