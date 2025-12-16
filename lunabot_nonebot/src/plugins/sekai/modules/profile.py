@@ -167,12 +167,12 @@ async def get_card_full_thumbnail(
 
     return img
 
-# 获取卡牌所属团名（VS会返回对应的所属团）
-async def get_unit_by_card_id(ctx: SekaiHandlerContext, card_id: int) -> str:
+# 获取卡牌所属团名（return_support控制VS是否返回对应的所属团）
+async def get_unit_by_card_id(ctx: SekaiHandlerContext, card_id: int, return_support: bool = True) -> str:
     card = await ctx.md.cards.find_by_id(card_id)
     if not card: raise Exception(f"卡牌ID={card_id}不存在")
     chara_unit = get_unit_by_chara_id(card['characterId'])
-    if chara_unit != 'piapro':
+    if not return_support or chara_unit != 'piapro':
         return chara_unit
     return card['supportUnit'] if card['supportUnit'] != "none" else "piapro"
 

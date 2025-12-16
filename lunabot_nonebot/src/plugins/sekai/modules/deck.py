@@ -1329,7 +1329,7 @@ async def compose_deck_recommend_image(
     if unit_filter:
         profile['userCards'] = [
             uc for uc in profile['userCards']
-            if await get_unit_by_card_id(ctx, uc['cardId']) == unit_filter
+            if await get_unit_by_card_id(ctx, uc['cardId'], return_support=False) == unit_filter
         ]
     # 属性卡牌过滤
     attr_filter = additional.get('attr_filter', None)
