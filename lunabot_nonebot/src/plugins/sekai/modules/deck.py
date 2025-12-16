@@ -326,8 +326,8 @@ async def extract_target_event_or_simulate_event(
     attr, args = extract_card_attr(args, default=None)
     unit, new_args = extract_unit(args, default=None)
     index_25 = args.find('25')
-    if unit == "piapro":
-        # 不支持vs加成活动
+    if unit == "piapro" and 'vs' not in args:
+        # vs加成活动只能匹配vs，避免v的误匹配
         unit = None
     elif unit == "school_refusal" and index_25 != -1:
         left = args[index_25 - 1] if index_25 - 1 >= 0 else ' '
