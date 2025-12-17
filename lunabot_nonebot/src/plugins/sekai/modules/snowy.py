@@ -297,7 +297,7 @@ async def get_cnskp_msg(ctx: SekaiHandlerContext, args: str) -> str:
 #     return await ctx.asend_msg(msg)
 
 SNOWY_ALLOW_REGIONS = [
-    'cn', 'jp'
+    'cn', 'jp', 'en', 'tw', 'kr'
 ]
 
 # 获取个人信息截图
