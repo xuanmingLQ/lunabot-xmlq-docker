@@ -64,10 +64,10 @@ def parse_query(query:dict|None):
     if query is None:
         return ''
     queryCopy = {}
-    for key,val in query.items():
+    for key, val in query.items():
         if val is None:
             continue
-        if isinstance(val,list):
+        if isinstance(val, (list, tuple, set)) and len(val) > 0:
             queryCopy[key] = ','.join(val)
         else:
             queryCopy[key]=val

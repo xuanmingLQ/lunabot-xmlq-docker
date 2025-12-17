@@ -4,6 +4,7 @@ cache/
 config/
 config_docker/
 data/
+notgit/
 .env
 .env.docker
 .gitignore

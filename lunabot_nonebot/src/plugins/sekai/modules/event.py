@@ -8,6 +8,7 @@ from .profile import (
     get_player_bind_id,
     get_detailed_profile,
     get_detailed_profile_card,
+    get_detailed_profile_card_filter,
     get_player_avatar_info_by_detailed_profile,
 )
 from src.api.game.event import send_boost as send_boost_api
@@ -833,7 +834,11 @@ async def compose_event_detail_image(ctx: SekaiHandlerContext, event: dict) -> I
 
 # 合成活动记录图片
 async def compose_event_record_image(ctx: SekaiHandlerContext, qid: int) -> Image.Image:
-    profile, err_msg = await get_detailed_profile(ctx, qid, raise_exc=True)
+    profile, err_msg = await get_detailed_profile(
+        ctx, 
+        qid, 
+        filter=get_detailed_profile_card_filter('userEvents','userWorldBlooms'), 
+        raise_exc=True)
     user_events: List[Dict[str, Any]] = profile.get('userEvents', [])
     user_worldblooms: List[Dict[str, Any]] = profile.get('userWorldBlooms', [])
     for item in user_worldblooms:

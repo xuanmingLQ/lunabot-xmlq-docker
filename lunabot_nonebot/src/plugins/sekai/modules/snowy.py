@@ -296,16 +296,18 @@ async def get_cnskp_msg(ctx: SekaiHandlerContext, args: str) -> str:
 #     msg += "数据来源：SnowyBot"
 #     return await ctx.asend_msg(msg)
 
-
+SNOWY_ALLOW_REGIONS = [
+    'cn', 'jp'
+]
 
 # 获取个人信息截图
 async def get_sekaiprofile_image(region: str, uid: str) -> Image.Image:
-    assert_and_reply(region == 'cn', f"不支持的服务器 {region}，当前支持的服务器：cn")
+    assert_and_reply(region in SNOWY_ALLOW_REGIONS, f"不支持的服务器 {region}，当前支持的服务器：{SNOWY_ALLOW_REGIONS}")
     base_url:str = snowy_config.get("sekaiprofile.base_url")
     assert_and_reply(base_url, "缺少sekaiprofile.base_url")
     token:str = snowy_config.get("sekaiprofile.token")
     assert_and_reply(token, "缺少sekaiprofile.token")
-    url = base_url.format(user_id=uid, token=token)
+    url = base_url.format(region=region, user_id=uid, token=token)
     async with PlaywrightPage() as page:
         try:
             await page.goto(url, wait_until='networkidle', timeout=60000)

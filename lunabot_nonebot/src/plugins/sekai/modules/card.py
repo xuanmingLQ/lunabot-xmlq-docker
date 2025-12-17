@@ -6,6 +6,7 @@ from ..draw import *
 from .profile import (
     get_detailed_profile, 
     get_detailed_profile_card, 
+    get_detailed_profile_card_filter,
     get_player_avatar_info_by_detailed_profile,
     has_after_training,
     only_has_after_training,
@@ -236,7 +237,7 @@ async def get_cards_of_event(ctx: SekaiHandlerContext, event_id: int) -> List[di
 # 合成卡牌列表图片
 async def compose_card_list_image(ctx: SekaiHandlerContext, cards: List[Dict], qid: int):
     if qid:
-        profile, pmsg = await get_detailed_profile(ctx, qid, raise_exc=True)
+        profile, pmsg = await get_detailed_profile(ctx, qid, filter=get_detailed_profile_card_filter('userCards'), raise_exc=True)
         if profile:
             box_card_ids = set([uc['cardId'] for uc in profile['userCards']])
             cards = [c for c in cards if c['id'] in box_card_ids]
@@ -486,7 +487,7 @@ async def get_card_story_summary(ctx: SekaiHandlerContext, card: dict, refresh: 
 async def compose_box_image(ctx: SekaiHandlerContext, qid: int, cards: dict, show_id: bool, show_box: bool, use_after_training=True):
     pcards, bg_unit = [], None
     if qid:
-        profile, pmsg = await get_detailed_profile(ctx, qid, raise_exc=show_box)
+        profile, pmsg = await get_detailed_profile(ctx, qid, filter=get_detailed_profile_card_filter('userCards'), raise_exc=show_box)
         if profile:
             pcards = profile['userCards']
             avatar_info = await get_player_avatar_info_by_detailed_profile(ctx, profile)

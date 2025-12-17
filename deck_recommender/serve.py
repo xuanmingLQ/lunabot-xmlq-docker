@@ -154,14 +154,15 @@ async def _(request: Request):
             start_time = datetime.now()
             async with WorkerContext() as ctx:
                 result = await ctx.recommend(region, options, userdata_hash)
-            total_time = (datetime.now() - start_time).total_seconds()
-            wait_time = total_time - result['cost_time']
-        
+
             if result['status'] != 'success':
                 raise HTTPException(
                     status_code=500, 
                     detail=result.get('message', '内部错误'),
                 )
+            
+            total_time = (datetime.now() - start_time).total_seconds()
+            wait_time = total_time - result['cost_time']
 
             return {
                 "result": result['result'],

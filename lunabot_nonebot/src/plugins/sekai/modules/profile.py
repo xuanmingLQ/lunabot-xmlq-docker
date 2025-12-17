@@ -8,7 +8,6 @@ from .resbox import get_res_box_info, get_res_icon
 from src.api.game.user import get_suite, get_profile, create_account
 from src.api.game.misc import get_service_status
 from src.utils.request import ApiError
-
 # 导入snowy的个人信息页面
 from .snowy import get_sekaiprofile_image
 
@@ -566,7 +565,7 @@ async def get_detailed_profile(
     raise_exc=False, 
     mode=None, 
     ignore_hide=False, 
-    filter: list[str]=None,
+    filter: tuple[str]|list[str]|set[str]|None=None,
 ) -> Tuple[dict, str]:
     cache_path = None
     try:
@@ -582,7 +581,7 @@ async def get_detailed_profile(
             raise ReplyException(f"你已隐藏抓包信息，发送\"/{ctx.region}展示抓包\"可重新展示")
         
         try:
-            profile = await get_suite(ctx.region, uid,filter)
+            profile = await get_suite(ctx.region, uid, filter)
         except HttpError as e:
             logger.info(f"获取 {qid} 抓包数据失败: {get_exc_desc(e)}")
             if e.status_code == 404:
@@ -622,9 +621,9 @@ async def get_detailed_profile(
             return None, str(e)
         
     return profile, ""
-# 获取玩家详细信息的简单卡片控件所需要的filter
-def get_detailed_profile_card_filter(filter: list[str] = []) -> list[str]:
-    return filter + ['userGamedata', 'userDecks', 'upload_time', 'userCards']
+# 获取包含了玩家详细信息的简单卡片控件所需要的filter
+def get_detailed_profile_card_filter(*s: str) -> set[str]:
+    return {'userGamedata', 'userDecks', 'upload_time', 'userCards', *s}
 
 # 从玩家详细信息获取该玩家头像的PlayerAvatarInfo
 async def get_player_avatar_info_by_detailed_profile(ctx: SekaiHandlerContext, detail_profile: dict) -> PlayerAvatarInfo:
@@ -882,8 +881,8 @@ def set_profile_bg_settings(
             os.remove(image_path)
     elif image:
         w, h = image.size
-        w1, h1 = config.get('profile_bg_image_size.horizontal')
-        w2, h2 = config.get('profile_bg_image_size.vertical')
+        w1, h1 = config.get('profile.bg_image_size.horizontal')
+        w2, h2 = config.get('profile.bg_image_size.vertical')
         scale = -1
         if w > w1 and h > h1:
             scale = max(scale, w1 / w, h1 / h)
@@ -896,7 +895,7 @@ def set_profile_bg_settings(
         image = image.convert('RGB')
         if image.width > target_w:
             image = image.resize((target_w, target_h), Image.LANCZOS)
-        save_kwargs = config.get('profile_bg_image_save_kwargs', {})
+        save_kwargs = config.get('profile.bg_image_save_kwargs', {})
         create_parent_folder(image_path)
         image.save(image_path, **save_kwargs)
         settings.setdefault(uid, {})['vertical'] = target_w < target_h
@@ -980,6 +979,11 @@ async def get_player_frame_image(ctx: SekaiHandlerContext, frame_id: int, frame_
             lt = await ctx.rip.img(asset_path + "vertical/frame_lefttop.png", allow_error=False)
             rb = await ctx.rip.img(asset_path + "vertical/frame_rightbottom.png", allow_error=False)
             rt = await ctx.rip.img(asset_path + "vertical/frame_righttop.png", allow_error=False)
+
+            # try:
+            #     ct = await run_in_pool(shrink_image, ct, 10, 0)
+            # except Exception as e:
+            #     logger.warning(f"合成playerFrame_{frame_id}时为ct执行shrink失败（可能导致错位）: {get_exc_desc(e)}")
             
             ct = resize_keep_ratio(ct, scale, mode='scale')
             lt = resize_keep_ratio(lt, scale, mode='scale')
@@ -1035,10 +1039,31 @@ async def get_avatar_widget_with_frame(ctx: SekaiHandlerContext, avatar_img: Ima
             frame_img = await get_player_frame_image(ctx, frame['playerFrameId'], avatar_w + 5)
     except:
         pass
+
+    # 期间限定框
+    term_limit_frame_img: Image.Image = None
+    try:
+        for limited_time_frame in config.get('profile.limited_time_custom_frames', []):
+            now = datetime.now()
+            for period in limited_time_frame.get('periods', []):
+                start = datetime.strptime(period[0], '%m-%d %H:%M').replace(year=now.year)
+                end = datetime.strptime(period[1], '%m-%d %H:%M').replace(year=now.year)
+                if start <= now <= end:
+                    term_limit_frame_img = ctx.static_imgs.get(limited_time_frame['path'])
+                    term_limit_frame_img = resize_keep_ratio(term_limit_frame_img, avatar_w, scale=limited_time_frame.get('scale', 1.0))
+                    break
+            if term_limit_frame_img:
+                break
+    except Exception as e:
+        logger.warning(f"获取期间限定头像框失败: {get_exc_desc(e)}")
+        term_limit_frame_img = None
+
     with Frame().set_size((avatar_w, avatar_w)).set_content_align('c').set_allow_draw_outside(True) as ret:
         ImageBox(avatar_img, size=(avatar_w, avatar_w), use_alphablend=False, shadow=True)
         if frame_img:
             ImageBox(frame_img, use_alphablend=True, shadow=True)
+        if term_limit_frame_img:
+            ImageBox(term_limit_frame_img, use_alphablend=True, shadow=True)
     return ret
 
 
@@ -1336,13 +1361,10 @@ async def _(ctx: SekaiHandlerContext):
     args = ctx.get_args().strip()
     uid = get_player_bind_id(ctx)
     if 'snowy' in args:
-        if ctx.region == 'cn':
-            return await ctx.asend_reply_msg(await get_image_cq(
-                await get_sekaiprofile_image(ctx.region, uid),
-                low_quality=True, quality=95,
-            ))
-        else:
-            return await ctx.asend_reply_msg("snowy 目前只支持cn服")
+        return await ctx.asend_reply_msg(await get_image_cq(
+            await get_sekaiprofile_image(ctx.region, uid),
+            low_quality=True, quality=95,
+        ))
     vertical = None
     if '横屏' in args:
         vertical = False
@@ -1804,10 +1826,10 @@ async def _(ctx: HandlerContext):
         msg = f"用户{qid}当前绑定:\n"
         for region in ALL_SERVER_REGIONS:
             region_ctx = SekaiHandlerContext.from_region(region)
-            main_uid = get_player_bind_id(region_ctx, ctx.user_id, check_bind=False)
+            main_uid = get_player_bind_id(region_ctx, qid, check_bind=False)
             lines = []
-            for i in range(get_player_bind_count(region_ctx, ctx.user_id)):
-                uid = get_player_bind_id(region_ctx, ctx.user_id, index=i)
+            for i in range(get_player_bind_count(region_ctx, qid)):
+                uid = get_player_bind_id(region_ctx, qid, index=i)
                 is_main = (uid == main_uid)
                 line = f"[{i+1}] {uid}"
                 if is_main:

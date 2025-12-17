@@ -1,5 +1,5 @@
 from src.utils import server, ApiError
-def get_suite(region:str, user_id:str,filter:list[str]|str|None=None):
+def get_suite(region: str, user_id: str, filter: list[str] | set[str] | str | None=None):
     return server(
         path="/user/suite",
         method="get",
@@ -9,7 +9,7 @@ def get_suite(region:str, user_id:str,filter:list[str]|str|None=None):
             'filter':filter
         }
     )
-def get_mysekai(region:str, user_id:str,filter:list[str]|str|None=None):
+def get_mysekai(region: str, user_id: str, filter: list[str] | set[str] | str | None=None):
     return server(
         path="/user/mysekai",
         method="get",

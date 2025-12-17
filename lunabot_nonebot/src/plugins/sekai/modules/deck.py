@@ -9,7 +9,9 @@ from .profile import (
     get_player_bind_id,
     get_basic_profile,
     get_detailed_profile, 
+    get_detailed_profile_card_filter,
     get_detailed_profile_card, 
+    get_detailed_profile_card_filter,
     get_card_full_thumbnail,
 )
 from .education import get_user_challenge_live_info
@@ -1099,7 +1101,6 @@ async def do_deck_recommend_batch(
             userdata_hash = res.get('userdata_hash')
         except Exception as e:
             logger.warning(f"组卡用户数据缓存请求 {url} 失败: {get_exc_desc(e)}")
-            return url, None
     
         # 向该后端发送组卡请求
         try:
@@ -1167,6 +1168,7 @@ async def do_deck_recommend_batch(
         res.decks = decks
         ret.append((res, src_algs, cost_and_wait_times))
     return ret
+
 
 # 构造顶配profile
 async def construct_max_profile(ctx: SekaiHandlerContext) -> dict:
@@ -1320,7 +1322,24 @@ async def compose_deck_recommend_image(
     else:
         # 用户信息
         with Timer("deckrec:get_detailed_profile", logger):
-            profile, pmsg = await get_detailed_profile(ctx, qid, raise_exc=True, ignore_hide=True)
+            profile, pmsg = await get_detailed_profile(
+                ctx, 
+                qid, 
+                filter=get_detailed_profile_card_filter(
+                    'userGamedata',
+                    'userDecks',
+                    'userCards',
+                    'userHonors',
+                    "userMysekaiCanvases",
+                    "userCharacters",
+                    "userMysekaiGates",
+                    "userMysekaiFixtureGameCharacterPerformanceBonuses",
+                    "userAreas", 
+                    'userChallengeLiveSoloDecks',
+                    'userChallengeLiveSoloHighScoreRewards',
+                    'userChallengeLiveSoloStages',
+                    'userChallengeLiveSoloResults'),
+                raise_exc=True, ignore_hide=True)
             uid = profile['userGamedata']['userId']
 
     original_usercards = profile['userCards']

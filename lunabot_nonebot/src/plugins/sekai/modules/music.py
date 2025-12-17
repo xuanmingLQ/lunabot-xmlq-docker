@@ -7,6 +7,7 @@ from ..sub import SekaiUserSubHelper, SekaiGroupSubHelper
 from .profile import (
     get_detailed_profile, 
     get_detailed_profile_card, 
+    get_detailed_profile_card_filter,
     get_player_avatar_info_by_detailed_profile,
     get_player_avatar_info_by_basic_profile,
     get_basic_profile,
@@ -983,7 +984,11 @@ async def compose_music_list_image(
         for m, cover in zip(musics, covers):
             m['cover_img'] = cover
         
-    profile, err_msg = await get_detailed_profile(ctx, qid, raise_exc=play_result_filter is not None)
+    profile, err_msg = await get_detailed_profile(
+        ctx, 
+        qid, 
+        filter=get_detailed_profile_card_filter('userMusicResults'),
+        raise_exc=play_result_filter is not None)
     bg_unit = (await get_player_avatar_info_by_detailed_profile(ctx, profile)).unit if profile else None
 
     if play_result_filter is None:
@@ -1053,7 +1058,11 @@ async def compose_music_list_image(
 
 # 合成打歌进度图片
 async def compose_play_progress_image(ctx: SekaiHandlerContext, diff: str, qid: int) -> Image.Image:
-    profile, err_msg = await get_detailed_profile(ctx, qid, raise_exc=True)
+    profile, err_msg = await get_detailed_profile(
+        ctx, 
+        qid, 
+        filter=get_detailed_profile_card_filter('userMusicResults'),
+        raise_exc=True)
     bg_unit = (await get_player_avatar_info_by_detailed_profile(ctx, profile)).unit
 
     count = { lv: PlayProgressCount() for lv in range(1, 40) }
@@ -1261,7 +1270,11 @@ async def compose_music_brief_list_image(
 
 # 合成歌曲奖励图片
 async def compose_music_rewards_image(ctx: SekaiHandlerContext, qid: int) -> Image.Image:
-    profile, err_msg = await get_detailed_profile(ctx, qid, raise_exc=False)
+    profile, err_msg = await get_detailed_profile(
+        ctx, 
+        qid, 
+        filter=get_detailed_profile_card_filter('userMusicAchievements'),
+        raise_exc=False)
     # 获取有效歌曲id
     mids = [m['id'] for m in await get_valid_musics(ctx, leak=False)]
 

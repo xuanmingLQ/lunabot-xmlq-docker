@@ -11,9 +11,11 @@ from .profile import (
     SEKAI_PROFILE_DIR,
     get_basic_profile,
     get_player_avatar_info_by_basic_profile,
+    get_player_avatar_info_by_detailed_profile,
     get_user_data_mode,
     get_detailed_profile,
     get_detailed_profile_card,
+    get_detailed_profile_card_filter,
     process_hide_uid,
     get_player_frames,
     get_avatar_widget_with_frame,
@@ -213,6 +215,58 @@ async def get_mysekai_info_card(ctx: SekaiHandlerContext, mysekai_info: dict, ba
                     TextBox(f"数据来源: {source}  获取模式: {mode}", TextStyle(font=DEFAULT_FONT, size=16, color=BLACK))
             if err_msg:
                 TextBox(f"获取数据失败:{err_msg}", TextStyle(font=DEFAULT_FONT, size=20, color=RED), line_count=3).set_w(240)
+    return f
+
+# 获取玩家mysekai抓包数据+suite数据的简单卡片 返回 Frame
+async def get_mysekai_and_detail_profile_card(ctx: SekaiHandlerContext, mysekai_info: dict, profile: dict, err_msg: str, mode: str = None) -> Frame:
+    with Frame().set_bg(roundrect_bg()).set_padding(16) as f:
+        with HSplit().set_content_align('c').set_item_align('c').set_sep(14):
+            if profile and mysekai_info:
+                avatar_info = await get_player_avatar_info_by_detailed_profile(ctx, profile)
+
+                frames = get_player_frames(ctx, profile['userGamedata']['userId'], profile)
+                await get_avatar_widget_with_frame(ctx, avatar_info.img, 80, frames)
+
+                with VSplit().set_content_align('c').set_item_align('l').set_sep(5):
+                    game_data = profile['userGamedata']
+                    source = profile.get('source', '?')
+                    if local_source := profile.get('local_source'):
+                        source += f"({local_source})"
+                    mode = mode or get_user_data_mode(ctx, ctx.user_id)
+                    update_time = datetime.fromtimestamp(profile['upload_time'] / 1000)
+                    update_time_text = update_time.strftime('%m-%d %H:%M:%S') + f" ({get_readable_datetime(update_time, show_original_time=False)})"
+                    user_id = process_hide_uid(ctx, game_data['userId'], keep=6)
+
+                    mysekai_game_data = mysekai_info['updatedResources']['userMysekaiGamedata']
+                    if ctx.region in BD_MYSEKAI_REGIONS:
+                        process_sensitive_cmd_source(mysekai_info)
+                    ms_source = mysekai_info.get('source', '?')
+                    if ms_local_source := mysekai_info.get('local_source'):
+                        ms_source += f"({ms_local_source})"
+                    ms_update_time = datetime.fromtimestamp(mysekai_info['upload_time'] / 1000)
+                    ms_update_time_text = update_time.strftime('%m-%d %H:%M:%S') + f" ({get_readable_datetime(ms_update_time, show_original_time=False)})"
+
+                    with HSplit().set_content_align('lb').set_item_align('lb').set_sep(5):
+                        hs = colored_text_box(
+                            truncate(game_data['name'], 64),
+                            TextStyle(font=DEFAULT_BOLD_FONT, size=24, color=BLACK, use_shadow=True, shadow_offset=2, shadow_color=ADAPTIVE_SHADOW),
+                        )
+                        name_length = 0
+                        for item in hs.items:
+                            if isinstance(item, TextBox):
+                                name_length += get_str_display_length(item.text)
+                        ms_lv = mysekai_game_data['mysekaiRank']
+                        ms_lv_text = f"MySekai Lv.{ms_lv}" if name_length <= 12 else f"MSLv.{ms_lv}"
+                        TextBox(ms_lv_text, TextStyle(font=DEFAULT_FONT, size=18, color=BLACK))
+
+                    style = TextStyle(font=DEFAULT_FONT, size=16, color=BLACK)
+                    TextBox(f"{ctx.region.upper()}: {user_id}", style)
+                    TextBox(f"Suite更新时间: {update_time_text}", style)
+                    TextBox(f"数据来源: {source} 获取模式: {mode}", style)
+                    TextBox(f"Mysekai更新时间: {ms_update_time_text}", style)
+                    TextBox(f"数据来源: {ms_source} 获取模式: {mode}", style)
+            if err_msg:
+                TextBox(f"获取数据失败: {err_msg}", TextStyle(font=DEFAULT_FONT, size=20, color=RED), line_count=3).set_w(300)
     return f
 
 # 获取mysekai上次资源刷新时间和刷新原因(natural/bdstart_{cid}/bdend_{cid})
@@ -1321,7 +1375,11 @@ async def compose_mysekai_door_upgrade_image(ctx: SekaiHandlerContext, qid: int,
 
     profile = None
     if qid:
-        profile, pmsg = await get_detailed_profile(ctx, qid, raise_exc=True, ignore_hide=True)
+        profile, pmsg = await get_detailed_profile(
+            ctx, 
+            qid, 
+            filter=get_detailed_profile_card_filter('userMysekaiMaterials','userMysekaiGates',),
+            raise_exc=True, ignore_hide=True)
 
     # 获取玩家的材料
     user_materials = {}
@@ -1617,7 +1675,11 @@ async def compose_mysekai_talk_list_image(
         chara_icon = await get_character_sd_image(cuid)
 
         if not show_all_talks:
-            profile, pmsg = await get_detailed_profile(ctx, qid, raise_exc=True)
+            profile, pmsg = await get_detailed_profile(
+                ctx, 
+                qid, 
+                filter=get_detailed_profile_card_filter('userMysekaiCharacterTalks'),
+                raise_exc=True)
             assert_and_reply('userMysekaiCharacterTalks' in profile, "你的Suite抓包数据来源没有提供角色家具对话数据")
             user_character_talks = profile['userMysekaiCharacterTalks']
         else:
@@ -1742,9 +1804,11 @@ async def compose_mysekai_talk_list_image(
     with Canvas(bg=SEKAI_BLUE_BG).set_padding(BG_PADDING) as canvas:
         with VSplit().set_content_align('lt').set_item_align('lt').set_sep(16) as vs:
             with VSplit().set_content_align('lt').set_item_align('lt').set_sep(16):
-                if qid:
+                if qid and profile:
+                    await get_mysekai_and_detail_profile_card(ctx, mysekai_info, profile, mimsg + pmsg)
+                elif qid:
                     await get_mysekai_info_card(ctx, mysekai_info, basic_profile, mimsg)
-                if profile:
+                elif profile:
                     await get_detailed_profile_card(ctx, profile, pmsg)
 
             # 进度
