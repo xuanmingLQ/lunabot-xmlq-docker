@@ -1,5 +1,5 @@
 sekairanking:
-  base_url: https://sekairanking.exmeaning.com/api/v1
+  base_url: https://sekaibangdan.exmeaning.com/api/v1
   token: xxx
   cache_duration: 300
 sekaiprofile:

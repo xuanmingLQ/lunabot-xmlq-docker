@@ -1,7 +1,7 @@
 sekairanking:
-  base_url: https://sekairanking.exmeaning.com/api/v1
+  base_url: https://sekaibangdan.exmeaning.com/api/v1
   token:
   cache_duration: 300
 sekaiprofile:
-  base_url: https://sekaiprofile.exmeaning.com/profile/{user_id}?token={token}
+  base_url: https://sekaiprofile.exmeaning.com/profile/{region}/{user_id}?token={token}
   token:

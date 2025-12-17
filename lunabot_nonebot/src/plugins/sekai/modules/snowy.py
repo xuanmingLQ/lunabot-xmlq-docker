@@ -312,13 +312,13 @@ async def get_sekaiprofile_image(region: str, uid: str) -> Image.Image:
         try:
             await page.goto(url, wait_until='networkidle', timeout=60000)
             # 等待加载遮罩消失
-            await page.wait_for_selector(
-                "#loadingOverlay.hidden",
-                state="attached",  
-                timeout=60000 
-            )
+            # await page.wait_for_selector(
+            #     "#loadingOverlay.hidden",
+            #     state="attached",  
+            #     timeout=60000 
+            # )
             await page.set_viewport_size({"width": 1000, "height": 1000})
-            main_container_locator = page.locator("#mainContainer")
+            main_container_locator = page.locator(".pjsk-container").nth(0)
             with TempFilePath('png') as path:
                 await main_container_locator.screenshot(path=path)
                 return open_image(path)
