@@ -8,6 +8,7 @@ from .resbox import get_res_box_info, get_res_icon
 from src.api.game.user import get_suite, get_profile, create_account
 from src.api.game.misc import get_service_status
 from src.utils.request import ApiError
+from ...imgtool import shrink_image
 # 导入snowy的个人信息页面
 from .snowy import get_sekaiprofile_image
 
@@ -980,10 +981,10 @@ async def get_player_frame_image(ctx: SekaiHandlerContext, frame_id: int, frame_
             rb = await ctx.rip.img(asset_path + "vertical/frame_rightbottom.png", allow_error=False)
             rt = await ctx.rip.img(asset_path + "vertical/frame_righttop.png", allow_error=False)
 
-            # try:
-            #     ct = await run_in_pool(shrink_image, ct, 10, 0)
-            # except Exception as e:
-            #     logger.warning(f"合成playerFrame_{frame_id}时为ct执行shrink失败（可能导致错位）: {get_exc_desc(e)}")
+            try:
+                ct = await run_in_pool(shrink_image, ct, 10, 0)
+            except Exception as e:
+                logger.warning(f"合成playerFrame_{frame_id}时为ct执行shrink失败（可能导致错位）: {get_exc_desc(e)}")
             
             ct = resize_keep_ratio(ct, scale, mode='scale')
             lt = resize_keep_ratio(lt, scale, mode='scale')

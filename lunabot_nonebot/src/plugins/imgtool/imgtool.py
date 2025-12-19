@@ -78,7 +78,10 @@ def execute_imgtool_py(
     is_single_frame = isinstance(image, Image.Image)
     if is_single_frame:
         image = [image]
-    
+    rgba_frames = []
+    for img in image:
+        # 即使原本是 RGB，调用 convert('RGBA') 也会增加一个不透明的 Alpha 通道
+        rgba_frames.append(img.convert('RGBA'))
     # 2. 转换为 NumPy 数组 (n, h, w, 4)
     img_array = np.array([np.array(img) for img in image])
     

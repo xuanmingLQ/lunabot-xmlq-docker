@@ -18,19 +18,6 @@ Note: This project is for reference and learning purposes only, and is **not** a
 
 - Install system emoji fonts if emojis fail to render for commands such as `/help`
 
-- Replace the line in `{your_python_dir}/site-packages/pilmoji/helpers.py`:
-
-    ```python
-    language_pack: Dict[str, str] = unicode_codes.get_emoji_unicode_dict('en')
-    ```
-
-    with
-    
-    ```python
-    import emoji
-    language_pack: Dict[str, str] = {data['en']: emj for emj, data in emoji.EMOJI_DATA.items() if 'en' in data and data['status'] <= emoji.STATUS['fully_qualified']}
-    ```
-
 #### 2. Setup Configurations
 
 - Copy the configuration from the `example_config` directory to the `config` directory and fill in the missing content as needed.
