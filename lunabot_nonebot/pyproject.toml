@@ -46,7 +46,7 @@ dependencies = [
     "uvloop",
     "wordcloud>=1.9.4",
     "yt-dlp>=2025.12.8",
-    "zhconv",
+    "zhconv>=1.4.3",
     "zhon",
     "zstandard",
 ]
