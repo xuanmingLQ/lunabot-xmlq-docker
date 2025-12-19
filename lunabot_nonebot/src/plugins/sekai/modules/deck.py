@@ -11,7 +11,6 @@ from .profile import (
     get_detailed_profile, 
     get_detailed_profile_card_filter,
     get_detailed_profile_card, 
-    get_detailed_profile_card_filter,
     get_card_full_thumbnail,
 )
 from .education import get_user_challenge_live_info
@@ -24,7 +23,7 @@ from .music import (
     get_music_cover_thumb,
 )
 from .mysekai import MYSEKAI_REGIONS
-from sekai_deck_recommend import (
+from sekai_deck_recommend_cpp import (
     DeckRecommendOptions, 
     DeckRecommendCardConfig, 
     DeckRecommendSingleCardConfig,
@@ -169,7 +168,7 @@ def parse_number(s: str) -> Optional[int]:
     else:
         return int(s)
 
-# 从args中提取live类型
+# 从args中提取live类型 直接修改options 返回剩余参数
 def extract_live_type(args: str, options: DeckRecommendOptions) -> str:
     if "多人" in args or '协力' in args: 
         options.live_type = "multi"
@@ -316,14 +315,26 @@ async def extract_target_event(
     
     return event, wl_cid, args
 
-# 从args同时获取组卡目标活动或者指定属性&团模拟活动 返回 (活动, cid, unit, attr, 剩余参数)
+# 从args同时获取组卡目标活动或者指定属性&团模拟活动 直接修改options 返回剩余参数
 async def extract_target_event_or_simulate_event(
     ctx: SekaiHandlerContext, 
     args: str,
-) -> Tuple[Optional[dict], Optional[int], Optional[str], Optional[str], str]:
+    options: DeckRecommendOptions,
+) -> str:
+    # 匹配模拟WL活动（角色名+wl1 / wl2）
+    for turn in (1, 2):
+        if f"wl{turn}" in args:
+            for nickname, cid in get_character_nickname_data().nickname_ids:
+                if nickname in args:
+                    args = args.replace(f"wl{turn}", "", 1).replace(nickname, "", 1).strip()
+                    unit = get_unit_by_chara_id(cid)
+                    options.event_unit = unit
+                    options.world_bloom_event_turn = turn
+                    options.world_bloom_character_id = cid
+                    return args
+
     # 25需要优先匹配团队，对于活动id内包含25的情况，必须让团队的25两边不能有数字或者"event"、"活动"
     # 这样只有想以单独数字25指定25期活动时可能产生歧义，为该情况额外添加用户提示
-
     # 匹配团名和属性名，并检查25的情况
     attr, args = extract_card_attr(args, default=None)
     unit, new_args = extract_unit(args, default=None)
@@ -343,7 +354,9 @@ async def extract_target_event_or_simulate_event(
         args = new_args
 
     if unit and attr:
-        return None, None, unit, attr, args
+        options.event_unit = unit
+        options.event_attr = attr
+        return args
     if unit or attr:
         hint = f"你在参数中指定了{'团名' if unit else '颜色'}，"
         hint += f"这意味着你需要加成是指定团+颜色的模拟活动组卡，"
@@ -364,7 +377,9 @@ async def extract_target_event_or_simulate_event(
         default_return_current=True, 
         raise_if_not_found=True,
     )
-    return event, wl_cid, None, None, args
+    options.event_id = event['id']
+    options.world_bloom_character_id = wl_cid
+    return args
 
 # 从args中提取组卡目标
 def extract_target(args: str, options: DeckRecommendOptions) -> str:
@@ -752,10 +767,7 @@ async def extract_event_options(ctx: SekaiHandlerContext, args: str) -> Dict:
         options.timeout_ms = int(SINGLE_ALG_RECOMMEND_TIMEOUT_CFG.get() * 1000)
 
     # 活动id
-    event, wl_cid, options.event_unit, options.event_attr, args = await extract_target_event_or_simulate_event(ctx, args)
-    if event:
-        options.event_id = event['id']
-        options.world_bloom_character_id = wl_cid
+    args = await extract_target_event_or_simulate_event(ctx, args, options)
         
     # 歌曲id和难度
     args = await extract_music_and_diff(ctx, args, options, "event", options.live_type, additional)
@@ -924,10 +936,7 @@ async def extract_mysekai_options(ctx: SekaiHandlerContext, args: str) -> Dict:
     args = extract_fixed_cards_and_characters(args, options)
     args = extract_card_config(args, options, default_nochange=True)
 
-    event, wl_cid, options.event_unit, options.event_attr, args = await extract_target_event_or_simulate_event(ctx, args)
-    if event:
-        options.event_id = event['id']
-        options.world_bloom_character_id = wl_cid
+    args = await extract_target_event_or_simulate_event(ctx, args, options)
 
     # 组卡限制
     options.limit = DEFAULT_LIMIT
@@ -1059,7 +1068,7 @@ async def do_deck_recommend_batch(
 
     # 通用请求函数
     async def req(payload: bytes, url: str) -> dict:
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
             async with session.post(url, data=payload) as resp:
                 if resp.status != 200:
                     msg = f"{resp.status}: "
@@ -1098,13 +1107,7 @@ async def do_deck_recommend_batch(
         # 向该后端缓存用户数据段
         try:
             res = await req(userdata_payload, url + "/cache_userdata")
-            userdata_hash = res.get('userdata_hash')
-        except Exception as e:
-            logger.warning(f"组卡用户数据缓存请求 {url} 失败: {get_exc_desc(e)}")
-    
-        # 向该后端发送组卡请求
-        try:
-            recommend_data['userdata_hash'] = userdata_hash
+            recommend_data['userdata_hash'] = res.get('userdata_hash')
             payload = []
             add_payload_segment(payload, dumps_json(recommend_data, indent=False).encode('utf-8'))
             with Timer("deckrec:request", logger):
@@ -1289,6 +1292,7 @@ async def compose_deck_recommend_image(
     NO_MUSIC_TYPES = ["bonus", "wl_bonus", "mysekai"]
 
     is_wl = options.world_bloom_character_id or options.event_id == 180
+
     if options.live_type == "mysekai":
         recommend_type = "mysekai"
     elif options.target == "bonus":
@@ -1301,6 +1305,8 @@ async def compose_deck_recommend_image(
             recommend_type = "challenge"
         else:
             recommend_type = "challenge_all"
+    elif options.world_bloom_event_turn:
+        recommend_type = "wl_fake"
     elif options.event_id:
         if is_wl:
             recommend_type = "wl"
@@ -1544,7 +1550,7 @@ async def compose_deck_recommend_image(
 
     # 获取WL角色名字和头像
     wl_chara_name = None
-    if recommend_type in ["wl", "wl_bonus"] and options.world_bloom_character_id:
+    if options.world_bloom_character_id:
         wl_chara = await ctx.md.game_characters.find_by_id(options.world_bloom_character_id)
         if wl_chara:
             wl_chara_name = wl_chara.get('firstName', '') + wl_chara.get('givenName', '')
@@ -1637,6 +1643,8 @@ async def compose_deck_recommend_image(
                                 title += f"WL活动#{event_id}组卡"
                             else:
                                 title += f"WL终章活动组卡"
+                        elif recommend_type == "wl_fake":
+                            title += f"第{options.world_bloom_event_turn}轮WL模拟组卡"
                         elif recommend_type == "unit_attr":
                             title += f"团队+颜色模拟活动组卡"
                         elif recommend_type == "no_event":
@@ -1665,7 +1673,7 @@ async def compose_deck_recommend_image(
                         if recommend_type == "challenge":
                             ImageBox(chara_icon, size=(None, 50))
                             TextBox(f"{chara_name}", TextStyle(font=DEFAULT_BOLD_FONT, size=30, color=(70, 70, 70)))
-                        if recommend_type in ["wl"] and wl_chara_name:
+                        if wl_chara_name:
                             ImageBox(wl_chara_icon, size=(None, 50))
                             TextBox(f"{wl_chara_name} 章节", TextStyle(font=DEFAULT_BOLD_FONT, size=30, color=(70, 70, 70)))
                         if unit_logo and attr_icon:

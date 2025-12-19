@@ -1378,7 +1378,7 @@ async def compose_mysekai_door_upgrade_image(ctx: SekaiHandlerContext, qid: int,
         profile, pmsg = await get_detailed_profile(
             ctx, 
             qid, 
-            filter=get_detailed_profile_card_filter('userMysekaiMaterials','userMysekaiGates',),
+            filter=get_detailed_profile_card_filter('userMysekaiMaterials','userMysekaiGates'),
             raise_exc=True, ignore_hide=True)
 
     # 获取玩家的材料

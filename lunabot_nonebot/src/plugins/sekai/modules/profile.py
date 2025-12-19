@@ -564,8 +564,8 @@ async def get_detailed_profile(
     qid: int, 
     raise_exc=False, 
     mode=None, 
-    ignore_hide=False, 
-    filter: tuple[str]|list[str]|set[str]|None=None,
+    ignore_hide=False,
+    filter: tuple[str]|list[str]|set[str]|None=None
 ) -> Tuple[dict, str]:
     cache_path = None
     try:
@@ -1564,7 +1564,7 @@ upload_profile_bg = SekaiCmdHandler([
 upload_profile_bg.check_cdrate(cd).check_wblist(gbl).check_cdrate(profile_bg_upload_rate_limit)
 @upload_profile_bg.handle()
 async def _(ctx: SekaiHandlerContext):
-    return await ctx.asend_reply_msg("不支持自定义个人背景")
+    assert_and_reply(config.get("allow_custom_profile_backgroud"), "不允许自定义个人信息背景")
     await ctx.block_region(key=str(ctx.user_id))
 
     args = ctx.get_args().strip()
@@ -1575,19 +1575,22 @@ async def _(ctx: SekaiHandlerContext):
 
     uid = get_uid_and_check_verified(ctx, force)
     img_url = await ctx.aget_image_urls(return_first=True)
-    res = await image_safety_check(img_url)
-    if res.suggest_block():
-        raise ReplyException(f"图片审核结果: {res.message}")
+    
+    # 使用腾讯云检查个人信息背景，需要自己参照 https://github.com/NeuraXmy/lunabot/blob/master/src/plugins/utils/safety.py 去设置
+
+    # res = await image_safety_check(img_url)
+    # if res.suggest_block():
+    #     raise ReplyException(f"图片审核结果: {res.message}")
     img = await download_image(img_url)
     set_profile_bg_settings(ctx, image=img, force=force)
 
     msg = f"背景设置成功，使用\"/{ctx.region}调整个人信息\"可以调整界面方向、模糊、透明度\n"
-    if res.suggest_review():
-        msg += f"图片审核结果: {res.message}"
-        logger.warning(f"用户 {ctx.user_id} 上传的个人信息背景图片需要人工审核: {res.message}")
-        review_log_path = f"{SEKAI_PROFILE_DIR}/profile_bg_review.log"
-        with open(review_log_path, 'a', encoding='utf-8') as f:
-            f.write(f"{datetime.now().isoformat()} {ctx.user_id} set {ctx.region} {uid}\n")
+    # if res.suggest_review():
+    #     msg += f"图片审核结果: {res.message}"
+    #     logger.warning(f"用户 {ctx.user_id} 上传的个人信息背景图片需要人工审核: {res.message}")
+    #     review_log_path = f"{SEKAI_PROFILE_DIR}/profile_bg_review.log"
+    #     with open(review_log_path, 'a', encoding='utf-8') as f:
+    #         f.write(f"{datetime.now().isoformat()} {ctx.user_id} set {ctx.region} {uid}\n")
 
     try:
         img_cq = await get_image_cq(

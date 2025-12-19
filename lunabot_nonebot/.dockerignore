@@ -10,4 +10,4 @@ notgit/
 .gitignore
 LICENSE
 *.md
-gitignore/
+requirements.txt

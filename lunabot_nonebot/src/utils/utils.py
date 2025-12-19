@@ -839,6 +839,7 @@ from playwright.async_api import (
     BrowserType, 
     BrowserContext, 
     Page,
+    Error as PlaywrightError
 )
 
 _playwright_instance: Playwright | None = None
@@ -846,7 +847,7 @@ _browser_type: BrowserType | None = None
 # 只启动一个浏览器实例，降低开销
 _playwright_browser: Browser | None = None
 # 使用playwright的context隔离浏览器
-MAX_CONTEXTS = global_config.get('max_playwright_contexts')
+MAX_CONTEXTS = global_config.get('playwright_context_num')
 # 使用asyncio.Semaphore限制同时运行的context数量
 _context_semaphore = asyncio.Semaphore(MAX_CONTEXTS)
 
@@ -863,24 +864,37 @@ class PlaywrightPage:
 
     async def __aenter__(self) -> Page:
         global _playwright_instance, _browser_type, _playwright_browser
-        
-        if _playwright_instance is None:
-            _playwright_instance = await async_playwright().start()
-            _browser_type = _playwright_instance.chromium
-            
+        # 检查浏览器的情况
+        if _playwright_browser is None or not _playwright_browser.is_connected():
+
+            if _playwright_instance is None: # 启动async_playwright实例
+                _playwright_instance = await async_playwright().start()
+                _browser_type = _playwright_instance.chromium
+                utils_logger.info("初始化 Playwright 异步 API")
+                pass
+            # 清除临时文件
             if os.system("rm -rf /tmp/rust_mozprofile*") != 0:
                 utils_logger.error(f"清空WebDriver临时文件失败")
-            
+            #启动浏览器
             _playwright_browser = await _browser_type.launch(
                 headless=True,
                 args=['--no-sandbox', '--disable-setuid-sandbox'] 
             )
-            utils_logger.info(f"初始化 Playwright Browser")
+            utils_logger.info(f"启动 Playwright Browser")
             pass
+        # 限制context的数量
         await _context_semaphore.acquire()
         try:
             self.context = await _playwright_browser.new_context(**self.context_options)
-        except: # 出现异常时释放新号
+        except PlaywrightError as pe:# 在新建context时就发生异常，可以认为playwright本身出了问题，重启一下
+            try:
+                _playwright_browser.close()
+            except Exception as e:
+                utils_logger.error(f"关闭 Playwright Browser 失败 {get_exc_desc(e)}")
+            _playwright_browser = None
+            _context_semaphore.release()
+            raise pe
+        except: # 出现异常时释放信号
             _context_semaphore.release()
             raise
         self.page = await self.context.new_page()
@@ -898,7 +912,7 @@ class PlaywrightPage:
                 await self.context.close()
             except Exception as e:
                 utils_logger.error(f"关闭 Playwright Context 失败 {get_exc_desc(e)}")
-            finally:
+            finally:# 释放信号
                 _context_semaphore.release()
         self.page = None
         self.context = None

@@ -1,7 +1,6 @@
 from utils import *
 from worker import *
 from config import *
-from process_pool import *
 from os.path import join as pjoin
 from fastapi import FastAPI, HTTPException, Request
 import uvicorn
@@ -11,7 +10,6 @@ try:
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 except ImportError:
     pass
-
 
 
 def update_data(
@@ -154,13 +152,13 @@ async def _(request: Request):
             start_time = datetime.now()
             async with WorkerContext() as ctx:
                 result = await ctx.recommend(region, options, userdata_hash)
-
+        
             if result['status'] != 'success':
                 raise HTTPException(
                     status_code=500, 
                     detail=result.get('message', '内部错误'),
                 )
-            
+
             total_time = (datetime.now() - start_time).total_seconds()
             wait_time = total_time - result['cost_time']
 
