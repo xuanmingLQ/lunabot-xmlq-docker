@@ -39,7 +39,15 @@ exception_mail:   # 发送异常消息邮件的配置
 
 default_thread_pool_size: 8
 
+<<<<<<< HEAD:config/global.yaml
 playwright_context_num: 4 # 同时运行的浏览器context数量
+=======
+<<<<<<< HEAD
+max_playwright_contexts: 2 # 同时运行的浏览器context数量
+=======
+playwright_context_num: 8
+>>>>>>> origin/master
+>>>>>>> origin/xmlq:example_config/global.yaml
 
 safety_check:
   secret_id: xxx

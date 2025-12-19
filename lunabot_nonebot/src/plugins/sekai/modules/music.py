@@ -949,8 +949,9 @@ async def compose_music_detail_image(ctx: SekaiHandlerContext, mid: int, title: 
                                 Spacer(w=16)
                                 for vocal in vocals:
                                     with HSplit().set_content_align('c').set_item_align('c').set_sep(4).set_padding(4).set_bg(roundrect_bg(fill=(255, 255, 255, 150), radius=8)):
-                                        if vocal['vocal_name']:
-                                            TextBox(vocal['vocal_name'], TextStyle(font=DEFAULT_FONT, size=24, color=(70, 70, 70)))
+                                        if vocal_name := vocal.get('vocal_name'):
+                                            font_size = int(24 * min(1.0, 50 / get_str_display_length(vocal_name)))
+                                            TextBox(vocal['vocal_name'], TextStyle(font=DEFAULT_FONT, size=font_size, color=(70, 70, 70)))
                                         else:
                                             for img in vocal['chara_imgs']:
                                                 ImageBox(img, size=(32, 32), use_alphablend=True)

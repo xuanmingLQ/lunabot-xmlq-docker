@@ -144,24 +144,29 @@ async def extract_wl_event(ctx: SekaiHandlerContext, args: str) -> Tuple[dict, s
         logger.info(f"查询WL活动章节: chapter_arg={carg} wl_id={event['id']}")
         return event, args
 
-# 给图表绘制一个昼夜颜色背景
+# 绘制昼夜变化背景
 def draw_daynight_bg(ax, start_time: datetime, end_time: datetime):
-    def get_time_bg_color(time: datetime) -> str:
-        night_color = (200, 200, 230)    # 0:00
-        day_color = (245, 245, 250)     # 12:00
-        ratio = math.sin((time.hour) / 24 * math.pi * 2 - math.pi / 2)
-        color = lerp_color(night_color, day_color, (ratio + 1) / 2)
-        return rgb_to_color_code(color)
-    interval = timedelta(hours=1)
-    start_time = start_time.replace(minute=0, second=0, microsecond=0)
-    bg_times = [start_time]
-    while bg_times[-1] < end_time:
-        bg_times.append(bg_times[-1] + interval)
-    bg_colors = [get_time_bg_color(t) for t in bg_times]
-    for i in range(len(bg_times)):
-        start = bg_times[i]
-        end = bg_times[i] + interval
-        ax.axvspan(start, end, facecolor=bg_colors[i], edgecolor=None, zorder=0)
+    t_start = mdates.date2num(start_time)
+    t_end = mdates.date2num(end_time)
+    step = 1.0 / 24.0 
+    times = np.arange(t_start, t_end, step)
+    if len(times) == 0:
+        return
+    ratio = np.sin(2 * np.pi * times - np.pi / 2)
+    mix_factor = (ratio + 1) / 2
+    night_color = np.array([200, 200, 230]) / 255.0
+    day_color = np.array([245, 245, 250]) / 255.0
+    colors = (1 - mix_factor[:, None]) * night_color + mix_factor[:, None] * day_color
+    img_data = colors.reshape(1, -1, 3)
+    ylim = ax.get_ylim()
+    ax.imshow(
+        img_data, 
+        extent=[t_start, t_end, ylim[0], ylim[1]], 
+        aspect='auto', 
+        origin='lower',
+        zorder=0
+    )
+    ax.set_ylim(ylim)
 
 # 从榜线列表中找到最近的前一个榜线
 def find_prev_ranking(ranks: List[Ranking], rank: int) -> Optional[Ranking]:
@@ -972,8 +977,6 @@ async def compose_player_trace_image(ctx: SekaiHandlerContext, qtype: str, qval:
         fig.set_size_inches(12, 8)
         fig.subplots_adjust(wspace=0, hspace=0)
 
-        draw_daynight_bg(ax1, times[0], times[-1])
-
         min_score = min(scores)
         max_score = max(scores) 
         if ranks2 is not None:
@@ -1022,6 +1025,9 @@ async def compose_player_trace_image(ctx: SekaiHandlerContext, qtype: str, qval:
         # 网格
         ax1.xaxis.grid(True, linestyle='-', alpha=0.3, color='gray')
         ax2.yaxis.grid(True, linestyle='-', alpha=0.3, color='gray')
+
+        # 背景
+        draw_daynight_bg(ax1, times[0], times[-1])
         
         if ranks2 is None:
             plt.title(f"{get_event_id_and_name_text(ctx.region, eid, '')} 玩家: 【{name}】(T{ranks[-1].rank})")
@@ -1052,7 +1058,7 @@ async def compose_rank_trace_image(ctx: SekaiHandlerContext, rank: int, event: d
     ranks = await query_ranking(ctx.region, eid, rank=rank)
     if len(ranks) < 1:
         raise ReplyException(f"指定排名为{rank}榜线记录过少，无法查询")
-
+   
     ranks.sort(key=lambda x: x.time)
     times = [rank.time for rank in ranks]
     scores = [rank.score for rank in ranks]
@@ -1166,8 +1172,6 @@ async def compose_rank_trace_image(ctx: SekaiHandlerContext, rank: int, event: d
         fig.set_size_inches(12, 8)
         fig.subplots_adjust(wspace=0, hspace=0)
 
-        draw_daynight_bg(ax1, times[0], times[-1])
-
         unique_uids = sorted(list(set(uids)))
         num_unique_uids = len(unique_uids)
         if num_unique_uids > 20:
@@ -1188,8 +1192,8 @@ async def compose_rank_trace_image(ctx: SekaiHandlerContext, rank: int, event: d
         fig.autofmt_xdate()
         if scores: # 当前分数
             plt.annotate(f"{get_board_score_str(scores[-1])}", 
-                         xy=(times[-1], scores[-1]), xytext=(times[-1], scores[-1]),
-                         color=point_colors[-1], fontsize=12, ha='right', va='bottom')
+                        xy=(times[-1], scores[-1]), xytext=(times[-1], scores[-1]),
+                        color=point_colors[-1], fontsize=12, ha='right', va='bottom')
         
         # 绘制预测
         line_histories = []
@@ -1203,7 +1207,8 @@ async def compose_rank_trace_image(ctx: SekaiHandlerContext, rank: int, event: d
                 ax2.axhline(y=f.final_score, color=color, linestyle='--', linewidth=0.8, alpha=0.7)
                 score = round(f.final_score / 10000) * 10000
                 final_score_texts.append(f"{name}: {get_board_score_str(score, precise=False)}")
-                final_score_ys.append(f.final_score)
+                # final_score_ys.append(f.final_score)
+                final_score_ys.append(max_score + f.final_score / 10000)
                 final_score_colors.append(color)
             # 预测历史
             if config.get(f'sk.forecast.{source}.show_history') and f.history_final_score:
@@ -1242,11 +1247,14 @@ async def compose_rank_trace_image(ctx: SekaiHandlerContext, rank: int, event: d
         ax1.xaxis.grid(True, linestyle='-', alpha=0.3, color='gray')
         ax2.yaxis.grid(True, linestyle='-', alpha=0.3, color='gray')
 
-        plt.title(f"{get_event_id_and_name_text(ctx.region, eid, '')} T{rank} 分数线")
+        # 背景
+        draw_daynight_bg(ax1, times[0], times[-1])
 
+        plt.title(f"{get_event_id_and_name_text(ctx.region, eid, '')} T{rank} 分数线")
         return plt_fig_to_image(fig, tight=True)
     
     img = await run_in_pool(draw_graph)
+
     with Canvas(bg=SEKAI_BLUE_BG).set_padding(BG_PADDING) as canvas:
         ImageBox(img).set_bg(roundrect_bg(fill=(255, 255, 255, 200))).set_padding(16)
         if wl_cid:

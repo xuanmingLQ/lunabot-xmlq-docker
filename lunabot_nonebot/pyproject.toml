@@ -35,6 +35,7 @@ dependencies = [
     "qrcode>=8.2",
     "rapidfuzz",
     "rembg>=2.0.69",
+    "rembg>=2.0.69",
     "requests",
     "scikit-learn>=1.8.0",
     "scipy",
