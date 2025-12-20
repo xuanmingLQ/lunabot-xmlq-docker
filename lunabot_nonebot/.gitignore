@@ -296,3 +296,4 @@ cache/
 notgit/
 notgit.*
 .git/
+uv.lock

@@ -1,0 +1,15 @@
+chat_max_tokens: 128000                  # 默认聊天最大生成长度
+chat_model_switch_interval: 1            # 默认的模型失败切换间隔 (s)
+chat_timeout: 180                        # 默认聊天超时时间 (s)
+
+text_embedding_model:                    # 文本嵌入模型
+  provider: "sf"
+  id: "BAAI/bge-m3"
+  input_pricing:  0.00000000             # 每个输入token的价格
+
+tts_model:                               # 文本转语音模型
+  provider: "ay"
+  id: "tts-1"
+  input_pricing:  0.000015               # 每个输入字符的价格
+  voice: "alloy"                         # TTS语音名称
+

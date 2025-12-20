@@ -1,0 +1,5 @@
+websockets
+chromadb
+aiorpcx
+orjson
+setproctitle

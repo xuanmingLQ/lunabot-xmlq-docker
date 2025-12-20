@@ -28,8 +28,7 @@ RUN --mount=type=cache,target=$UV_CACHE_DIR \
 
 # 配置环境变量
 # 确保虚拟环境中的 python 路径在最前面
-ENV PATH="/app/deck_recommender/.venv/bin:$PATH" \
-    CONFIG_PATH=/app/deck_recommender/config.docker.yaml
+ENV PATH="/app/deck_recommender/.venv/bin:$PATH"
 # 暴露应用程序运行的端口
 EXPOSE 45556
 

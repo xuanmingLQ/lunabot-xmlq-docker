@@ -6,6 +6,8 @@ FROM python:3.13-slim-bookworm AS builder
 # 1. 安装 uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
+WORKDIR /app/lunabot_nonebot
+
 # 2. 设置 uv 缓存目录以加速构建
 ENV UV_CACHE_DIR=/root/.cache/uv
 
@@ -59,9 +61,9 @@ RUN playwright install --only-shell --with-deps chromium \
 COPY . .
 
 # 暴露端口
-EXPOSE 8383
+EXPOSE 8383 8486
 
 # 挂载数据目录
-VOLUME ["/app/lunabot_nonebot/data", "/app/lunabot_nonebot/config", "/app/lunabot_nonebot/.env"]
+VOLUME ["/app/lunabot_nonebot/data", "/app/lunabot_nonebot/config"]
 # 启动 NoneBot
 CMD ["python", "bot.py"]

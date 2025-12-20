@@ -9,6 +9,7 @@ from src.api.game.user import get_suite, get_profile, create_account
 from src.api.game.misc import get_service_status
 from src.utils.request import ApiError
 from ...imgtool import shrink_image
+from src.utils.safety import image_safety_check
 # 导入snowy的个人信息页面
 from .snowy import get_sekaiprofile_image
 
@@ -54,6 +55,8 @@ PROFILE_BG_IMAGE_PATH = f"{SEKAI_PROFILE_DIR}/profile_bg/" + "{region}/{uid}.jpg
 profile_bg_settings_db = get_file_db(f"{SEKAI_PROFILE_DIR}/profile_bg_settings.json", logger)
 profile_bg_upload_rate_limit = RateLimit(file_db, logger, 10, 'd', rate_limit_name='个人信息背景上传')
 
+PROFILE_HORIZONTAL_KEYWORDS = ('横屏', '横向', '横版',)
+PROFILE_VERTICAL_KEYWORDS = ('竖屏', '竖向', '竖版', '纵向',)
 
 
 # ======================= 卡牌逻辑（防止循环依赖） ======================= #
@@ -384,7 +387,7 @@ def swap_player_bind_id(ctx: SekaiHandlerContext, qid: str, index1: int, index2:
 
 
 # 验证用户游戏帐号
-async def verify_user_game_account(ctx: SekaiHandlerContext):
+async def verify_user_game_account(ctx: SekaiHandlerContext, triggered_by_not_verified: bool = False):
     verified_uids = get_user_verified_uids(ctx)
     uid = get_player_bind_id(ctx)
     assert_and_reply(uid not in verified_uids, f"你当前绑定的{get_region_name(ctx.region)}帐号已经验证过")
@@ -414,12 +417,16 @@ async def verify_user_game_account(ctx: SekaiHandlerContext):
             err_msg = f"你的上次验证已过期\n"
         if info.uid != uid:
             err_msg = f"开始验证时绑定的帐号与当前绑定帐号不一致\n"
-        if err_msg:
-            _region_qid_verify_codes[ctx.region].pop(qid, None)
-            info = None
+
+    if triggered_by_not_verified:
+        err_msg = f"该功能需要验证你的游戏账号\n"
+
+    if err_msg:
+        _region_qid_verify_codes[ctx.region].pop(qid, None)
+        info = None
     
+    # 首次验证
     if not info:
-        # 首次验证
         info = VerifyCode(
             region=ctx.region,
             qid=qid,
@@ -429,9 +436,9 @@ async def verify_user_game_account(ctx: SekaiHandlerContext):
         )
         _region_qid_verify_codes[ctx.region][qid] = info
         raise ReplyException(f"""
-{err_msg}请在你当前绑定的{get_region_name(ctx.region)}帐号({process_hide_uid(ctx, info.uid, keep=6)})的游戏名片的简介(word)的末尾输入该验证码(不要去掉斜杠):
+{err_msg}请在你当前绑定的{get_region_name(ctx.region)}帐号的名片简介末尾输入验证码(不要去掉斜杠):
 {info.verify_code}
-编辑后需要退出名片界面以保存，然后在{get_readable_timedelta(VERIFY_CODE_EXPIRE_TIME)}内重新发送一次\"{ctx.original_trigger_cmd}\"以完成验证
+编辑后退出名片界面保存，然后在{get_readable_timedelta(VERIFY_CODE_EXPIRE_TIME)}内发送\"/{ctx.region}pjsk验证\"完成验证
 """.strip())
     
     profile = await get_basic_profile(ctx, info.uid, use_cache=False, use_remote_cache=False)
@@ -455,11 +462,14 @@ def get_user_verified_uids(ctx: SekaiHandlerContext) -> List[str]:
     return profile_db.get(f"verify_accounts_{ctx.region}", {}).get(str(ctx.user_id), [])
 
 # 获取游戏id并检查用户是否验证过当前的游戏id，失败抛出异常
-def get_uid_and_check_verified(ctx: SekaiHandlerContext, force: bool = False) -> str:
+async def get_uid_and_check_verified(ctx: SekaiHandlerContext, force: bool = False) -> str:
     uid = get_player_bind_id(ctx)
     if not force:
         verified_uids = get_user_verified_uids(ctx)
-        assert_and_reply(uid in verified_uids, f"""
+        if uid not in verified_uids:
+            await verify_user_game_account(ctx, triggered_by_not_verified=True)
+            # 正常情况下不会往下走
+            assert_and_reply(uid in verified_uids, f"""
 该功能需要验证你的游戏帐号
 请使用"/{ctx.region}pjsk验证"进行验证，使用"/{ctx.region}pjsk验证列表"查看你验证过的游戏ID
 """.strip())
@@ -701,8 +711,36 @@ async def compose_profile_image(ctx: SekaiHandlerContext, basic_profile: dict, v
     bg = ImageBg(bg_settings.image, blur=False, fade=0) if bg_settings.image else random_unit_bg(avatar_info.unit)
     ui_bg = roundrect_bg(fill=(255, 255, 255, bg_settings.alpha), blurglass=True, blurglass_kwargs={'blur': bg_settings.blur})
 
+    async def draw_honor():
+        with HSplit().set_content_align('c').set_item_align('c').set_sep(8).set_padding((16, 0)):
+            honors = basic_profile["userProfileHonors"]
+            async def compose_honor_image_nothrow(*args):
+                try: return await compose_full_honor_image(*args)
+                except: 
+                    logger.print_exc("合成头衔图片失败")
+                    return None
+            honor_imgs = await asyncio.gather(*[
+                compose_honor_image_nothrow(ctx, find_by(honors, 'seq', 1), True, basic_profile),
+                compose_honor_image_nothrow(ctx, find_by(honors, 'seq', 2), False, basic_profile),
+                compose_honor_image_nothrow(ctx, find_by(honors, 'seq', 3), False, basic_profile)
+            ])
+            for img in honor_imgs:
+                if img: 
+                    ImageBox(img, size=(None, 48), shadow=True)
+
+    async def draw_deck(vertical: bool):
+        with HSplit().set_content_align('c').set_item_align('c').set_sep(6 if not vertical else 16).set_padding((16, 0)):
+            card_ids = [pcard['cardId'] for pcard in pcards]
+            cards = await ctx.md.cards.collect_by_ids(card_ids)
+            card_imgs = [
+                await get_card_full_thumbnail(ctx, card, pcard=pcard)
+                for card, pcard in zip(cards, pcards)
+            ]
+            for i in range(len(card_imgs)):
+                ImageBox(card_imgs[i], size=(90, 90), image_size_mode='fill', shadow=True)
+
     # 个人信息部分
-    async def draw_info():
+    async def draw_info(vertical: bool): 
         with VSplit().set_bg(ui_bg).set_content_align('c').set_item_align('c').set_sep(32).set_padding((32, 35)) as ret:
             # 名片
             with HSplit().set_content_align('c').set_item_align('c').set_sep(32).set_padding((32, 0)):
@@ -718,7 +756,11 @@ async def compose_profile_image(ctx: SekaiHandlerContext, basic_profile: dict, v
                     TextBox(f"{ctx.region.upper()}: {process_hide_uid(ctx, game_data['userId'], keep=6)}", TextStyle(font=DEFAULT_FONT, size=20, color=ADAPTIVE_WB))
                     with Frame():
                         ImageBox(ctx.static_imgs.get("lv_rank_bg.png"), size=(180, None))
-                        TextBox(f"{game_data['rank']}", TextStyle(font=DEFAULT_FONT, size=30, color=WHITE)).set_offset((110, 0))
+                        TextBox(f"{game_data['rank']}", TextStyle(font=DEFAULT_FONT, size=30, color=WHITE)).set_offset((110, 0))\
+                        
+            # 头衔（竖版）
+            if vertical:
+                await draw_honor()
 
             # 推特
             with Frame().set_content_align('l').set_w(450):
@@ -734,36 +776,18 @@ async def compose_profile_image(ctx: SekaiHandlerContext, basic_profile: dict, v
             user_word_box = TextBox(user_word, TextStyle(font=DEFAULT_FONT, size=20, color=ADAPTIVE_WB), line_count=3)
             user_word_box.set_wrap(True).set_bg(ui_bg).set_line_sep(2).set_padding((18, 16)).set_w(450)
 
-            # 头衔
-            with HSplit().set_content_align('c').set_item_align('c').set_sep(8).set_padding((16, 0)):
-                honors = basic_profile["userProfileHonors"]
-                async def compose_honor_image_nothrow(*args):
-                    try: return await compose_full_honor_image(*args)
-                    except: 
-                        logger.print_exc("合成头衔图片失败")
-                        return None
-                honor_imgs = await asyncio.gather(*[
-                    compose_honor_image_nothrow(ctx, find_by(honors, 'seq', 1), True, basic_profile),
-                    compose_honor_image_nothrow(ctx, find_by(honors, 'seq', 2), False, basic_profile),
-                    compose_honor_image_nothrow(ctx, find_by(honors, 'seq', 3), False, basic_profile)
-                ])
-                for img in honor_imgs:
-                    if img: 
-                        ImageBox(img, size=(None, 48), shadow=True)
-            # 卡组
-            with HSplit().set_content_align('c').set_item_align('c').set_sep(6).set_padding((16, 0)):
-                card_ids = [pcard['cardId'] for pcard in pcards]
-                cards = await ctx.md.cards.collect_by_ids(card_ids)
-                card_imgs = [
-                    await get_card_full_thumbnail(ctx, card, pcard=pcard)
-                    for card, pcard in zip(cards, pcards)
-                ]
-                for i in range(len(card_imgs)):
-                    ImageBox(card_imgs[i], size=(90, 90), image_size_mode='fill', shadow=True)
+            # 头衔（横版）
+            if not vertical:
+                await draw_honor()
+            
+            # 卡组（横版）
+            if not vertical:
+                await draw_deck(vertical)
+            
         return ret
 
     # 打歌部分
-    async def draw_play(): 
+    async def draw_play(vertical: bool): 
         with HSplit().set_content_align('c').set_item_align('t').set_sep(12).set_bg(ui_bg).set_padding(32) as ret:
             hs, vs, gw, gh = 8, 12, 90, 25
             with VSplit().set_sep(vs):
@@ -789,50 +813,56 @@ async def compose_profile_image(ctx: SekaiHandlerContext, basic_profile: dict, v
         return ret
     
     # 养成部分
-    async def draw_chara():
-        with Frame().set_content_align('rb').set_bg(ui_bg) as ret:
-            hs, vs, gw, gh = 8, 7, 96, 48
-            # 角色等级
-            with Grid(col_count=6).set_sep(hsep=hs, vsep=vs).set_padding(32):
-                chara_list = [
-                    "miku", "rin", "len", "luka", "meiko", "kaito", 
-                    "ick", "saki", "hnm", "shiho", None, None,
-                    "mnr", "hrk", "airi", "szk", None, None,
-                    "khn", "an", "akt", "toya", None, None,
-                    "tks", "emu", "nene", "rui", None, None,
-                    "knd", "mfy", "ena", "mzk", None, None,
-                ]
-                for chara in chara_list:
-                    if chara is None:
-                        Spacer(gw, gh)
-                        continue
-                    cid = int(get_cid_by_nickname(chara))
-                    rank = find_by(basic_profile['userCharacters'], 'characterId', cid)['characterRank']
-                    with Frame().set_size((gw, gh)):
-                        chara_img = ctx.static_imgs.get(f'chara_rank_icon/{chara}.png')
-                        ImageBox(chara_img, size=(gw, gh), use_alphablend=True)
-                        t = TextBox(str(rank), TextStyle(font=DEFAULT_FONT, size=20, color=(40, 40, 40, 255)))
-                        t.set_size((60, 48)).set_content_align('c').set_offset((36, 4))
-            
-            # 挑战Live等级
-            if 'userChallengeLiveSoloResult' in basic_profile:
-                solo_live_result = basic_profile['userChallengeLiveSoloResult']
-                if isinstance(solo_live_result, list):
-                    solo_live_result = sorted(solo_live_result, key=lambda x: x['highScore'], reverse=True)[0]
-                cid, score = solo_live_result['characterId'], solo_live_result['highScore']
-                stages = find_by(basic_profile['userChallengeLiveSoloStages'], 'characterId', cid, mode='all')
-                stage_rank = max([stage['rank'] for stage in stages])
+    async def draw_chara(vertical: bool):
+        with VSplit().set_sep(16).set_item_bg(ui_bg) as ret:
+            with Frame().set_content_align('rb'):
+                hs, vs, gw, gh = 8, 7, 96, 48
+                # 角色等级
+                with Grid(col_count=6).set_sep(hsep=hs, vsep=vs).set_padding(32):
+                    chara_list = [
+                        "miku", "rin", "len", "luka", "meiko", "kaito", 
+                        "ick", "saki", "hnm", "shiho", None, None,
+                        "mnr", "hrk", "airi", "szk", None, None,
+                        "khn", "an", "akt", "toya", None, None,
+                        "tks", "emu", "nene", "rui", None, None,
+                        "knd", "mfy", "ena", "mzk", None, None,
+                    ]
+                    for chara in chara_list:
+                        if chara is None:
+                            Spacer(gw, gh)
+                            continue
+                        cid = int(get_cid_by_nickname(chara))
+                        rank = find_by(basic_profile['userCharacters'], 'characterId', cid)['characterRank']
+                        with Frame().set_size((gw, gh)):
+                            chara_img = ctx.static_imgs.get(f'chara_rank_icon/{chara}.png')
+                            ImageBox(chara_img, size=(gw, gh), use_alphablend=True)
+                            t = TextBox(str(rank), TextStyle(font=DEFAULT_FONT, size=20, color=(40, 40, 40, 255)))
+                            t.set_size((60, 48)).set_content_align('c').set_offset((36, 4))
                 
-                with VSplit().set_content_align('c').set_item_align('c').set_padding((32, 64)).set_sep(12):
-                    t = TextBox(f"CHANLLENGE LIVE", TextStyle(font=DEFAULT_FONT, size=18, color=(50, 50, 50, 255)))
-                    t.set_bg(roundrect_bg(radius=6)).set_padding((10, 7))
-                    with Frame():
-                        chara_img = ctx.static_imgs.get(f'chara_rank_icon/{get_character_first_nickname(cid)}.png')
-                        ImageBox(chara_img, size=(100, 50), use_alphablend=True)
-                        t = TextBox(str(stage_rank), TextStyle(font=DEFAULT_FONT, size=22, color=(40, 40, 40, 255)), overflow='clip')
-                        t.set_size((50, 50)).set_content_align('c').set_offset((40, 5))
-                    t = TextBox(f"SCORE {score}", TextStyle(font=DEFAULT_FONT, size=18, color=(50, 50, 50, 255)))
-                    t.set_bg(roundrect_bg(radius=6)).set_padding((10, 7))
+                # 挑战Live等级
+                if 'userChallengeLiveSoloResult' in basic_profile:
+                    solo_live_result = basic_profile['userChallengeLiveSoloResult']
+                    if isinstance(solo_live_result, list):
+                        solo_live_result = sorted(solo_live_result, key=lambda x: x['highScore'], reverse=True)[0]
+                    cid, score = solo_live_result['characterId'], solo_live_result['highScore']
+                    stages = find_by(basic_profile['userChallengeLiveSoloStages'], 'characterId', cid, mode='all')
+                    stage_rank = max([stage['rank'] for stage in stages])
+                    
+                    with VSplit().set_content_align('c').set_item_align('c').set_padding((32, 64)).set_sep(12):
+                        t = TextBox(f"CHANLLENGE LIVE", TextStyle(font=DEFAULT_FONT, size=18, color=(50, 50, 50, 255)))
+                        t.set_bg(roundrect_bg(radius=6)).set_padding((10, 7))
+                        with Frame():
+                            chara_img = ctx.static_imgs.get(f'chara_rank_icon/{get_character_first_nickname(cid)}.png')
+                            ImageBox(chara_img, size=(100, 50), use_alphablend=True)
+                            t = TextBox(str(stage_rank), TextStyle(font=DEFAULT_FONT, size=22, color=(40, 40, 40, 255)), overflow='clip')
+                            t.set_size((50, 50)).set_content_align('c').set_offset((40, 5))
+                        t = TextBox(f"SCORE {score}", TextStyle(font=DEFAULT_FONT, size=18, color=(50, 50, 50, 255)))
+                        t.set_bg(roundrect_bg(radius=6)).set_padding((10, 7))
+
+            # 卡组（竖版）
+            if vertical:
+                with Frame().set_content_align('c').set_padding(32):
+                    await draw_deck(vertical)
         return ret
 
     if vertical is None:
@@ -841,15 +871,15 @@ async def compose_profile_image(ctx: SekaiHandlerContext, basic_profile: dict, v
     with Canvas(bg=bg).set_padding(BG_PADDING) as canvas:
         if not vertical:
             with HSplit().set_content_align('lt').set_item_align('lt').set_sep(16):
-                await draw_info()
+                await draw_info(vertical)
                 with VSplit().set_content_align('c').set_item_align('c').set_sep(16):
-                    await draw_play()
-                    await draw_chara()
+                    await draw_play(vertical)
+                    await draw_chara(vertical)
         else:
             with VSplit().set_content_align('c').set_item_align('c').set_sep(16).set_item_bg(ui_bg):
-                (await draw_info()).set_bg(None)
-                (await draw_play()).set_bg(None)
-                (await draw_chara()).set_bg(None)
+                (await draw_info(vertical)).set_bg(None)
+                (await draw_play(vertical)).set_bg(None)
+                (await draw_chara(vertical)).set_bg(None).set_omit_parent_bg(True)
 
     if 'update_time' in basic_profile:
         update_time = datetime.fromtimestamp(basic_profile['update_time'] / 1000).strftime('%Y-%m-%d %H:%M:%S')
@@ -862,7 +892,7 @@ async def compose_profile_image(ctx: SekaiHandlerContext, basic_profile: dict, v
     return await canvas.get_img(1.5)
 
 # 个人信息背景设置
-def set_profile_bg_settings(
+async def set_profile_bg_settings(
     ctx: SekaiHandlerContext,
     image: Optional[Image.Image] = None,
     remove_image: bool = False,
@@ -871,7 +901,7 @@ def set_profile_bg_settings(
     vertical: Optional[bool] = None,
     force: bool = False
 ):
-    uid = get_uid_and_check_verified(ctx, force)
+    uid = await get_uid_and_check_verified(ctx, force)
     region = ctx.region
     image_path = PROFILE_BG_IMAGE_PATH.format(region=region, uid=uid)
 
@@ -1367,12 +1397,19 @@ async def _(ctx: SekaiHandlerContext):
             low_quality=True, quality=95,
         ))
     vertical = None
-    if '横屏' in args:
-        vertical = False
-        args = args.replace('横屏', '').strip()
-    elif '竖屏' in args:
-        vertical = True
-        args = args.replace('竖屏', '').strip()
+
+    for keyword in PROFILE_HORIZONTAL_KEYWORDS:
+        if keyword in args:
+            vertical = False
+            args = args.replace(keyword, '', 1).strip()
+            break
+    for keyword in PROFILE_VERTICAL_KEYWORDS:
+        if keyword in args:
+            vertical = True
+            args = args.replace(keyword, '', 1).strip()
+            break
+
+    uid = get_player_bind_id(ctx)
     profile = await get_basic_profile(ctx, uid, use_cache=True, use_remote_cache=False)
     logger.info(f"绘制名片 region={ctx.region} uid={uid}")
     return await ctx.asend_reply_msg(await get_image_cq(
@@ -1574,16 +1611,16 @@ async def _(ctx: SekaiHandlerContext):
         force = True
         args = args.replace('force', '').strip()
 
-    uid = get_uid_and_check_verified(ctx, force)
+    uid = await get_uid_and_check_verified(ctx, force)
     img_url = await ctx.aget_image_urls(return_first=True)
     
     # 使用腾讯云检查个人信息背景，需要自己参照 https://github.com/NeuraXmy/lunabot/blob/master/src/plugins/utils/safety.py 去设置
 
-    # res = await image_safety_check(img_url)
-    # if res.suggest_block():
-    #     raise ReplyException(f"图片审核结果: {res.message}")
+    res = await image_safety_check(img_url)
+    if res.suggest_block():
+        raise ReplyException(f"图片审核结果: {res.message}")
     img = await download_image(img_url)
-    set_profile_bg_settings(ctx, image=img, force=force)
+    await set_profile_bg_settings(ctx, image=img, force=force)
 
     msg = f"背景设置成功，使用\"/{ctx.region}调整个人信息\"可以调整界面方向、模糊、透明度\n"
     # if res.suggest_review():
@@ -1622,7 +1659,7 @@ async def _(ctx: SekaiHandlerContext):
         force = True
         args = args.replace('force', '').strip()
 
-    set_profile_bg_settings(ctx, remove_image=True, force=force)
+    await set_profile_bg_settings(ctx, remove_image=True, force=force)
     return await ctx.asend_reply_msg(f"已清空{get_region_name(ctx.region)}个人信息背景图片")
 
 
@@ -1642,7 +1679,7 @@ async def _(ctx: SekaiHandlerContext):
         force = True
         args = args.replace('force', '').strip()
 
-    uid = get_uid_and_check_verified(ctx, force)
+    uid = await get_uid_and_check_verified(ctx, force)
     HELP = f"""
 调整横屏/竖屏:
 {ctx.original_trigger_cmd} 竖屏
@@ -1667,10 +1704,17 @@ async def _(ctx: SekaiHandlerContext):
     vertical, blur, alpha = None, None, None
     try:
         args = args.replace('度', '').replace('%', '')
-        if '竖屏' in args:
-            vertical = True
-        elif '横屏' in args:
-            vertical = False
+
+        for keyword in PROFILE_HORIZONTAL_KEYWORDS:
+            if keyword in args:
+                vertical = False
+                args = args.replace(keyword, '', 1).strip()
+                break
+        for keyword in PROFILE_VERTICAL_KEYWORDS:
+            if keyword in args:
+                vertical = True
+                args = args.replace(keyword, '', 1).strip()
+                break
 
         if '全模糊' in args:
             blur = 10
@@ -1707,7 +1751,7 @@ async def _(ctx: SekaiHandlerContext):
     if alpha is not None:
         assert_and_reply(0 <= alpha <= 255, "透明度必须在0到100之间")
     
-    set_profile_bg_settings(ctx, vertical=vertical, blur=blur, alpha=alpha, force=force)
+    await set_profile_bg_settings(ctx, vertical=vertical, blur=blur, alpha=alpha, force=force)
     settings = get_profile_bg_settings(ctx)
 
     msg = f"当前设置: {'竖屏' if settings.vertical else '横屏'} 透明度{100 - int(settings.alpha * 100 / 255)} 模糊度{settings.blur}\n"

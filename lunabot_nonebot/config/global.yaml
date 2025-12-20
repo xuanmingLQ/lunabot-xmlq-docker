@@ -1,7 +1,7 @@
 bot_name: "lunabot-xmlq"
 log_level: "INFO"
 superuser:
-  - 12345678
+  - 1234567
 
 group_member_name_cache_expire_seconds: 60  # 群成员名称缓存过期时间（秒）
 
@@ -21,7 +21,7 @@ msg_send:
     default_quality: 75
     default_subsampling: 2
     default_optimize: True
-
+    
 font:
   path: "utils/fonts/Microsoft YaHei.ttf"  # 中文字体路径
   name: "Microsoft YaHei"     # Matplotlib库使用的中文字体名称
@@ -39,17 +39,10 @@ exception_mail:   # 发送异常消息邮件的配置
 
 default_thread_pool_size: 8
 
-<<<<<<< HEAD:config/global.yaml
-playwright_context_num: 4 # 同时运行的浏览器context数量
-=======
-<<<<<<< HEAD
-max_playwright_contexts: 2 # 同时运行的浏览器context数量
-=======
-playwright_context_num: 8
->>>>>>> origin/master
->>>>>>> origin/xmlq:example_config/global.yaml
+playwright_context_num: 8 # 同时运行的浏览器context数量
 
 safety_check:
+  enabled: false
   secret_id: xxx
   secret_key: xxx
   endpoint: ims.tencentcloudapi.com

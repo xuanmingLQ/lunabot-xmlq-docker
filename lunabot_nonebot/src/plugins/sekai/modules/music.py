@@ -1,4 +1,5 @@
 from src.utils import *
+from ...llm import get_text_retriever
 from ..common import *
 from ..handler import *
 from ..asset import *
@@ -24,7 +25,7 @@ music_user_sub = SekaiUserSubHelper("music", "新曲@提醒", ALL_SERVER_REGIONS
 apd_group_sub = SekaiGroupSubHelper("apd", "新APD通知", ALL_SERVER_REGIONS)
 apd_user_sub = SekaiUserSubHelper("apd", "新APD@提醒", ALL_SERVER_REGIONS, related_group_sub=apd_group_sub)
 
-# music_name_retriever = get_text_retriever(f"music_name") 
+music_name_retriever = get_text_retriever(f"music_name") 
 
 music_cn_titles = WebJsonRes("曲名中文翻译", "https://i18n-json.sekai.best/zh-CN/music_titles.json", update_interval=timedelta(days=1))
 music_en_titles = WebJsonRes("曲名英文翻译", "https://i18n-json.sekai.best/en/music_titles.json", update_interval=timedelta(days=1))
@@ -569,8 +570,6 @@ async def search_music(ctx: SekaiHandlerContext, query: str, options: MusicSearc
     if not search_type and options.use_emb:
         start_time = time.time()
         search_type = "emb"
-        err_msg = "不支持语义匹配"    
-        '''
         if not query:
             err_msg = "搜索文本为空"
         else:
@@ -591,7 +590,6 @@ async def search_music(ctx: SekaiHandlerContext, query: str, options: MusicSearc
             ret_musics.extend(res)
         if options.debug:
             log(f"语义匹配耗时: {time.time() - start_time:.4f}s")
-                '''   
                             
     music = ret_musics[0] if len(ret_musics) > 0 else None
     candidates = ret_musics[1:] if len(ret_musics) > 1 else []
@@ -697,7 +695,6 @@ async def get_music_trans_title(mid: int, lang: str, default: str=None) -> str:
 
 # 更新曲名语义库
 async def update_music_name_embs(ctx: SekaiHandlerContext):
-    return
     try:
         await ctx.block_region()
         region = ctx.region
@@ -750,8 +747,6 @@ async def check_music_has_diff(ctx: SekaiHandlerContext, mid: int, diff: str) ->
 
 # 根据曲名语义查询歌曲 返回歌曲列表和相似度
 async def query_music_by_emb(ctx: SekaiHandlerContext, text: str, limit: int=5):
-    logger.warning("不支持根据曲名语义查询歌曲")
-    return [], []
     await update_music_name_embs(ctx)
     def filter(key: str):
         _, t, _ = key.split()

@@ -1,4 +1,5 @@
 from src.utils import *
+from ...llm import translate_text, ChatSession, get_model_preset, ChatSessionResponse
 from ..common import *
 from ..handler import *
 from ..asset import *
@@ -326,7 +327,6 @@ async def get_card_cutout_image(ctx: SekaiHandlerContext, cid: int, after_traini
 async def get_card_story_summary(ctx: SekaiHandlerContext, card: dict, refresh: bool, summary_model: List[str], save: bool) -> List[str]:
     cid = card['id']
     title = card['prefix']
-    return await ctx.asend_reply_msg("不支持剧情总结")
     cn_title = await translate_text(title, additional_info="该文本是偶像抽卡游戏中卡牌的标题", default=title)
     
     card_thumbs = []
@@ -1020,7 +1020,6 @@ pjsk_card_story = SekaiCmdHandler([
 pjsk_card_story.check_cdrate(cd).check_wblist(gbl)
 @pjsk_card_story.handle()
 async def _(ctx: SekaiHandlerContext):
-    return await ctx.asend_reply_msg("不支持剧情总结")
     args = ctx.get_args().strip()
     refresh = False
     save = True

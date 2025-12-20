@@ -1,0 +1,32 @@
+qps_limit: 5
+quota_sync_interval_sec: 60*60*6
+price_unit: "$"
+
+http_options:
+  base_url: "xxx"
+  # api_version: "v1"
+
+api_key: "xxx"
+
+models:
+  - name: "gemini-2-flash"
+    model_id: "models/gemini-2.0-flash"
+    is_multimodal: true
+
+  - name: "gemini-2-flash-lite"
+    model_id: "models/gemini-2.0-flash-lite"
+    is_multimodal: true
+
+  - name: "gemini-2-flash-exp"
+    model_id: "models/gemini-2.0-flash-exp"
+    is_multimodal: true
+    image_response: true
+
+  - name: "gemini-2.5-pro"
+    model_id: "models/gemini-2.5-pro"
+    is_multimodal: true
+
+  - name: "gemini-2.5-flash"
+    model_id: "models/gemini-2.5-flash"
+    is_multimodal: true
+

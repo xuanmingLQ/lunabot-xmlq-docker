@@ -1,4 +1,5 @@
 from src.utils import *
+from ...llm import ChatSession, translate_text, get_model_preset, ChatSessionResponse
 from ..common import *
 from ..handler import *
 from ..asset import *
@@ -447,7 +448,6 @@ async def parse_search_single_event_args(ctx: SekaiHandlerContext, args: str) ->
 
 # 获取活动剧情总结
 async def get_event_story_summary(ctx: SekaiHandlerContext, event: dict, refresh: bool, summary_model: List[str], save: bool) -> List[str]:
-    return await ctx.asend_reply_msg("不支持剧情总结")
     eid = event['id']
     title = event['name']
     banner_img_cq = await get_image_cq(await get_event_banner_img(ctx, event))
@@ -995,7 +995,6 @@ pjsk_event_story = SekaiCmdHandler([
 pjsk_event_story.check_cdrate(cd).check_wblist(gbl)
 @pjsk_event_story.handle()
 async def _(ctx: SekaiHandlerContext):
-    return await ctx.asend_reply_msg("不支持剧情总结")
     args = ctx.get_args().strip()
     refresh = False
     save = True

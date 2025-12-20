@@ -1,4 +1,5 @@
 from src.utils import *
+from ...llm import translate_text
 from ..common import *
 from ..handler import *
 from ..asset import *
@@ -1196,7 +1197,7 @@ async def get_mysekai_fixture_detail_image_card(ctx: SekaiHandlerContext, fid: i
                     translated_name = f['name']
                     break
         if not translated_name:
-            translated_name = fname
+            translated_name = await translate_text(fname, additional_info="要翻译的内容是家具/摆设的名字")
 
     fsize = fixture['gridSize']
     is_assemble = fixture.get('isAssembled', False)

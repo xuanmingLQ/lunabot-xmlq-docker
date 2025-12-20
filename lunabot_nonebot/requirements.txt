@@ -1,4 +1,5 @@
 aiohttp
+aiorpcx
 aiosmtplib
 aiosqlite
 asteval>=1.0.8
@@ -6,6 +7,7 @@ bs4
 colour-science
 emoji==2.0.0
 ffmpeg
+google-genai
 jieba>=0.42.1
 matplotlib
 mistune
@@ -14,6 +16,7 @@ nonebot-plugin-apscheduler
 nonebot-plugin-htmlrender
 nonebot-plugin-picstatus
 nonebot2[fastapi]
+openai
 opencv-python-headless
 orjson
 pandas
@@ -35,6 +38,7 @@ sekai-deck-recommend-cpp
 sekaiworld-scores
 setproctitle
 tenacity
+tencentcloud-sdk-python
 uvloop
 wordcloud>=1.9.4
 yt-dlp>=2025.12.8

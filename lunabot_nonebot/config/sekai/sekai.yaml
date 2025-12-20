@@ -69,7 +69,7 @@ stamp:
 
 deck:
   servers:
-    - url: http://127.0.0.1:45556
+    - url: http://deck-recommender:45556
       weight: 4 # 负载均衡权重
     # - url: http://127.0.0.1:45678
     #   weight: 8

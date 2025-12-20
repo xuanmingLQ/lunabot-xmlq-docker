@@ -1,0 +1,119 @@
+log_level: INFO
+
+rpc:
+  host: "127.0.0.1"
+  port: 123456
+  token: xxxx
+  reconnect_interval: 5
+  default_timeout: 5
+
+text_embed_dim: 1024
+
+image_caption:
+  image_limit: 1
+  image_prob: 1.0
+  emotion_limit: 1
+  emotion_prob: 1.0
+  model: 
+    - gg:gemini-2.5-flash-lite
+  timeout: 20
+  max_tokens: 50
+  prompt: |
+    该{sub_type}是在QQ群中由群友发送的，请你简短总结这张图片的内容用于视障人士理解图片。
+    对于表情，着重描述表情可能表达的情绪。对于图片，着重描述图片中包含什么内容。
+    直接输出简短精炼的图片总结并结束，字数在50字以内，不需要附带其他额外语句。
+  
+summary:
+  model:
+    - gg:gemini-2.5-flash-lite
+  timeout: 60
+  max_tokens: 10240
+  prompt: |
+    请你阅读以下聊天记录，并简要总结出这段聊天的主要内容
+    不需要带有当前时间信息，格式类似：xxx在讨论yyy 或者 xxx对yyy的看法是zzz 等
+    请使用用户的QQ号而不是昵称来描述用户
+    尽量简洁流畅、不分点、并包含尽可能多的信息，字数控制在100字以内:
+    ```
+    {text}
+    ```
+
+chat:
+  willing:
+    limit: 2.0
+    increase_per_msg: 0.01
+    increase_per_at: 1.0
+    increase_per_reply: 1.0
+    decay_after_send: 0.7
+    decrease_after_send: 0.2
+    decrease_per_minute: 0.02
+    increase_keywords:
+      "时雨": 1.0
+      "bot": 0.2
+    group_scale:
+      "12345678910": 100.0
+
+  mem:
+    short_em_num: 3
+    long_em_num: 1
+    em_time_decay_per_hour: 0.02
+
+    short_em_reward: 1.0
+    em_long_term_threshold: 10.0
+
+    short_em_forget_days: 3
+    short_em_forget_prob: 0.1
+
+    sm_num: 3
+    sm_keep_count: 10
+
+    um_num: 3
+
+  get_history_msg_delay_seconds: 5
+  history_msg_num: 10
+  reply_max_length: 512
+
+  llm:
+    model:
+      # - gg:gemini-2.5-pro
+      - gg:gemini-2.5-flash
+      - gg:gemini-2.5-flash
+      - gg:gemini-2.5-flash-lite
+    timeout: 120
+    max_tokens: 10240
+    reasoning: False
+    prompt: |
+      请你扮演一个QQ群友在群聊中聊天，你需要尽量伪装成真人而不要让人发现你是AI
+      你在群里的用户ID是{self_id}，昵称是"{self_name}"（没有特殊含义），人设如下:
+      ```
+      你是一个厦门大学的大一软件工程女学生
+      你的性格比较内向高冷，但是有时又温柔关心人，说法风格比较网络化和很简短，符合2025年现代的网友，不会使用太旧的风格和梗
+      对于大部分话题你都有一定了解，但是你讨厌暴力色情和政治敏感话题。你不喜欢使用emoji和颜文字
+      ```
+
+      下面是部分你的记忆用于参考（可能为空）:
+      {recent_text}
+      {em_text}
+      {um_text}
+      {sm_text}
+
+      以下是聊天的要求:
+      ```
+      如果你要使用at一个群友，需要用[@qqid]，例如[@123]可以@qq号为123456的群友
+      如果你要回复一条消息，需要用[reply=msgid]，例如[reply=123]可以回复msg_id=123的消息
+      只有必要的时候才使用at或回复，否则可能会打扰到别人
+      请记住你的任务是伪装真人日常水群，不需要你每次都发表有意义的长篇大论。
+      你可以模仿群友的聊天方法和消息长度，但要保持自己的风格。
+      你需要适当变化你每次聊天的句式、方式，避免重复使用相同句式或者重复聊法
+      如果有人回复或者at你，你可以优先回复他们。
+      ```
+      
+      请你生成一条当前要发送的聊天语句，以如下json格式输出:
+      ```
+      {{ 
+        "reply": "你要发送的文本内容",
+        "update_um_id": "需要更新的用户记忆ID，如果没有可以去掉该字段",
+        "update_um_text": "需要更新的用户记忆内容，如果没有可以去掉该字段"
+      }}
+      ```
+      如果没有用户记忆或者某个用户有新的值得记录的记忆（对于该用户的印象），可以附加 update_um_id 和 update_um_text 字段，否则不需要这两个字段
+      如果你觉得没必要说话或者实在不适合聊天，可以将回复设为空字符串，即 {{ "reply": "" }}

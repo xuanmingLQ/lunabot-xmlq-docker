@@ -1,4 +1,5 @@
 from src.utils import *
+from ...llm import translate_text
 from ..common import *
 from ..handler import *
 from ..asset import *
@@ -238,10 +239,6 @@ async def get_latest_ranking(ctx: SekaiHandlerContext, event_id: int, query_rank
         data = await get_ranking(ctx.region, event_id)
     except ApiError as e:
         raise ReplyException(e.msg)
-    # url = get_gameapi_config(ctx).ranking_api_url
-    # assert_and_reply(url, f"暂不支持获取{ctx.region}榜线数据")
-    # data = await request_gameapi(url.format(event_id=event_id % 1000))
-    # assert_and_reply(data, "获取榜线数据失败")
     logger.info(f"从API获取 {ctx.region}_{event_id} 最新榜线数据")
     return [r for r in await parse_rankings(ctx, event_id, data, False) if r.rank in query_ranks]
 
@@ -1303,9 +1300,9 @@ async def compose_winrate_predict_image(ctx: SekaiHandlerContext) -> Image.Image
     teams.sort(key=lambda x: x['id'])
     tids = [team['id'] for team in teams]
     tnames = [team['teamName'] for team in teams]
-    # for i in range(2):
-    #     if tname_cn := await translate_text(tnames[i]):
-    #         tnames[i] = f"{tnames[i]} ({tname_cn})"
+    for i in range(2):
+        if tname_cn := await translate_text(tnames[i]):
+            tnames[i] = f"{tnames[i]} ({tname_cn})"
     ticons = [
         await ctx.rip.img(f"event/{event['assetbundleName']}/team_image/{team['assetbundleName']}.png")
         for team in teams

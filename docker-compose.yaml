@@ -21,6 +21,7 @@ services:
     # 配置端口映射，本地的端口多加一位防止和本地的程序冲突
     ports:
       - '18383:8383'
+      - '18486:8486'
     # 配置容器在network中的ip地址
     networks:
       network:
@@ -28,8 +29,7 @@ services:
     # 配置挂载卷
     volumes:
       - ./data:/app/lunabot_nonebot/data # 必须和napcat、deck-recommend挂载到同一个位置
-      - ./lunabot_nonebot/config_docker:/app/lunabot_nonebot/config # 配置docker的config
-      - ./lunabot_nonebot/.env.docker:/app/lunabot_nonebot/.env # 配置docker的环境
+      - ./lunabot_nonebot/config:/app/lunabot_nonebot/config # 配置docker的config
   
   # 配置napcat 如果你本身就有了napcat，可以将那个napcat关掉
   # 然后将volume中的/app/.config/QQ和/app/napcat/config挂载到原来那个napcat的位置上
@@ -92,6 +92,23 @@ services:
         ipv4_address: 172.8.0.14
     volumes:
       - ./data/sekai/deckrec:/app/deck_recommender/data/sekai/deckrec # 必须和nonebot挂载到同一位置
-  # 如果你需要数据库，自行使用官方镜像
+  
+  # autochat服务，这一项是可选的，如果你需要autochat服务可以将这一项取消注释
+  
+  # autochat:
+  #   build:
+  #     context: ./autochat
+  #     dockerfile: ./Dockerfile
+  #   container_name: lunabot-autochat
+  #   restart: always
+  #   # ports: # 这个服务没有开放端口
+  #   networks:
+  #     network:
+  #       ipv4_address: 172.8.0.16
+  #   volumes:
+  #     - ./lunabot_autochat/config:/app/lunabot_autochat/config
+  #     - ./data:/app/lunabot_autochat/data # 总之是同一个data
+  
+  # 如果你需要数据库，自行添加
   # pgsql:
   # redis:

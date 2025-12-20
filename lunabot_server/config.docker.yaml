@@ -1,6 +1,6 @@
 disk-list:
     - mount-point: /
-haruki-api:
+xxx-api:
     token: "xxx"
     suite-api:
         endpoint: "https://xxx"
@@ -27,11 +27,11 @@ sekai-asset:
     sources:
         jp:
             materdata:
-                haruki:
+                xxx:
                     base-url: https://raw.githubusercontent.com/xxx/xxx-master/refs/heads/main/master
                     version-url: https://raw.githubusercontent.com/xxx/xxx-master/refs/heads/main/versions/current_version.json
             asset:
-                haruki:
+                xxx:
                     base-url: https://xxx/jp-assets
         cn: # ...
     ondemand-prefixes: ['event', 'gacha', 'music/long', 'mysekai', 'virtual_live']
@@ -40,7 +40,7 @@ system:
     router-prefix: ""
     addr: 8888
     use-redis: false
-    root: /home/xmlq/codes/gocodes
+    root: 
 upload:
     path: uploads/file
     store-path: uploads/file

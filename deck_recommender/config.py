@@ -3,7 +3,7 @@ from os.path import join as pjoin
 import yaml
 
 CONFIG = {}
-CONFIG_PATH = os.getenv("CONFIG_PATH") or pjoin(os.path.dirname(os.path.abspath(__file__)), 'config.yaml')
+CONFIG_PATH = '/app/deck_recommender/config.yaml'
 if os.path.exists(CONFIG_PATH):
     with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
         CONFIG = yaml.safe_load(f)
