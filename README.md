@@ -29,8 +29,9 @@ https://github.com/NeuraXmy/lunabot.git
 
 #### 5. 可选的，打开autochat
 
-- 在 docker-compose.yaml 中将 autochat 服务取消注释
-- 在napcat中设置websocket反向连接：Network -> New -> Websocket Client -> Set Url=ws://nonebot:8486 -> 记住那个token然后 Save 
-- 在 autochat/config/chat/autochat.yaml 中填入 rpc.token
+- 自己填充 lunabot_nonebot/config/llm/providers 中的内容，或者写自己的供应商。
+- 在 docker-compose.yaml 中将 autochat 服务取消注释。然后运行docker compose。
+- 在 autochat/config/chat/autochat.yaml 中调整chat.willing相关内容，在其中的group_scale中填入要开启autochat的群聊，比例越高bot的回复意愿越高。rpc需要保持与lunabot_nonebot/config/chat/autochat.yaml中的一致。
+- 启动后，在要开启autochat的群聊中发送"/autochat on"即可与bot自动聊天。
 
 
