@@ -5,11 +5,9 @@ from typing import List, Union
 # --- 底层 NumPy 算法实现 ---
 
 def _color_diff_sq(a, b):
-    """计算 RGB 欧氏距离的平方"""
     return np.sum((a[..., :3].astype(np.int32) - b[..., :3].astype(np.int32))**2, axis=-1)
 
 def _floodfill_numpy(frame, sy, sx, max_color, tolerance_sq):
-    """基于栈的泛洪填充 (针对单帧 NumPy 数组)"""
     h, w = frame.shape[:2]
     dst_color = np.array([0, 0, 0, 0], dtype=np.uint8)
     stack = [(sy, sx)]
@@ -30,7 +28,6 @@ def _floodfill_numpy(frame, sy, sx, max_color, tolerance_sq):
                     stack.append((ny, nx))
 
 def _cutout_logic(img_array: np.ndarray, tolerance: int) -> np.ndarray:
-    """实现 C++ 的 cutout 逻辑"""
     n, h, w, _ = img_array.shape
     tolerance_sq = (tolerance * tolerance) * 3
     
@@ -53,7 +50,6 @@ def _cutout_logic(img_array: np.ndarray, tolerance: int) -> np.ndarray:
     return img_array
 
 def _shrink_logic(img_array: np.ndarray, alpha_threshold: int, edge: int) -> np.ndarray:
-    """实现 C++ 的 shrink 逻辑"""
     coords = np.where(img_array[..., 3] > alpha_threshold)
     if coords[0].size == 0: return np.zeros((1, 1, 1, 4), dtype=np.uint8)
     
@@ -73,17 +69,13 @@ def execute_imgtool_py(
     *args
 ) -> Union[Image.Image, List[Image.Image]]:
     """
-    直接从路径读取图像并处理
+    直接输入图像并处理
     """
     is_single_frame = isinstance(image, Image.Image)
     if is_single_frame:
         image = [image]
-    rgba_frames = []
-    for img in image:
-        # 即使原本是 RGB，调用 convert('RGBA') 也会增加一个不透明的 Alpha 通道
-        rgba_frames.append(img.convert('RGBA'))
-    # 2. 转换为 NumPy 数组 (n, h, w, 4)
-    img_array = np.array([np.array(img) for img in image])
+    # 转换为 NumPy 数组 (n, h, w, 4)
+    img_array = np.array([np.array(img.convert('RGBA')) for img in image])
     
     # 3. 根据命令处理
     if command == "cutout":

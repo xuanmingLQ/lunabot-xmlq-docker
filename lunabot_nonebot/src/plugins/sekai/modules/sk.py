@@ -1350,7 +1350,7 @@ async def compose_winrate_predict_image(ctx: SekaiHandlerContext) -> Image.Image
 
 # 查询榜线预测
 pjsk_skp = SekaiCmdHandler([
-    "/pjsk sk predict", "/pjsk_sk_predict", "/pjsk board predict", "/pjsk_board_predict",
+    "/pjsk sk predict", "/pjsk board predict",
     "/sk预测", "/榜线预测", "/skp",
 ], prefix_args=['', 'wl'])
 pjsk_skp.check_cdrate(cd).check_wblist(gbl)
@@ -1368,7 +1368,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 查询整体榜线
 pjsk_skl = SekaiCmdHandler([
-    "/pjsk sk line", "/pjsk_sk_line", "/pjsk board line", "/pjsk_board_line",
+    "/pjsk sk line", "/pjsk board line",
     "/sk线", "/skl", "/榜线",
 ], prefix_args=['', 'wl'])
 pjsk_skl.check_cdrate(cd).check_wblist(gbl)
@@ -1403,7 +1403,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 查询时速
 pjsk_sks = SekaiCmdHandler([
-    "/pjsk sk speed", "/pjsk_sk_speed", "/pjsk board speed", "/pjsk_board_speed",
+    "/pjsk sk speed", "/pjsk board speed",
     "/时速", "/sks", "/skv", "/sk时速",
 ], prefix_args=['', 'wl'])
 pjsk_sks.check_cdrate(cd).check_wblist(gbl)
@@ -1445,7 +1445,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 查询指定榜线
 pjsk_sk = SekaiCmdHandler([
-    "/pjsk sk board", "/pjsk_sk_board", "/pjsk board", "/pjsk_board",
+    "/pjsk sk board", "/pjsk board",
     "/sk", 
 ], prefix_args=['', 'wl'])
 pjsk_sk.check_cdrate(cd).check_wblist(gbl)
@@ -1535,8 +1535,8 @@ async def _(ctx: SekaiHandlerContext):
 
 # 5v5胜率预测
 pjsk_winrate = SekaiCmdHandler([
-    "/pjsk winrate predict", "/pjsk_winrate_predict", 
-    "/胜率预测", "/5v5预测", "/胜率", "/5v5胜率",
+    "/pjsk winrate predict",
+    "/胜率预测", "/5v5预测", "/胜率", "/5v5胜率", "/预测胜率", "/预测5v5",
 ], regions=['jp'])
 pjsk_winrate.check_cdrate(cd).check_wblist(gbl)
 @pjsk_winrate.handle()

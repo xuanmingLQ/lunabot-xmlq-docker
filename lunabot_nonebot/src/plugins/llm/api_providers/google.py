@@ -38,7 +38,7 @@ class GenaiCompletions:
         messages: list, 
         extra_body: dict = None, 
         max_tokens: int = None,
-        include_thoughts: bool = None,
+        thinking_config: dict = {}
     ):
         image_response = extra_body.get("image_response", False)
 
@@ -74,8 +74,16 @@ class GenaiCompletions:
             safety_settings=self.safety_settings,
             max_output_tokens=max_tokens,
         )
-        if include_thoughts is not None:
-            config.thinking_config = ThinkingConfig(include_thoughts=include_thoughts)
+        config.thinking_config = ThinkingConfig(**thinking_config)
+
+        # thinking_config = {}
+        # if include_thoughts is not None: 
+        #     thinking_config['include_thoughts'] = include_thoughts
+        # if include_thoughts != False and 'lite' not in model:
+        #     if '3' in model:
+        #         thinking_config['thinking_level'] = 'high' if high_thinking_level else 'low'
+        #     else:
+        #         thinking_config['thinking_budget'] = -1 if high_thinking_level else '128'
 
         def gen():
             return self.genai_client.models.generate_content(

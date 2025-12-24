@@ -558,7 +558,7 @@ async def _(ctx: SekaiHandlerContext):
 # 猜卡面
 pjsk_guess_card = SekaiCmdHandler([
     "/pjsk guess card", "/pjsk_guess_card", 
-    "/pjsk猜卡面", "/猜卡面", 
+    "/pjsk猜卡面", "/猜卡面", "/pjsk猜卡", "/猜卡",
 ], regions=['jp'])
 pjsk_guess_card.check_cdrate(cd).check_wblist(gbl)
 @pjsk_guess_card.handle()

@@ -1,0 +1,125 @@
+log_level: INFO
+
+rpc:
+  host: "127.0.0.1"
+  port: 12345
+  token: xxxxx
+  reconnect_interval: 5
+  default_timeout: 5
+
+text_embed_dim: 1024
+
+image_caption:
+  image_limit: 1
+  image_prob: 1.0
+  emotion_limit: 1
+  emotion_prob: 1.0
+  model: 
+    - gg:gemini-2.5-flash-lite
+  timeout: 20
+  max_tokens: 50
+  prompt: |
+    该{sub_type}是在QQ群中由群友发送的，请你简短总结这张图片的内容用于视障人士理解图片。
+    对于表情，着重描述表情可能表达的情绪。对于图片，着重描述图片中包含什么内容。
+    直接输出简短精炼的图片总结并结束，字数在50字以内，不需要附带其他额外语句。
+  
+summary:
+  model:
+    - gg:gemini-2.5-flash-lite
+  timeout: 60
+  max_tokens: 10240
+  prompt: |
+    请你阅读以下聊天记录，并简要总结出这段聊天的主要内容
+    不需要带有当前时间信息，格式类似：xxx在讨论yyy 或者 xxx对yyy的看法是zzz 等
+    请使用用户的QQ号而不是昵称来描述用户
+    尽量简洁流畅、不分点、并包含尽可能多的信息，字数控制在100字以内:
+    ```
+    {text}
+    ```
+
+chat:
+  willing:
+    limit: 1.5
+    increase_per_msg: 0.005
+    increase_per_at: 1.0
+    increase_per_reply: 1.0
+    decay_after_send: 0.6
+    decrease_after_send: 0.5
+    decrease_per_minute: 0.005
+    increase_keywords:
+      "bot": 0.1
+    group_scale:
+      "123455667": 100.0
+
+  mem:
+    short_em_num: 3
+    long_em_num: 1
+    em_time_decay_per_hour: 0.02
+
+    short_em_reward: 1.0
+    em_long_term_threshold: 10.0
+
+    short_em_forget_days: 3
+    short_em_forget_prob: 0.1
+
+    sm_num: 5
+    sm_keep_count: 10
+
+    um_num: 3
+
+  get_history_msg_delay_seconds: 5
+  history_msg_num: 20
+  reply_max_length: 512
+
+  llm:
+    model:
+      - gg:gemini-2.5-pro-high
+      - gg:gemini-3-flash
+      - gg:gemini-2.5-flash
+      - gg:gemini-2.5-flash-lite
+    timeout: 120
+    max_tokens: 10240
+    reasoning: False
+
+  prompt:
+    persona:
+      default: |
+        编写默认人设...
+      12345678: |
+        编写该群聊专用人设...
+      
+    framework: |
+      # Role
+      你是一个正在群聊中的真实用户，请基于人设进行沉浸式聊天。
+      - ID: {self_id}
+      - 昵称: "{self_name}"（无特殊含义）
+      - 人设:
+      ```
+      {persona}
+      ```
+
+      # Memory
+      以下是你脑海中的相关记忆（供参考）：
+      {recent_text}
+      {em_text}
+      {um_text}
+      {sm_text}
+
+      # Rules
+      1. **真实感**: 说话简短口语化，像真人一样随意。拒绝翻译腔，拒绝长篇大论，适当使用网络用语。
+      2. **交互语法**: 
+        - 仅在必要时使用 [@qqid] 提及某人。
+        - 仅在对话流混乱需明确指向时使用 [reply=msgid]。
+        - 平时直接发送文本即可。
+      3. **行为逻辑**:
+        - 优先回应与你相关的话题或提及你的消息。
+        - 保持人设一致性，句式要有变化，不要像机器人一样重复。
+        - **安全原则**: 遇到敏感/冒犯话题选择忽略（回复空字符串）。
+
+      # Output Format
+      请分析当前语境，输出严格的 JSON 格式（无 Markdown 标记）：
+      {{
+        "reply": "回复内容。若觉得无需回复或不适合回复，请留空字符串",
+        "update_um_id": "需更新记忆的用户ID (仅当发现用户新特征时填写)",
+        "update_um_text": "该用户的新版记忆文本（即你对该用户的印象，包括用户昵称、喜好、和别人的关系等）注意：必须将新旧信息合并，保留该用户过去的重要特征"
+      }}

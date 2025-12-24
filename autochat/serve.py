@@ -1,7 +1,6 @@
 from utils import *
 from memory import *
 import re
-import random
 
 
 def debug_mode() -> bool:
@@ -396,10 +395,17 @@ async def chat(msg: Message):
 {recent_text}
 ```
 """.strip()
+        
+        persona = config.get('chat.prompt.persona')
+        if msg.group_id in persona:
+            persona = persona[msg.group_id]
+        else:
+            persona = persona.get('default', '')
 
-        full_prompt: str = config.get('chat.llm.prompt').format(
+        full_prompt: str = config.get('chat.prompt.framework').format(
             self_id=self_id,
             self_name=self_name,
+            persona=persona,
             recent_text=recent_text,
             em_text=em_text,
             sm_text=sm_text,
@@ -419,7 +425,6 @@ async def chat(msg: Message):
             options={
                 'timeout': config.get('chat.llm.timeout'),
                 'max_tokens': config.get('chat.llm.max_tokens'),
-                'reasoning': config.get('chat.llm.reasoning'),
                 'json_reply': True,
                 'json_key_restraints': [
                     { 'key': 'reply', 'type': 'str' },
@@ -539,21 +544,49 @@ async def chat(msg: Message):
 
 # ================ 主循环 ================= #
 
+group_queues: dict[int, asyncio.Queue] = {}
+
+
+async def group_message_worker(group_id: int, queue: asyncio.Queue):
+    while True:
+        try:
+            msg = await asyncio.wait_for(queue.get(), timeout=3*60*60)
+            try:
+                await chat(msg)
+            except Exception as e:
+                error(f"群 {group_id} 消息处理异常: {get_exc_desc(e)}")
+            finally:
+                queue.task_done()
+        except asyncio.TimeoutError:
+            if group_id in group_queues:
+                del group_queues[group_id]
+            info(f"群 {group_id} 闲置超时，Worker 退出")
+            break
+
+
 async def main():
     asyncio.create_task(rpc_session.run(reconnect=True))
     await asyncio.sleep(1)
     info("开始监听新消息")
 
     while True:
-        await asyncio.sleep(2)
+        await asyncio.sleep(3)
+        
+        msgs = []
         try:
             msgs = await rpc_get_new_msgs()
         except Exception as e:
             warning(f"获取新消息失败: {get_exc_desc(e)}")
             continue
+            
         for msg in msgs:
-            await chat(msg)
+            group_id = msg.group_id
+            if group_id not in group_queues:
+                queue = asyncio.Queue()
+                group_queues[group_id] = queue
+                asyncio.create_task(group_message_worker(group_id, queue))
+            group_queues[group_id].put_nowait(msg)
+
 
 if __name__ == '__main__':
-    import asyncio
     asyncio.run(main())

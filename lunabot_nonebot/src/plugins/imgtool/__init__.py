@@ -14,62 +14,17 @@ cd = ColdDown(file_db, logger)
 gbl = get_group_black_list(file_db, logger, 'imgtool')
 
 
-# ============================= cpp程序调用 ============================= # 
-
-def execute_imgtool_cpp(image: Image.Image | List[Image.Image], command: str, *args) -> Image.Image | List[Image.Image]:
-    """
-    调用imgtool-cpp程序处理图片
-    """
-    is_single_frame = isinstance(image, Image.Image)
-    if is_single_frame:
-        image = [image]
-    ret = []
-    w, h = image[0].size
-    n = len(image)
-    with TempFilePath('input') as input_path:
-        with TempFilePath('output') as output_path:
-            # 保存输入文件
-            with open(input_path, 'wb') as f:
-                f.write(int(n).to_bytes(4, sys.byteorder))
-                f.write(int(h).to_bytes(4, sys.byteorder))
-                f.write(int(w).to_bytes(4, sys.byteorder))
-                for i in range(n):
-                    frame = image[i].convert('RGBA')
-                    f.write(frame.tobytes('raw', 'RGBA'))
-
-            cli_path = get_data_path("imgtool/imgtool-cpp")
-            logger.info(f"调用imgtool-cpp程序: {command} " + " ".join(map(str, args)) + f" 输入尺寸: {n}x{w}x{h}")
-            assert_and_reply(os.path.exists(cli_path), "imgtool-cpp程序不存在，请使用src/scripts/compile_imgtool_cpp.sh编译")
-            cmd = f"{cli_path} {input_path} {output_path} {command} " + " ".join(map(str, args))
-            assert_and_reply(os.system(cmd) == 0, "调用imgtool-cpp程序失败")
-
-            # 读取输出文件
-            with open(output_path, 'rb') as f:
-                n = int.from_bytes(f.read(4), sys.byteorder)
-                h = int.from_bytes(f.read(4), sys.byteorder)
-                w = int.from_bytes(f.read(4), sys.byteorder)
-                for i in range(n):
-                    frame = Image.new('RGBA', (w, h))
-                    frame.frombytes(f.read(w * h * 4), 'raw', 'RGBA')
-                    ret.append(frame)
-            logger.info(f"imgtool-cpp程序执行完毕，输出尺寸: {n}x{w}x{h}")
-
-    return ret[0] if is_single_frame else ret
-
-
 
 def cutout_image(image: Image.Image | List[Image.Image], tolerance: int) -> Image.Image | List[Image.Image]:
     """
     抠图，tolerance为rgb距离平方的容差
     """
-    # return execute_imgtool_cpp(image, "cutout", tolerance)
     return execute_imgtool_py(image, "cutout", tolerance)
 
 def shrink_image(image: Image.Image | List[Image.Image], alpha_threshold: int, edge: int) -> Image.Image | List[Image.Image]:
     """
     将图片边缘的透明部分裁剪掉，alpha_threshold为alpha通道阈值，edge为裁剪后保留的边缘宽度
     """
-    # return execute_imgtool_cpp(image, "shrink", alpha_threshold, edge)
     return execute_imgtool_py(image, "shrink", alpha_threshold, edge)
 
 

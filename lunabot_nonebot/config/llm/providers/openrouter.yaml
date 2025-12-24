@@ -9,14 +9,12 @@ auth_key_url: "https://xxx/api/v1/auth/key"
 models:
   - name: "deepseek-r1-free"
     model_id: "deepseek/deepseek-r1-0528:free"
-    include_reasoning: true
     allow_online: true
 
   - name: "deepseek-r1"
     model_id: "deepseek/deepseek-r1-0528"
     input_pricing: 0.75/1e6
     output_pricing: 2.4/1e6
-    include_reasoning: true
     allow_online: true
 
   - name: "deepseek-v3"
@@ -44,7 +42,6 @@ models:
     input_pricing: 0.3/1e6
     output_pricing: 2.5/1e6
     is_multimodal: true
-    include_reasoning: true
 
   - name: "gemini-2.5-flash-lite"
     model_id: "google/gemini-2.5-flash-lite"

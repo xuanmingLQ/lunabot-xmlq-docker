@@ -24,7 +24,7 @@ class OpenrouterApiProvider(ApiProvider):
                 if resp.status != 200:
                     raise Exception(f"获取OpenRouter剩余额度失败: {resp.status} {resp.reason}")
                 data = await resp.json()
-                usage, limit = data['data']["usage"], data['data']["limit"]
+                usage, limit = data['data']["total_usage"], data['data']["total_credits"]
                 if limit is None:
                     raise Exception("OpenRouter API key 无限额")
                 return limit - usage

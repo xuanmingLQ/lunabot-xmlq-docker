@@ -159,7 +159,6 @@ class ChatSession:
         self, 
         model_name: Union[str, List[str]],
         process_func=None,
-        enable_reasoning=False, 
         image_response=False,
         timeout: Union[int, ConfigItem]=CHAT_TIMEOUT_CFG,
         model_switch_interval: Union[int, ConfigItem]=CHAT_MODEL_SWITCH_INTERVAL_CFG,
@@ -180,42 +179,20 @@ class ChatSession:
 
                 provider.check_qps_limit()
 
-                # 推理附加新的prompt
-                use_reasoning = enable_reasoning and model.include_reasoning
-                content = self.content.copy()
-                if use_reasoning:
-                    reasoning_prompt = Path(f"{CONFIG_DIR}llm/reasoning_prompt.txt").read_text(encoding='utf-8')
-                    if isinstance(content[-1]['content'], str):
-                        content[-1]['content'] += reasoning_prompt
-                    else:
-                        content[-1]['content'].append({
-                            "type": "text",
-                            "text": reasoning_prompt
-                        })
-
-                # 请求回复
-                extra_body = {}
-                if model.include_reasoning:
-                    extra_body["include_reasoning"] = use_reasoning
+                # 附加请求体参数
+                extra_body = model.extra_body.copy()
                 if model.image_response:
                     extra_body["image_response"] = image_response
                     extra_body["modalities"] = ["image", "text"]
-                if reasoning_effort := model.data.get("reasoning_effort"):
-                    extra_body["reasoning_effort"] = reasoning_effort
-
-                # qwen3 推理使用/think /no_think
-                if "qwen3" in name:
-                    if content[0]['role'] != "system":
-                        content.insert(0, { "role": "system", "content": "" })
-                    content[0]['content'] = "/think " if use_reasoning else "/no_think " + content[0]['content']
 
                 client = provider.get_client()
 
+                # 请求回复
                 try:
                     response = await asyncio.wait_for(
                         client.chat.completions.create(
                             model=model.get_model_id(),
-                            messages=content,
+                            messages=self.content,
                             extra_body=extra_body,
                             max_tokens=get_cfg_or_value(max_tokens),
                             **model.client_kwargs,

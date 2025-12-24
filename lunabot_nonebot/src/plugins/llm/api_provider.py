@@ -17,13 +17,13 @@ class LlmModel:
     max_token: int = 128000
     is_multimodal: bool = False
     model_id: Optional[str] = None
-    include_reasoning: bool = False
     image_response: bool = False
     allow_online: bool = False
     provider: "ApiProvider" = None
 
     data: dict = field(default_factory=dict)
     client_kwargs: dict = field(default_factory=dict)
+    extra_body: dict = field(default_factory=dict)
 
     def calc_price(self, input_tokens: int, output_tokens: int) -> float:
         return input_tokens * self.input_pricing + output_tokens * self.output_pricing

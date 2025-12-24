@@ -614,7 +614,7 @@ def extract_multilive_options(args: str, options: DeckRecommendOptions) -> str:
                 value = seg.replace(keyword, "").strip()
                 try:
                     options.multi_live_teammate_power = parse_number(value)
-                    args = args.replace(seg, "").strip()
+                    args = args.replace(seg, "", 1).strip()
                     break
                 except:
                     raise ReplyException(f"无法解析指定的队友综合力\"{value}\"")
@@ -623,7 +623,7 @@ def extract_multilive_options(args: str, options: DeckRecommendOptions) -> str:
                 value = seg.replace(keyword, "").strip()
                 try:
                     options.multi_live_teammate_score_up = int(value)
-                    args = args.replace(seg, "").strip()
+                    args = args.replace(seg, "", 1).strip()
                     break
                 except:
                     raise ReplyException(f"无法解析指定的队友实效\"{value}\"")
@@ -632,7 +632,8 @@ def extract_multilive_options(args: str, options: DeckRecommendOptions) -> str:
                 value = seg.replace(keyword, "").strip()
                 if value.isdigit():
                     options.multi_live_score_up_lower_bound = int(value)
-                    args = args.replace(seg, "").strip()
+                    options.multi_live_teammate_score_up = int(value)
+                    args = args.replace(seg, "", 1).strip()
                     break
 
     return args.strip()
@@ -1936,10 +1937,9 @@ async def compose_deck_recommend_image(
 
 # 活动组卡
 pjsk_event_deck = SekaiCmdHandler([
-    "/pjsk event card", "/pjsk_event_card", "/pjsk_event_deck", "/pjsk event deck",
+    "/pjsk event card", "/pjsk event deck", "/pjsk deck", 
     "/活动组卡", "/活动组队", "/活动卡组",
-    "/pjsk deck", 
-    "/组卡", "/组队", "/指定属性组卡", "/指定属性组队",
+    "/组卡", "/组队", "/指定属性组卡", "/指定属性组队", "/模拟组卡",
 ])
 pjsk_event_deck.check_cdrate(cd).check_wblist(gbl)
 @pjsk_event_deck.handle()
@@ -1956,7 +1956,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 挑战组卡
 pjsk_challenge_deck = SekaiCmdHandler([
-    "/pjsk challenge card", "/pjsk_challenge_card", "/pjsk_challenge_deck", "/pjsk challenge deck",
+    "/pjsk challenge card", "/pjsk challenge deck",
     "/挑战组卡", "/挑战组队", "/挑战卡组",
 ])
 pjsk_challenge_deck.check_cdrate(cd).check_wblist(gbl)
@@ -1973,7 +1973,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 长草组卡
 pjsk_no_event_deck = SekaiCmdHandler([
-    "/pjsk_no_event_deck", "/pjsk no event deck", "/pjsk best deck", "/pjsk_best_deck",
+    "/pjsk no event deck", "/pjsk best deck",
     "/长草组卡", "/长草组队", "/长草卡组", "/最强卡组", "/最强组卡", "/最强组队",
 ])
 pjsk_no_event_deck.check_cdrate(cd).check_wblist(gbl)
@@ -1990,7 +1990,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 加成组卡
 pjsk_bonus_deck = SekaiCmdHandler([
-    "/pjsk bonus deck", "/pjsk_bonus_deck", "/pjsk bonus card", "/pjsk_bonus_card",
+    "/pjsk bonus deck", "/pjsk bonus card",
     "/加成组卡", "/加成组队", "/加成卡组", "/控分组卡", "/控分组队", "/控分卡组",
 ])
 pjsk_bonus_deck.check_cdrate(cd).check_wblist(gbl)
@@ -2024,7 +2024,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 实效计算
 pjsk_score_up = CmdHandler([
-    "/实效", "/pjsk_score_up", "/pjsk score up", "/倍率", "/时效",
+    "/实效", "/倍率", "/时效", "/pjsk score up",
 ], logger)
 pjsk_score_up.check_cdrate(cd).check_wblist(gbl)
 @pjsk_score_up.handle()

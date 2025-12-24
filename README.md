@@ -27,11 +27,15 @@ https://github.com/NeuraXmy/lunabot.git
 - 输入你的 WebUi Token 然后登录你的bot的qq号
 - 设置websocket反向连接：Network -> New -> Websocket Client -> Set Url=ws://nonebot:8383/onebot/v11/ws -> Save 
 
-#### 5. 可选的，打开autochat
+#### 5. Enable Bot
+
+- 用你的管理员账号在群聊中 @bot /enable
+
+#### 6. 可选的，打开autochat
 
 - 自己填充 lunabot_nonebot/config/llm/providers 中的内容，或者写自己的供应商。
 - 在 docker-compose.yaml 中将 autochat 服务取消注释。然后运行docker compose。
 - 在 autochat/config/chat/autochat.yaml 中调整chat.willing相关内容，在其中的group_scale中填入要开启autochat的群聊，比例越高bot的回复意愿越高。rpc需要保持与lunabot_nonebot/config/chat/autochat.yaml中的一致。
-- 启动后，在要开启autochat的群聊中发送"/autochat on"即可与bot自动聊天。
+- 启动后，在要开启autochat的群聊中用管理员发送 /autochat on。
 
 

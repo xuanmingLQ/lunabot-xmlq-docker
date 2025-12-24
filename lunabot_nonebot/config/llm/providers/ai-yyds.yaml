@@ -97,7 +97,6 @@ models:
     input_pricing: 0.000225/1000
     output_pricing: 0.0009/1000
     is_multimodal: true
-    include_reasoning: true
 
   - name: "gpt-oss-120b"
     model_id: "gpt-oss-120b"

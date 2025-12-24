@@ -105,7 +105,10 @@ async def search_single_card(ctx: SekaiHandlerContext, args: str) -> dict:
                 assert_and_reply(-seq <= len(chara_cards), f"角色{nickname}只有{len(chara_cards)}张卡")
                 card = chara_cards[seq]
                 return card
-    assert_and_reply(args.isdigit(), SEARCH_SINGLE_CARD_HELP)
+    assert_and_reply(
+        args.isdigit(), 
+        f"无法解析的参数: {args}\n" + SEARCH_SINGLE_CARD_HELP,
+    )
     card = await ctx.md.cards.find_by_id(int(args))
     assert_and_reply(card, f"找不到卡牌{ctx.region.upper()}-{args}")
     return card
@@ -938,8 +941,8 @@ async def compose_card_detail_image(ctx: SekaiHandlerContext, card_id: int):
 
 # 角色别名查询
 pjsk_chara_alias = SekaiCmdHandler([
-    "/pjsk chara alias", "/pjsk_chara_alias", 
-    "/角色别名", 
+    "/pjsk chara alias",
+    "/角色别名", '/查角色别名',
 ])
 pjsk_chara_alias.check_cdrate(cd).check_wblist(gbl)
 @pjsk_chara_alias.handle()
@@ -997,7 +1000,7 @@ async def _(ctx: SekaiHandlerContext):
         
 # 卡面查询
 pjsk_card_img = SekaiCmdHandler([
-    "/pjsk card img", "/pjsk_card_img", 
+    "/pjsk card img",
     "/查卡面", "/卡面", 
 ])
 pjsk_card_img.check_cdrate(cd).check_wblist(gbl)
@@ -1014,8 +1017,8 @@ async def _(ctx: SekaiHandlerContext):
 
 # 卡牌剧情查询
 pjsk_card_story = SekaiCmdHandler([
-    "/pjsk card story", "/pjsk_card_story", 
-    "/卡牌剧情", "/卡面剧情", "/卡剧情",
+    "/pjsk card story",
+    "/卡牌剧情", "/卡面剧情", "/卡剧情", '/卡牌故事', '/卡面故事', '/卡故事',
 ], regions=['jp'])
 pjsk_card_story.check_cdrate(cd).check_wblist(gbl)
 @pjsk_card_story.handle()
@@ -1043,7 +1046,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 查询卡牌一览
 pjsk_box = SekaiCmdHandler([
-    "/pjsk box", "/pjsk_box", "/pjskbox",
+    "/pjsk box",
     "/卡牌一览", "/卡面一览", "/卡一览",
 ])
 pjsk_box.check_cdrate(cd).check_wblist(gbl)

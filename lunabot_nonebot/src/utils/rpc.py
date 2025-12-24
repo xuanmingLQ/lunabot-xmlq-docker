@@ -30,6 +30,8 @@ class RpcSession(aiorpcx.RPCSession):
         self._logger = logger
         self.on_connect = on_connect
         self.on_disconnect = on_disconnect
+        self.processing_timeout = 300.0
+        self.sent_request_timeout = 60.0
 
         self.on_connect(self)
         logger.info(f'{self.name}RPC服务的客户端 {self.id} 连接成功')

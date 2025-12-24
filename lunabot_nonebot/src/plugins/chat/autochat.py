@@ -105,7 +105,6 @@ async def handle_get_group_msg(cid: str, group_id: int, limit: int):
 async def handle_query_llm(cid: str, model: str | list[str], text: str, images: list[str], options: dict):
     timeout: int = options.get('timeout', 300)
     max_tokens: int = options.get('max_tokens', 2048)
-    reasoning: bool = options.get('reasoning', False)
     json_reply: bool = options.get('json_reply', False)
     json_key_restraints: list[dict] = options.get('json_key_restraints', [])
 
@@ -155,7 +154,6 @@ async def handle_query_llm(cid: str, model: str | list[str], text: str, images: 
     logger.info(f"自动聊天RPC客户端 {cid} 请求LLM模型")
     return await session.get_response(
         model_name=model,
-        enable_reasoning=reasoning,
         process_func=process,
         timeout=timeout,
         max_tokens=max_tokens,

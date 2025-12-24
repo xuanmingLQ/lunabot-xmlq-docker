@@ -990,7 +990,7 @@ async def _(ctx: SekaiHandlerContext):
 # 活动剧情总结
 pjsk_event_story = SekaiCmdHandler([
     "/pjsk event story", "/pjsk_event_story", 
-    "/活动剧情"
+    "/活动剧情", "/活动故事", "/活动总结",
 ], regions=['jp'])
 pjsk_event_story.check_cdrate(cd).check_wblist(gbl)
 @pjsk_event_story.handle()

@@ -301,7 +301,7 @@ async def _(ctx: SekaiHandlerContext):
 
 
 heyiwei = SekaiCmdHandler([
-    "/pjskb30", "/pjskdetail", 
+    "/pjskb30", "/pjskdetail", "/b30", "/b39", "/pjskb39", "/pjsk b30", "/pjsk b39", "/pjsk detail"
 ])
 heyiwei.check_cdrate(cd).check_wblist(gbl)
 @heyiwei.handle()

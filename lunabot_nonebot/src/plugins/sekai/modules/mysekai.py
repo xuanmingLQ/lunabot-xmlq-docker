@@ -90,6 +90,8 @@ MSR_PUSH_CONCURRENCY_CFG = config.item('mysekai.msr_push_concurrency')
 
 bd_msr_bind_db = get_file_db(f"{SEKAI_PROFILE_DIR}/bd_msr_bind.json", logger)
 
+harvest_point_image_offsets_cache: dict[int, Tuple[Image.Image, tuple[int, int]]] = {}
+
 
 # ======================= 处理逻辑 ======================= #
 
@@ -427,24 +429,6 @@ async def compose_mysekai_harvest_map_image(ctx: SekaiHandlerContext, harvest_ma
         z = max(0, min(z, draw_h))
         return (int(x), int(z))
 
-    # 获取所有资源点的位置
-    harvest_points = []
-    for item in harvest_map['userMysekaiSiteHarvestFixtures']:
-        fid = item['mysekaiSiteHarvestFixtureId']
-        fstatus = item['userMysekaiSiteHarvestFixtureStatus']
-        if not show_harvested and fstatus != "spawned": 
-            continue
-        x, z = game_pos_to_draw_pos(item['positionX'], item['positionZ'])
-        try: 
-            harvest_fixture = (await ctx.md.mysekai_site_harvest_fixtures.find_by_id(fid))
-            asset_name = harvest_fixture['assetbundleName']
-            rarity = harvest_fixture['mysekaiSiteHarvestFixtureRarityType']
-            image = ctx.static_imgs.get(f"mysekai/harvest_fixture_icon/{rarity}/{asset_name}.png", (128, None))
-        except: 
-            image = None
-        harvest_points.append({"id": fid, 'image': image, 'x': x, 'z': z})
-    harvest_points.sort(key=lambda x: (x['z'], x['x']))
-
     # 获取资源掉落的位置
     all_res = {}
     for item in harvest_map['userMysekaiSiteHarvestResourceDrops']:
@@ -500,17 +484,74 @@ async def compose_mysekai_harvest_map_image(ctx: SekaiHandlerContext, harvest_ma
             elif is_birthday_drop(item):
                 all_res[pkey][res_key]['del'] = True
 
+    # 获取所有资源点的位置
+    harvest_points = []
+    harvest_point_fid_pkeys: dict[int, str] = {}
+    for item in harvest_map['userMysekaiSiteHarvestFixtures']:
+        fid = item['mysekaiSiteHarvestFixtureId']
+        fstatus = item['userMysekaiSiteHarvestFixtureStatus']
+        if not show_harvested and fstatus != "spawned": 
+            continue
+        x, z = game_pos_to_draw_pos(item['positionX'], item['positionZ'])
+        harvest_point_fid_pkeys[fid] = f"{x}_{z}"
+        harvest_points.append({"id": fid, 'x': x, 'z': z})
+    harvest_points.sort(key=lambda x: (x['z'], x['x']))
+
+    # 获取需要的资源点图标
+    for fid, pkey in harvest_point_fid_pkeys.items():
+        if fid in harvest_point_image_offsets_cache:
+            continue
+        try: 
+            harvest_fixture = (await ctx.md.mysekai_site_harvest_fixtures.find_by_id(fid))
+            asset_name = harvest_fixture['assetbundleName']
+            ftype = harvest_fixture['mysekaiSiteHarvestFixtureType']
+
+            if ftype == 'birthday_plant':
+                # 检查该位置的掉落以判断是哪个角色的生日花
+                cid = None
+                for res_key in all_res.get(pkey, {}):
+                    res_id = int(res_key.rsplit("_", 1)[-1])
+                    if 174 <= res_id <= 199:
+                        cid = res_id - 173
+                        break
+                assert cid
+                chara_eng_name = (await ctx.md.game_characters.find_by_id(cid))['givenNameEnglish'].lower()
+                image = await ctx.rip.img(
+                    f'mysekai/birthday/{chara_eng_name}_2025/icon_refresh.png',
+                    use_img_cache=True,
+                )
+                point_img_size = 50 * scale
+                xoffset = point_img_size * 0.15
+                zoffset = 0
+                image = resize_keep_ratio(image, point_img_size)
+
+            else:
+                rarity = harvest_fixture['mysekaiSiteHarvestFixtureRarityType']
+                image = ctx.static_imgs.get(f"mysekai/harvest_fixture_icon/{rarity}/{asset_name}.png", (128, None))
+
+                point_img_size = 160 * scale
+                xoffset = 0
+                zoffset = -point_img_size * 0.3  # 道具和资源点图标整体偏上，以让资源点对齐实际位置
+                image = resize_keep_ratio(image, point_img_size)
+
+            offset = (
+                int(-point_img_size * 0.5 + xoffset),
+                int(-point_img_size * 0.5 + zoffset),
+            )
+            harvest_point_image_offsets_cache[fid] = (image, offset)
+        except Exception as e:
+            logger.warning(f"获取资源点 {fid} 图标失败: {get_exc_desc(e)}")
+        
+
     # 绘制
     with Canvas(bg=FillBg(WHITE), w=draw_w, h=draw_h) as canvas:
         ImageBox(site_image, size=(draw_w, draw_h))
 
         # 绘制资源点
-        point_img_size = 160 * scale
-        global_zoffset = -point_img_size * 0.2  # 道具和资源点图标整体偏上，以让资源点对齐实际位置
         for point in harvest_points:
-            offset = (int(point['x'] - point_img_size * 0.5), int(point['z'] - point_img_size * 0.6 + global_zoffset))
-            if point['image']:
-                ImageBox(point['image'], size=(point_img_size, point_img_size), use_alphablend=True).set_offset(offset)
+            if point['id'] in harvest_point_image_offsets_cache:
+                img, offset = harvest_point_image_offsets_cache[point['id']]
+                ImageBox(img, use_alphablend=True).set_offset((point['x'] + offset[0], point['z'] + offset[1]))
 
         # 绘制出生点
         spawn_x, spawn_z = game_pos_to_draw_pos(0, 0)
@@ -544,6 +585,8 @@ async def compose_mysekai_harvest_map_image(ctx: SekaiHandlerContext, harvest_ma
                 else:                   large_total += 1
             small_idx, large_idx = 0, 0
 
+            icon_zoffset = -160 * scale * 0.2
+
             for item in pres:
                 if item['del']: continue
                 if not item['image']: continue
@@ -566,12 +609,12 @@ async def compose_mysekai_harvest_map_image(ctx: SekaiHandlerContext, harvest_ma
                 if item['small_icon']:
                     call.size = small_size
                     call.x = int(item['x'] + 0.5 * large_size * large_total - 0.6 * small_size)
-                    call.z = int(item['z'] - 0.45 * large_size + 1.0 * small_size * small_idx + global_zoffset)
+                    call.z = int(item['z'] - 0.45 * large_size + 1.0 * small_size * small_idx + icon_zoffset)
                     small_idx += 1
                 else:
                     call.size = large_size
                     call.x = int(item['x'] - 0.5 * large_size * large_total + large_size * large_idx)
-                    call.z = int(item['z'] - 0.5 * large_size + global_zoffset)
+                    call.z = int(item['z'] - 0.5 * large_size + icon_zoffset)
                     large_idx += 1
 
                 # 对于高度可能超过的情况
@@ -1916,9 +1959,9 @@ def update_bd_msr_limit_uid(ctx: SekaiHandlerContext, qid: int) -> str:
 
 # 查询mysekai资源
 pjsk_mysekai_res = SekaiCmdHandler([
-    "/pjsk mysekai res", "/pjsk_mysekai_res", "/mysekai res", "/mysekai_res", 
-    "/msr", "/mysekai资源", "/mysekai 资源", "/msa",
-], regions=MYSEKAI_REGIONS)
+    "/pjsk mysekai res", "/msr", "/msmap", "/msa",
+    "/mysekai 资源", 
+], regions=MYSEKAI_REGIONS, priority=101)
 pjsk_mysekai_res.check_cdrate(cd).check_wblist(gbl)
 @pjsk_mysekai_res.handle()
 async def _(ctx: SekaiHandlerContext):
@@ -1936,12 +1979,14 @@ async def _(ctx: SekaiHandlerContext):
 
 # 查询mysekai蓝图
 pjsk_mysekai_blueprint = SekaiCmdHandler([
-    "/pjsk mysekai blueprint", "/pjsk_mysekai_blueprint", "/mysekai blueprint", "/mysekai_blueprint", 
-    "/msb", "/mysekai蓝图", "/mysekai 蓝图"
+    "/pjsk mysekai blueprint", "/mysekai blueprint",
+    "/msb", "/mysekai 蓝图",
 ], regions=MYSEKAI_REGIONS)
 pjsk_mysekai_blueprint.check_cdrate(cd).check_wblist(gbl)
 @pjsk_mysekai_blueprint.handle()
 async def _(ctx: SekaiHandlerContext):
+    if ctx.region in bd_msr_sub.regions and not bd_msr_sub.is_subbed(ctx.region, ctx.group_id): 
+        raise ReplyException(f"不支持{get_region_name(ctx.region)}的烤森查询")
     args = ctx.get_args().strip()
     show_id = False
     if 'id' in args:
@@ -1977,9 +2022,8 @@ async def _(ctx: SekaiHandlerContext):
 
 # 查询mysekai家具列表/家具
 pjsk_mysekai_furniture = SekaiCmdHandler([
-    "/pjsk mysekai furniture", "/pjsk_mysekai_furniture", "/mysekai furniture", "/mysekai_furniture", 
-    "/pjsk mysekai fixture", "/pjsk_mysekai_fixture", "/mysekai fixture", "/mysekai_fixture", 
-    "/msf", "/mysekai家具", "/mysekai 家具"
+    "/pjsk mysekai furniture", "/pjsk mysekai fixture", 
+    "/msf", "/mysekai 家具", "/家具列表",
 ], regions=MYSEKAI_REGIONS)
 pjsk_mysekai_furniture.check_cdrate(cd).check_wblist(gbl)
 @pjsk_mysekai_furniture.handle()
@@ -2011,6 +2055,8 @@ async def _(ctx: SekaiHandlerContext):
             only_craftable=False, 
         )
     else:
+        if ctx.region in bd_msr_sub.regions and not bd_msr_sub.is_subbed(ctx.region, ctx.group_id): 
+            raise ReplyException(f"不支持{get_region_name(ctx.region)}的msr查询")
         img = await compose_mysekai_talk_list_image(
             ctx, 
             qid=ctx.user_id, 
@@ -2025,13 +2071,14 @@ async def _(ctx: SekaiHandlerContext):
 
 # 下载mysekai照片
 pjsk_mysekai_photo = SekaiCmdHandler([
-    "/pjsk mysekai photo", "/pjsk_mysekai_photo", "/mysekai photo", "/mysekai_photo",
-    "/pjsk mysekai picture", "/pjsk_mysekai_picture", "/mysekai picture", "/mysekai_picture",
-    "/msp", "/mysekai照片", "/mysekai 照片" 
+    "/pjsk mysekai photo", "/pjsk mysekai picture", 
+    "/msp", "/mysekai 照片" ,
 ], regions=MYSEKAI_REGIONS)
 pjsk_mysekai_photo.check_cdrate(cd).check_wblist(gbl)
 @pjsk_mysekai_photo.handle()
 async def _(ctx: SekaiHandlerContext):
+    if ctx.region in bd_msr_sub.regions and not bd_msr_sub.is_subbed(ctx.region, ctx.group_id): 
+        raise ReplyException(f"不支持{get_region_name(ctx.region)}的烤森查询")
     args = ctx.get_args().strip()
     try: seq = int(args)
     except: raise Exception("请输入正确的照片编号（从1或-1开始）")
@@ -2044,13 +2091,15 @@ async def _(ctx: SekaiHandlerContext):
 
 # 查询烤森抓包数据
 pjsk_check_mysekai_data = SekaiCmdHandler([
-    "/pjsk check mysekai data", "/pjsk_check_mysekai_data", 
+    "/pjsk check mysekai data",
     "/pjsk烤森抓包数据", "/pjsk烤森抓包", "/烤森抓包", "/烤森抓包数据",
     "/msd",
 ], regions=MYSEKAI_REGIONS)
 pjsk_check_mysekai_data.check_cdrate(cd).check_wblist(gbl)
 @pjsk_check_mysekai_data.handle()
 async def _(ctx: SekaiHandlerContext):
+    if ctx.region in bd_msr_sub.regions and not bd_msr_sub.is_subbed(ctx.region, ctx.group_id): 
+        raise ReplyException(f"不支持{get_region_name(ctx.region)}的烤森查询")
     cqs = extract_cq_code(ctx.get_msg())
     qid = int(cqs['at'][0]['qq']) if 'at' in cqs else ctx.user_id
     uid = get_player_bind_id(ctx)
@@ -2077,8 +2126,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 查询烤森门升级数据
 pjsk_mysekai_gate = SekaiCmdHandler([
-    "/pjsk mysekai gate", "/pjsk_mysekai_gate", 
-    "/msg",
+    "/pjsk mysekai gate",  "/msg", "/msgate",
 ], regions=MYSEKAI_REGIONS)
 pjsk_mysekai_gate.check_cdrate(cd).check_wblist(gbl)
 @pjsk_mysekai_gate.handle()
@@ -2104,12 +2152,13 @@ async def _(ctx: SekaiHandlerContext):
 
 # 查询烤森唱片数据
 pjsk_mysekai_musicrecord = SekaiCmdHandler([
-    "/pjsk mysekai musicrecord", "/pjsk_mysekai_musicrecord",
-    "/msm", "/mss",
+    "/pjsk mysekai musicrecord", "/msm", "/mss", "/mssong", 
 ], regions=MYSEKAI_REGIONS)
 pjsk_mysekai_musicrecord.check_cdrate(cd).check_wblist(gbl)
 @pjsk_mysekai_musicrecord.handle()
 async def _(ctx: SekaiHandlerContext):
+    if ctx.region in bd_msr_sub.regions and not bd_msr_sub.is_subbed(ctx.region, ctx.group_id): 
+        raise ReplyException(f"不支持{get_region_name(ctx.region)}的msr查询")
     args = ctx.get_args().strip()
     show_id = False
     if 'id' in args:
@@ -2133,6 +2182,9 @@ msr_change_bind = SekaiCmdHandler([
 msr_change_bind.check_cdrate(cd).check_wblist(gbl)
 @msr_change_bind.handle()
 async def _(ctx: SekaiHandlerContext):
+    args = ctx.get_args().strip()
+    assert_and_reply(not args, "该指令用于切换MSR查询限制ID为你当前绑定的ID，不需要添加参数。请你确认要更换的ID为你当前绑定的ID")
+
     next_times = bd_msr_bind_db.get(f"{ctx.region}_next_time", {})
     qid = str(ctx.user_id)
     next_time = next_times.get(qid, 0)

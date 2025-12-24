@@ -1496,7 +1496,7 @@ async def get_chart_bpm(ctx: SekaiHandlerContext, mid: int, timeout: float=5.0):
 
 # 设置歌曲别名
 pjsk_alias_set = SekaiCmdHandler([
-    "/pjsk alias add", "/pjsk_alias_add", "/pjskalias add", "/pjskalias_add",
+    "/pjsk alias add", "/pjskalias add",
     "/添加歌曲别名", "/歌曲别名添加", 
 ])
 pjsk_alias_set.check_cdrate(cd).check_wblist(gbl)
@@ -1544,7 +1544,8 @@ async def _(ctx: SekaiHandlerContext):
 
 # 查看歌曲别名
 pjsk_alias = SekaiCmdHandler([
-    "/pjsk alias", "/歌曲别名", "/music alias",
+    "/pjsk alias", "/music alias", 
+    "/歌曲别名", "/查歌曲别名",
 ])
 pjsk_alias.check_cdrate(cd).check_wblist(gbl)
 @pjsk_alias.handle()
@@ -1568,7 +1569,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 删除歌曲别名
 pjsk_alias_del = SekaiCmdHandler([
-    "/pjsk alias del", "/pjsk_alias_del", "/pjskalias del", "/pjskalias_del",
+    "/pjsk alias del", "/pjskalias del",
     "/删除歌曲别名", "/歌曲别名删除",
 ])
 pjsk_alias_del.check_cdrate(cd).check_wblist(gbl)
@@ -1612,8 +1613,8 @@ async def _(ctx: SekaiHandlerContext):
 
 # 查曲
 pjsk_song = SekaiCmdHandler([
-    "/pjsk song", "/pjsk_song", "/pjsk music", "/pjsk_music", 
-    "/查曲", "/查歌", "/song", "/music", "/歌曲",
+    "/pjsk song", "/pjsk music", "/song", "/music",
+    "/查曲", "/查歌", "/歌曲",
 ])
 pjsk_song.check_cdrate(cd).check_wblist(gbl)
 @pjsk_song.handle()
@@ -1656,7 +1657,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 物量查询
 pjsk_note_num = SekaiCmdHandler([
-    "/pjsk note num", "/pjsk_note_num", "/pjsk note count", "/pjsk_note_count", 
+    "/pjsk note num", "/pjsk note count",
     "/物量", "/查物量"
 ])
 pjsk_note_num.check_cdrate(cd).check_wblist(gbl)
@@ -1681,7 +1682,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 歌曲列表
 pjsk_music_list = SekaiCmdHandler([
-    "/pjsk song list", "/pjsk_song_list", "/pjsk music list", "/pjsk_music_list", 
+    "/pjsk song list", "/pjsk music list",
     "/歌曲列表", "/难度排行",
 ])
 pjsk_music_list.check_cdrate(cd).check_wblist(gbl)
@@ -1782,7 +1783,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 打歌进度
 pjsk_play_progress = SekaiCmdHandler([
-    "/pjsk progress", "/pjsk_progress", 
+    "/pjsk progress",
     "/pjsk进度", "/打歌进度", "/歌曲进度", "/打歌信息",
 ])
 pjsk_play_progress.check_cdrate(cd).check_wblist(gbl)
@@ -1798,8 +1799,8 @@ async def _(ctx: SekaiHandlerContext):
 
 # 同步歌曲别名
 pjsk_sync_music_alias = CmdHandler([
-    "/sync music alias", "/sync_music_alias", 
-    "/同步歌曲别名", "/sma",
+    "/sync music alias", "/sma",
+    "/同步歌曲别名", 
 ], logger)
 pjsk_sync_music_alias.check_cdrate(cd).check_wblist(gbl).check_superuser()
 @pjsk_sync_music_alias.handle()
@@ -1812,7 +1813,7 @@ async def _(ctx: HandlerContext):
 
 # 歌曲奖励
 pjsk_music_rewards = SekaiCmdHandler([
-    "/pjsk music rewards", "/pjsk_music_rewards", 
+    "/pjsk music rewards",
     "/歌曲奖励", "/打歌奖励", "/歌曲挖矿", "/打歌挖矿",
 ])  
 pjsk_music_rewards.check_cdrate(cd).check_wblist(gbl)
@@ -1826,7 +1827,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # bpm查询
 pjsk_bpm = SekaiCmdHandler([
-    "/pjsk bpm", "/pjsk_bpm", "/pjskbpm", "/查bpm",
+    "/pjsk bpm", "/查bpm", "/查BPM",
 ])
 pjsk_bpm.check_cdrate(cd).check_wblist(gbl)
 @pjsk_bpm.handle()
@@ -1857,7 +1858,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 查曲绘
 pjsk_music_cover = SekaiCmdHandler([
-    "/pjsk music cover", "/pjsk_music_cover", "/pjskmusiccover", 
+    "/pjsk music cover",
     "/查曲绘", "/曲绘",
 ])
 pjsk_music_cover.check_cdrate(cd).check_wblist(gbl)

@@ -1,6 +1,8 @@
-####  Lunabot
+# Lunabot
 
-基于 Nonebot2 框架开发的多功能个人 Bot
+- 基于 Nonebot2 框架开发的多功能个人 Bot
+- 项目原作者: NeuraXmy (ルナ茶)
+- 项目链接: https://github.com/NeuraXmy/lunabot
 
 --- 
 

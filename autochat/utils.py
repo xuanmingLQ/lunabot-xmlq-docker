@@ -314,7 +314,7 @@ def parse_cfg_num(x: str) -> Union[int, float]:
     except Exception as e:
         raise ValueError(f"无法解析配置数字 '{x}': {e}")
 
-config = Config('chat.autochat')
+config = Config('autochat')
 
 
 # ========================== Log ========================== #

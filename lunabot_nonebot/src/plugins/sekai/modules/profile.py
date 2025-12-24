@@ -1102,8 +1102,8 @@ async def get_avatar_widget_with_frame(ctx: SekaiHandlerContext, avatar_img: Ima
 
 # 绑定id或查询绑定id
 pjsk_bind = SekaiCmdHandler([
-    "/pjsk bind", "/pjsk_bind", "/pjsk id", "/pjsk_id",
-    "/绑定", "/pjsk绑定", "/pjsk 绑定"
+    "/pjsk bind", "/pjsk id",
+    "/绑定", "/pjsk 绑定"
 ], parse_uid_arg=False)
 pjsk_bind.check_cdrate(cd).check_wblist(gbl)
 @pjsk_bind.handle()
@@ -1314,7 +1314,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 隐藏抓包信息
 pjsk_hide_suite = SekaiCmdHandler([
-    "/pjsk hide suite", "/pjsk_hide_suite", 
+    "/pjsk hide suite",
     "/pjsk隐藏抓包", "/隐藏抓包",
 ])
 pjsk_hide_suite.check_cdrate(cd).check_wblist(gbl)
@@ -1331,7 +1331,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 展示抓包信息
 pjsk_show_suite = SekaiCmdHandler([
-    "/pjsk show suite", "/pjsk_show_suite",
+    "/pjsk show suite",
     "/pjsk显示抓包", "/pjsk展示抓包", "/展示抓包",
 ])
 pjsk_show_suite.check_cdrate(cd).check_wblist(gbl)
@@ -1348,7 +1348,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 隐藏id信息
 pjsk_hide_id = SekaiCmdHandler([
-    "/pjsk hide id", "/pjsk_hide_id",
+    "/pjsk hide id",
     "/pjsk隐藏id", "/pjsk隐藏ID", "/隐藏id", "/隐藏ID",
 ])
 pjsk_hide_id.check_cdrate(cd).check_wblist(gbl)
@@ -1365,7 +1365,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 展示id信息
 pjsk_show_id = SekaiCmdHandler([
-    "/pjsk show id", "/pjsk_show_id",
+    "/pjsk show id",
     "/pjsk显示id", "/pjsk显示ID", "/pjsk展示id", "/pjsk展示ID",
     "/展示id", "/展示ID", "/显示id", "/显示ID",
 ])
@@ -1383,8 +1383,8 @@ async def _(ctx: SekaiHandlerContext):
 
 # 查询个人名片
 pjsk_info = SekaiCmdHandler([
-    "/pjsk profile", "/pjsk_profile", "/pjskprofile", 
-    "/个人信息", "/名片", "/pjsk个人信息", "/pjsk名片", "/pjsk 个人信息", "/pjsk 名片",
+    "/pjsk profile",
+    "/个人信息", "/名片", "/pjsk 个人信息", "/pjsk 名片",
 ])
 pjsk_info.check_cdrate(cd).check_wblist(gbl)
 @pjsk_info.handle()
@@ -1420,8 +1420,8 @@ async def _(ctx: SekaiHandlerContext):
 
 # 查询注册时间
 pjsk_reg_time = SekaiCmdHandler([
-    "/pjsk reg time", "/pjsk_reg_time", 
-    "/注册时间", "/pjsk注册时间", "/pjsk 注册时间", "/查时间",
+    "/pjsk reg time",
+    "/注册时间", "/pjsk 注册时间", "/查时间",
 ])
 pjsk_reg_time.check_cdrate(cd).check_wblist(gbl)
 @pjsk_reg_time.handle()
@@ -1435,8 +1435,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 检查profile服务器状态
 pjsk_check_service = SekaiCmdHandler([
-    "/pjsk check service", "/pjsk_check_service", "/pcs",
-    "/pjsk检查", "/pjsk检查服务", "/pjsk检查服务状态", "/pjsk状态",
+    "/pjsk check service", "/pcs", "/pjsk检查服务状态",
 ])
 pjsk_check_service.check_cdrate(cd).check_wblist(gbl)
 @pjsk_check_service.handle()
@@ -1453,7 +1452,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 设置抓包数据获取模式
 pjsk_data_mode = SekaiCmdHandler([
-    "/pjsk data mode", "/pjsk_data_mode",
+    "/pjsk data mode", 
     "/pjsk抓包模式", "/pjsk抓包获取模式", "/抓包模式",
 ])
 pjsk_data_mode.check_cdrate(cd).check_wblist(gbl)
@@ -1499,7 +1498,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 查询抓包数据
 pjsk_check_data = SekaiCmdHandler([
-    "/pjsk check data", "/pjsk_check_data",
+    "/pjsk check data",
     "/pjsk抓包", "/pjsk抓包状态", "/pjsk抓包数据", "/pjsk抓包查询", "/抓包数据", "/抓包状态", "/抓包信息",
 ])
 pjsk_check_data.check_cdrate(cd).check_wblist(gbl)
@@ -1528,7 +1527,7 @@ async def _(ctx: SekaiHandlerContext):
 
 # 添加游戏id到黑名单
 pjsk_blacklist = CmdHandler([
-    "/pjsk blacklist add", "/pjsk_blacklist_add",
+    "/pjsk blacklist add", "/pjsk add blacklist",
     "/pjsk黑名单添加", "/pjsk添加黑名单",
 ], logger)
 pjsk_blacklist.check_cdrate(cd).check_wblist(gbl).check_superuser()
@@ -1546,7 +1545,7 @@ async def _(ctx: HandlerContext):
 
 # 移除游戏id到黑名单
 pjsk_blacklist_remove = CmdHandler([
-    "/pjsk blacklist remove", "/pjsk_blacklist_remove", "/pjsk_blacklist_del",
+    "/pjsk blacklist remove", "/pjsk blacklist del", "/pjsk remove blacklist", "/pjsk del blacklist",
     "/pjsk黑名单移除", "/pjsk移除黑名单", "/pjsk删除黑名单",
 ], logger)
 pjsk_blacklist_remove.check_cdrate(cd).check_wblist(gbl).check_superuser()
@@ -1597,7 +1596,7 @@ async def _(ctx: SekaiHandlerContext):
 # 上传个人信息背景图片
 upload_profile_bg = SekaiCmdHandler([
     "/pjsk upload profile bg", "/pjsk upload profile background",
-    "/上传个人信息背景", "/上传个人信息图片", 
+    "/上传个人信息背景", "/上传个人信息图片", "/上传个人背景", "/上传个人信息",
 ])
 upload_profile_bg.check_cdrate(cd).check_wblist(gbl).check_cdrate(profile_bg_upload_rate_limit)
 @upload_profile_bg.handle()
