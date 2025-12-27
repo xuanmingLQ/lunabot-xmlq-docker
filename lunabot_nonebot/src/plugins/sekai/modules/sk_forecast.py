@@ -104,10 +104,11 @@ class ForecastData:
                     old_history = []
                     if rank in old.rank_data and old.rank_data[rank].history_final_score is not None:
                         old_history = old.rank_data[rank].history_final_score
-                    old_history.append(ForecastRanking(
-                        score=data.final_score,
-                        ts=self.forecast_ts,
-                    ))
+                    if old_history[-1].ts != self.forecast_ts:
+                        old_history.append(ForecastRanking(
+                            score=data.final_score,
+                            ts=self.forecast_ts,
+                        ))
                     data.history_final_score = old_history
             # 加载new没有预测但是old有的历史
             for rank in old.rank_data:

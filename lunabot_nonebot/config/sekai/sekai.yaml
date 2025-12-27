@@ -69,19 +69,60 @@ stamp:
 
 deck:
   servers:
-    - url: http://deck-recommender:45556
+    - url: http://127.0.0.1:45556
       weight: 4 # 负载均衡权重
     # - url: http://127.0.0.1:45678
     #   weight: 8
 
-  music_meta_url: https://sekai-data.3-3.dev/music_metas.json
+  music_meta_url: https://storage.sekai.best/sekai-best-assets/music_metas.json
   data_update_interval_seconds: 30
   default_algs: ['dfs', 'ga']
+
+  return_deck_num:
+    multi: 6
+    challenge: 6
+    mysekai: 6
+    bonus: 1
+
   timeout:
     default: 5
     no_event: 5
     single_alg: 60
     bonus_target: 10
+
+  default_musicdiffs:
+    event:
+      multi: 
+        - [omakase, master]
+      solo:
+        - [74, expert]  # 红虾
+      auto:
+        - [186, master] # 紫盘古
+    challenge:
+      challenge:
+        - [610, master] # 紫北极星
+        - [104, master] # 紫10th
+      challenge_auto:
+        - [610, master] # 紫北极星
+        - [104, master] # 紫10th
+
+  challenge_music_auto_recommend:
+    enabled: true
+    rules:
+      - music: [610, master]  # 紫北极星
+        fc_requires: { 'master_31': 5 }
+      - music: [6, append]    # 火花apd
+        fc_requires: { 'append_34': 1 }
+      - music: [141, append]  # 群青apd
+        fc_requires: { 'append_29': 3 }
+      - music: [540, master]  # 紫虚无
+        fc_requires: { 'master_29': 5 }
+      - music: [104, master]  # 紫10th
+        fc_requires: { 'master_29': 5 }
+      - music: [62, expert]   # 红jsg
+        fc_requires: { 'expert_26': 5 }
+      - music: [74, expert]   # 红虾
+        fc_requires: {}
 
 gacha:
   list_page_size: 100

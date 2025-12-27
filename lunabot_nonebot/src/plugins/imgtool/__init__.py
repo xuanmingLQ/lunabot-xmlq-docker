@@ -5,7 +5,7 @@ from enum import Enum
 import sys
 import numpy as np
 # 使用py替代cpp程序调用
-from .imgtool import execute_imgtool_py
+from .imgtool import execute_imgtool_py, ImageToolResult
 
 config = Config('imgtool')
 logger = get_logger("ImgTool")
@@ -15,15 +15,19 @@ gbl = get_group_black_list(file_db, logger, 'imgtool')
 
 
 
-def cutout_image(image: Image.Image | List[Image.Image], tolerance: int) -> Image.Image | List[Image.Image]:
+def cutout_image(image: Image.Image | List[Image.Image], tolerance: int) -> ImageToolResult:
     """
-    抠图，tolerance为rgb距离平方的容差
+    抠图
+    - tolerance: rgb距离平方的容差
     """
     return execute_imgtool_py(image, "cutout", tolerance)
 
-def shrink_image(image: Image.Image | List[Image.Image], alpha_threshold: int, edge: int) -> Image.Image | List[Image.Image]:
+def shrink_image(image: Image.Image | List[Image.Image], alpha_threshold: int, edge: int) -> ImageToolResult:
     """
-    将图片边缘的透明部分裁剪掉，alpha_threshold为alpha通道阈值，edge为裁剪后保留的边缘宽度
+    将图片边缘的透明部分裁剪掉，
+    - alpha_threshold: alpha通道阈值，
+    - edge: 裁剪后保留的边缘宽度
+    - extra_ret: 返回 { 'bbox': (x, y, w, h) }
     """
     return execute_imgtool_py(image, "shrink", alpha_threshold, edge)
 
@@ -1174,7 +1178,7 @@ cutout ai: 使用AI模型抠图
             frames = [img]
 
         if args['method'] == 'floodfill':
-            frames = cutout_image(frames, args['tolerance'])
+            frames = cutout_image(frames, args['tolerance']).image
         elif args['method'] == 'ai':
             from rembg import remove
             for i in range(len(frames)):
@@ -1213,7 +1217,7 @@ shrink 10 +10: 裁剪透明部分，透明度阈值为10，并在裁剪区域外
         else:
             frames = [img]
 
-        frames = shrink_image(frames, args['alpha_threshold'], args['edge'])
+        frames = shrink_image(frames, args['alpha_threshold'], args['edge']).image
 
         if is_animated(img):
             return frames_to_gif(frames, get_gif_duration(img))

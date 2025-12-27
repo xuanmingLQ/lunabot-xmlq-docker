@@ -193,8 +193,8 @@ async def ensure_stamp_maker_base_image(ctx: SekaiHandlerContext, sid: int, use_
     image: Image.Image = await session.get_response(model, process_resp, image_response=True)
     image = resize_keep_ratio(image, max(w, h) * 2)
 
-    image = await run_in_pool(cutout_image, image, tolerance)
-    image = await run_in_pool(shrink_image, image, 0, edge)
+    image = (await run_in_pool(cutout_image, image, tolerance)).image
+    image = (await run_in_pool(shrink_image, image, 0, edge)).image
 
     img_np = np.array(image)
     alpha_channel = img_np[:, :, 3]

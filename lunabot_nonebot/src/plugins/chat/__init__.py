@@ -676,7 +676,7 @@ async def _(ctx: HandlerContext):
     if not reply_msg:
         text = ctx.get_args().strip()
         assert_and_reply(text, "请输入要翻译的文本，或回复要翻译的文本/图片")
-        return await ctx.asend_reply_msg(await translate_text(text, cache=False))
+        return await ctx.asend_fold_msg_adaptive(await translate_text(text, cache=False))
 
     cqs = extract_cq_code(reply_msg)
     imgs = cqs.get("image", [])
@@ -685,7 +685,7 @@ async def _(ctx: HandlerContext):
     if not imgs:
         text = extract_text(reply_msg)
         assert_and_reply(text, "请输入要翻译的文本，或回复要翻译的文本/图片")
-        return await ctx.asend_reply_msg(await translate_text(text, cache=False))
+        return await ctx.asend_fold_msg_adaptive(await translate_text(text, cache=False))
 
     args = ctx.get_args().strip()
     debug = False

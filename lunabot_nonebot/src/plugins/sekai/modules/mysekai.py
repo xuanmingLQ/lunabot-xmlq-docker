@@ -22,10 +22,11 @@ from .profile import (
     get_avatar_widget_with_frame,
     process_sensitive_cmd_source,
 )
-from src.api.subscribe.pjsk import set_msr_sub
 from .music import get_music_cover_thumb, is_valid_music
 from .card import get_character_sd_image
 from src.api.game.user import get_mysekai,get_mysekai_photo,get_mysekai_upload_time
+from src.api.subscribe.pjsk import set_msr_sub
+from ...imgtool import shrink_image
 
 MYSEKAI_REGIONS = ['jp',  'cn']
 BD_MYSEKAI_REGIONS = ['cn',]
@@ -533,6 +534,15 @@ async def compose_mysekai_harvest_map_image(ctx: SekaiHandlerContext, harvest_ma
                 xoffset = 0
                 zoffset = -point_img_size * 0.3  # 道具和资源点图标整体偏上，以让资源点对齐实际位置
                 image = resize_keep_ratio(image, point_img_size)
+
+            # 提前shrink以提高绘制效率
+            try:
+                res = await run_in_pool(shrink_image, image, 5, 0)
+                xoffset += res.extra_info['bbox'][0]
+                zoffset += res.extra_info['bbox'][1]
+                image = res.image
+            except Exception as e:
+                logger.warning(f"资源点 {fid} 图标shrink失败: {get_exc_desc(e)}")
 
             offset = (
                 int(-point_img_size * 0.5 + xoffset),

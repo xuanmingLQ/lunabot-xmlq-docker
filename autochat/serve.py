@@ -434,8 +434,9 @@ async def chat(msg: Message):
         info(f"LLM生成回复成功: {llm_response}")
 
         reply_text = llm_response['reply']
-        update_um_id = llm_response.get('update_um_id', None)
-        update_um_text = llm_response.get('update_um_text', None)
+        reply_text2 = llm_response.get('reply2', '')
+        update_um_id = llm_response.get('update_um_id', '')
+        update_um_text = llm_response.get('update_um_text', '')
 
     except:
         error(f"请求LLM生成回复时失败，放弃聊天处理")
@@ -444,30 +445,33 @@ async def chat(msg: Message):
     # ---------------- 发送回复 ---------------- #
 
     try:
-        if not reply_text.strip():
-            info(f"LLM生成的回复为空，放弃发送")
-        else:
+        send_msg_id_texts: list[tuple[int, str]] = []
+
+        async def process_reply_text(index: int, text: str):
+            if not text:
+                info(f"LLM生成的回复{index}为空，放弃发送")
+                return
             # 获取at和回复
             at_id, reply_id = None, None
             # 匹配 [@id]
-            if at_match := re.search(r"\[@(\d+)\]", reply_text):
+            if at_match := re.search(r"\[@(\d+)\]", text):
                 at_id = int(at_match.group(1))
-                reply_text = reply_text.replace(at_match.group(0), "")
+                text = text.replace(at_match.group(0), "")
                 if any(m.user_id == at_id for m in recent_msgs):
-                    reply_text = f"[CQ:at,qq={at_id}]" + reply_text
+                    text = f"[CQ:at,qq={at_id}]" + text
             # 匹配 [reply=id]
-            if reply_match := re.search(r"\[reply=(\d+)\]", reply_text):
+            if reply_match := re.search(r"\[reply=(\d+)\]", text):
                 reply_id = int(reply_match.group(1))
-                reply_text = reply_text.replace(reply_match.group(0), "")
+                text = text.replace(reply_match.group(0), "")
                 if any(m.msg_id == reply_id for m in recent_msgs):
-                    reply_text = f"[CQ:reply,id={reply_id}]" + reply_text
-
-            reply_text = truncate(reply_text, config.get('chat.reply_max_length'))
-            info(f"自动聊天生成回复: {reply_text} at_id={at_id} reply_id={reply_id}")
-            
-            send_ret = await rpc_send_group_msg(msg.group_id, reply_text)
+                    text = f"[CQ:reply,id={reply_id}]" + text
+            text = truncate(text, config.get('chat.reply_max_length'))
+            info(f"自动聊天生成回复{index}: {text} at_id={at_id} reply_id={reply_id}")
+        
+            send_ret = await rpc_send_group_msg(msg.group_id, text)
             send_msg_id = int(send_ret['message_id'])
-            info(f"发送回复成功: send_msg_id={send_msg_id}")
+            send_msg_id_texts.append((send_msg_id, text))
+            info(f"发送回复{index}成功: send_msg_id={send_msg_id}")
 
             status.load(msg.group_id)
             status.self_msg_ids.append(send_msg_id)
@@ -475,9 +479,14 @@ async def chat(msg: Message):
             status.last_reply_time = time.time()
             status.save()
 
+        await process_reply_text(1, reply_text)
+        await asyncio.sleep(config.get('chat.reply_interval_seconds'))
+        await process_reply_text(2, reply_text2)
+
     except:
         error(f"发送回复时失败")
         return
+
 
     # ---------------- 更新意愿值 ---------------- #
 
@@ -528,10 +537,10 @@ async def chat(msg: Message):
             )
             
         # 添加自身记忆
-        if reply_text.strip():
+        for msg_id, text in send_msg_id_texts:
             mem.sm_add(
-                msg_id=send_msg_id,
-                text=reply_text,
+                msg_id=msg_id,
+                text=text,
                 keep_count=config.get('chat.mem.sm_keep_count'),
             )
 
