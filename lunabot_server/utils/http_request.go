@@ -1,62 +1,64 @@
 package utils
 
 import (
-	"bytes"
+	"crypto/tls"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
-	"net/url"
 )
 
+const (
+	DataTypeNone = iota
+	DataTypeJson
+	DataTypeBytes
+)
+
+var (
+	hc *http.Client
+)
+
+// DataTypeNone 返回Response
+// DataTypeJson 返回json.Decode的结果
+// DataTypeBytes 返回[]byte
 func HttpRequest(
-	urlStr string,
-	method string,
-	headers map[string]string,
-	params map[string]string,
-	data any) (*http.Response, error) {
-	// 创建URL
-	u, err := url.Parse(urlStr)
-	if err != nil {
-		return nil, err
-	}
-
-	// 添加查询参数
-	query := u.Query()
-	for k, v := range params {
-		query.Set(k, v)
-	}
-	u.RawQuery = query.Encode()
-
-	// 将数据编码为JSON
-	buf := new(bytes.Buffer)
-	if data != nil {
-		b, err := json.Marshal(data)
-		if err != nil {
-			return nil, err
+	Req *http.Request,
+	DataType int) (interface{}, error) {
+	if hc == nil {
+		hc = &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+			},
 		}
-		buf = bytes.NewBuffer(b)
 	}
-
-	// 创建请求
-	req, err := http.NewRequest(method, u.String(), buf)
-
+	resp, err := hc.Do(Req)
 	if err != nil {
 		return nil, err
 	}
-
-	for k, v := range headers {
-		req.Header.Set(k, v)
+	// 如果不需要原始响应，将它关闭
+	if DataType != DataTypeNone {
+		defer resp.Body.Close()
 	}
-
-	if data != nil {
-		req.Header.Set("Content-Type", "application/json")
+	if resp.StatusCode != http.StatusOK {
+		var detail map[string]string
+		_ = json.NewDecoder(resp.Body).Decode(&detail)
+		return nil, fmt.Errorf("请求第三方Api %s 失败：%s %s", Req.URL.String(), resp.Status, detail["detail"])
 	}
-
-	// 发送请求
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
+	switch DataType {
+	case DataTypeNone:
+		return resp, err
+	case DataTypeJson:
+		// 解码jsons
+		var result interface{}
+		err = json.NewDecoder(resp.Body).Decode(&result)
+		return result, err
+	case DataTypeBytes:
+		// 把即将关闭的body读出
+		result, err := io.ReadAll(resp.Body)
+		return result, err
+	default:
+		return nil, fmt.Errorf("不支持的数据类型： %d", DataType)
 	}
-
-	// 返回响应，让调用者处理
-	return resp, nil
 }

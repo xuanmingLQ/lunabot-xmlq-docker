@@ -1,5 +1,6 @@
 from src.utils import server
-def get_masterdata_version(region:list|str="all"):
+
+def get_masterdata_version(*region:str):
     return server(
         path="/masterdata/version",
         method="get",
@@ -8,7 +9,7 @@ def get_masterdata_version(region:list|str="all"):
         }
     )
 
-def download_masterdata(region:str,source:str,name:list|str):
+def download_masterdata(region:str,source:str, *name:str):
     return server(
         path="/masterdata/download",
         method="get",

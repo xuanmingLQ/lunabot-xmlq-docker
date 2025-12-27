@@ -17,13 +17,13 @@ type MusicApi struct{}
 // @Success 200 {object}
 // @Router /music/alias [get]
 func (*MusicApi) GetAlias(c *gin.Context) {
-	musicId, ok := c.GetQuery("musicId")
+	musicIds, ok := c.GetQueryArray("musicIds")
 	if !ok {
-		global.LOG.Error("缺少musicId")
-		response.FailWithMessage("缺少musicId", c)
+		global.LOG.Error("缺少musicIds")
+		response.FailWithMessage("缺少musicIds", c)
 		return
 	}
-	if result, err := harukiMusicService.GetMusicAlias(c, musicId); err != nil {
+	if result, err := harukiMusicService.GetMusicAlias(c, musicIds); err != nil {
 		global.LOG.Error("请求 Haruki Api 获取 Music Alias 失败", zap.Error(err))
 		response.FailWithMessage("请求 Haruki Api 获取 Music Alias 失败", c)
 		return

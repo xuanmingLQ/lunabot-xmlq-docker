@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"lunabot/xmlq/server/global"
+	"lunabot/xmlq/server/utils"
 	"net/http"
 	"net/url"
 	"slices"
@@ -30,7 +31,7 @@ func (hrk *GameApiService) GetProfile(ctx context.Context, Region string, UserId
 	}
 	v, err = hrk.get(ctx,
 		Url,
-		DataTypeJson,
+		utils.DataTypeJson,
 	)
 	////
 	return
@@ -65,7 +66,7 @@ func (hrk *GameApiService) GetRanking(ctx context.Context, Region, EventId strin
 	}
 	vBorder, err := hrk.get(ctx,
 		Url,
-		DataTypeJson,
+		utils.DataTypeJson,
 	)
 	if err != nil {
 		return
@@ -77,7 +78,7 @@ func (hrk *GameApiService) GetRanking(ctx context.Context, Region, EventId strin
 	}
 	vTop100, err := hrk.get(ctx,
 		Url,
-		DataTypeJson,
+		utils.DataTypeJson,
 	)
 	if err != nil {
 		return
@@ -115,7 +116,7 @@ func (hrk *GameApiService) GetSuiteInfo(ctx context.Context, Region, UserId stri
 	URL.RawQuery = Query.Encode() //编写到Url中
 	v, err = hrk.get(ctx,
 		URL.String(),
-		DataTypeJson,
+		utils.DataTypeJson,
 	)
 	if vMap, ok := v.(map[string]interface{}); ok {
 		vMap["source"] = "haruki"
@@ -142,7 +143,7 @@ func (hrk *GameApiService) GetMysekaiInfo(ctx context.Context, Region, UserId st
 	URL.RawQuery = Query.Encode()
 	v, err = hrk.get(ctx,
 		URL.String(),
-		DataTypeJson,
+		utils.DataTypeJson,
 	)
 	if vMap, ok := v.(map[string]interface{}); ok {
 		vMap["source"] = "haruki"
@@ -176,14 +177,15 @@ func (hrk *GameApiService) post(ctx context.Context, Url string, DataType int, B
 	)
 }
 func (*GameApiService) request(ctx context.Context, Method string, Url string, DataType int, Body io.Reader) (v interface{}, err error) {
-	global.LOG.Info(Url)
+	global.LOG.Debug(Url)
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(global.CONFIG.HarukiApi.Timeout)*time.Second)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, Method, Url, Body)
 	if err != nil {
 		return
 	}
 	req.Header.Set("X-Haruki-Sekai-Token", global.CONFIG.HarukiApi.Token)
-	return hcDo(req,
+	return utils.HttpRequest(req,
 		DataType,
-		time.Duration(global.CONFIG.HarukiApi.Timeout)*time.Second,
 	)
 }

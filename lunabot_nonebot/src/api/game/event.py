@@ -9,4 +9,4 @@ def get_ranking(region:str,event_id:str):
         }
     )
 def send_boost():
-    raise ApiError("","不支持自动送火")
+    raise ApiError("","不支持自动送火", None)

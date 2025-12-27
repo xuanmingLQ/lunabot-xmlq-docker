@@ -6,10 +6,11 @@ from .env import SEKAI_API_BASE_PATH, SEKAI_ASSET_BASE_PATH
 logger = get_logger("Request")
 
 class ApiError(Exception):
-    def __init__(self, path, msg, *args):
+    def __init__(self, path, msg, data: any = None, *args):
         self.path=path
         self.msg = msg
-        super().__init__(*args)
+        self.data = data
+        super().__init__(msg, *args)
     pass
 # Api请求
 async def server(path:str, method:str, json:dict|None=None, query:dict|None=None)->any:
@@ -31,7 +32,7 @@ async def server(path:str, method:str, json:dict|None=None, query:dict|None=None
                     raise HttpError(resp.status, detail)
                 res = await resp.json()
                 if res["code"]!=0:
-                    raise ApiError(path, res["msg"])
+                    raise ApiError(path, res["msg"], res.get('data'))
                 return res["data"]
     except aiohttp.ClientConnectionError as e:
         raise Exception(f"连接后端API失败，请稍后再试")

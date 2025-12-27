@@ -41,58 +41,59 @@ class RegionMasterDbManager:
     _all_mgrs = {}
     _update_hooks = []
 
-    def __init__(self, region: str, sources: List[RegionMasterDbSource], version_update_interval: timedelta):
+    def __init__(self, region: str, version_update_interval: timedelta):
         self.region = region
-        self.sources = sources
-        self.latest_source = None
         self.version_update_interval = version_update_interval
         self.version_update_time = None
+        self.source = RegionMasterDbSource("NONE")
 
     async def update(self):
         """
         更新所有MasterDB的版本信息
         """
         # logger.info(f"开始更新 {self.region} 的 {len(self.sources)} 个 MasterDB 的版本信息")
-        last_version = self.latest_source.version if self.latest_source else DEFAULT_VERSION
-        last_asset_version = self.latest_source.asset_version if self.latest_source else DEFAULT_VERSION
+        last_source = self.source
+        source_versions:list[RegionMasterDbSource] = []
         try:
-            version_datas = await get_masterdata_version(self.region) # 获取指定服务器的所有数据源的版本信息
-            for source in self.sources: 
-                if source.name in version_datas:
-                    version_data = version_datas[source.name]
-                    source.version = str(get_multi_keys(version_data, ['cdnVersion', 'data_version', 'dataVersion']))
-                    source.asset_version = get_multi_keys(version_data, ['asset_version', 'assetVersion'])
+            version_datas: dict = await get_masterdata_version(self.region) # 获取指定服务器的所有数据源的版本信息
+            for source_name in version_datas.keys():
+                version_data = version_datas[source_name]
+                source_versions.append(RegionMasterDbSource(
+                    name = source_name, 
+                    version = str(get_multi_keys(version_data, ['cdnVersion', 'data_version', 'dataVersion'])),
+                    asset_version = get_multi_keys(version_data, ['asset_version', 'assetVersion'])
+                ))
         except Exception as e:
             logger.error(f"获取{self.region} masterdata的版本信息失败：{get_exc_desc(e)}")
-            return
-
-        self.sources.sort(key=lambda x: get_version_order(x.version), reverse=True)
-        self.latest_source = self.sources[0]
+            return None
+        source_versions.sort(key=lambda x: get_version_order(x.version), reverse=True)
+        self.source =  source_versions[0]
         self.version_update_time = datetime.now()
-        if last_version != DEFAULT_VERSION and last_version != self.latest_source.version:
-            logger.info(f"获取到最新版本的 MasterDB [{self.region}.{self.latest_source.name}] 版本为 {self.latest_source.version}")
+        if last_source.version != DEFAULT_VERSION and last_source.version != self.source.version:
+            logger.info(f"获取到最新版本的 MasterDB [{self.region}.{self.source.name}] 版本为 {self.source.version}")
             for hook in self._update_hooks:
                 asyncio.create_task(hook(
-                    self.region, self.latest_source.name,
-                    self.latest_source.version, last_version,
-                    self.latest_source.asset_version, last_asset_version
+                    self.region, self.source.name,
+                    self.source.version, last_source.version,
+                    self.source.asset_version, last_source.asset_version
                 ))
+        return source_versions
     
-    async def get_latest_source(self) -> RegionMasterDbSource:
-        """
-        获取最新的MasterDB
-        """
-        if not self.latest_source or datetime.now() - self.version_update_time > self.version_update_interval:
-            await self.update()
-        return self.latest_source
-
-    async def get_all_sources(self, force_update=False) -> List[RegionMasterDbSource]:
-        """
-        获取所有MasterDB数据源
-        """
-        if force_update or not self.latest_source or datetime.now() - self.version_update_time > self.version_update_interval:
-            await self.update()
-        return self.sources
+    # async def get_latest_source(self) -> RegionMasterDbSource:
+    #     """
+    #     获取最新的MasterDB
+    #     """
+    #     if not self.latest_source or datetime.now() - self.version_update_time > self.version_update_interval:
+    #         await self.update()
+    #     return self.latest_source
+    
+    # async def get_all_sources(self, force_update=False) -> List[RegionMasterDbSource]:
+    #     """
+    #     获取所有MasterDB数据源
+    #     """
+    #     if force_update or not self.latest_source or datetime.now() - self.version_update_time > self.version_update_interval:
+    #         await self.update()
+    #     return self.sources
 
     @classmethod
     def on_update(cls):
@@ -108,13 +109,12 @@ class RegionMasterDbManager:
     def get(cls, region: str) -> "RegionMasterDbManager":
         if region not in cls._all_mgrs:
             # 从本地配置中获取
-            config = asset_config.get_all()
-            assert region in config and 'masterdata' in config[region], f"未找到 {region} 的 MasterData 配置"
-            region_config = config[region]['masterdata']
+            regions = asset_config.get('masterdata')
+            assert region in regions , f"未找到 {region} 的 masterdata 配置"
             cls._all_mgrs[region] = RegionMasterDbManager(
                 region=region, 
-                sources=[RegionMasterDbSource(**source) for source in region_config["sources"]],
-                version_update_interval=timedelta(minutes=region_config.get("version_update_interval", 10))
+                # sources=[RegionMasterDbSource(**source) for source in region_config["sources"]],
+                version_update_interval=timedelta(minutes=asset_config.get("default_version_update_interval", 10))
             )
         return cls._all_mgrs[region]
             
@@ -188,7 +188,7 @@ class MasterDataManager:
             logger.info(f"MasterData [{region}.{self.name}] 映射函数执行完成")
         await run_in_pool(self._build_indices, region)
 
-    async def _download_from_db(self, region: str, source: RegionMasterDbSource):
+    async def _download_from_db(self, region: str, db_mgr: RegionMasterDbManager):
         """
         从远程数据源更新数据
         """
@@ -199,9 +199,9 @@ class MasterDataManager:
         timeout = asset_config.get('default_masterdata_download_timeout')
         async def _download():
             if not download_fn:
-                self.data[region] = await download_masterdata(region, source.name, self.name)
+                self.data[region] = await download_masterdata(region, db_mgr.source.name, self.name)
             else:
-                self.data[region] = await download_fn(region, source.name)
+                self.data[region] = await download_fn(region, db_mgr.source.name)
         try:
             await asyncio.wait_for(_download(), timeout)
         except ApiError as e:
@@ -209,7 +209,7 @@ class MasterDataManager:
         except asyncio.TimeoutError:
             logger.warning(f"下载 MasterData [{region}.{self.name}] 超时")
             return
-        self.version[region] = source.version
+        self.version[region] = db_mgr.source.version
 
         # 缓存到本地
         versions = file_db.get("master_data_cache_versions", {})
@@ -250,9 +250,8 @@ class MasterDataManager:
                     logger.warning(f"MasterData [{region}.{self.name}] 从本地缓存加载失败: {e}")
             # 检查是否更新
             db_mgr = RegionMasterDbManager.get(region)
-            source = await db_mgr.get_latest_source()
-            if get_version_order(self.version.get(region, DEFAULT_VERSION)) < get_version_order(source.version):
-                await self._download_from_db(region, source)
+            if get_version_order(self.version.get(region, DEFAULT_VERSION)) < get_version_order(db_mgr.source.version):
+                await self._download_from_db(region, db_mgr)
 
     async def get_data(self, region: str):
         """
@@ -520,7 +519,7 @@ class RegionMasterDataCollection:
     
     async def get_version(self) -> str:
         mgr = RegionMasterDbManager.get(self._region)
-        return (await mgr.get_latest_source()).version
+        return mgr.source.version
 
 
 # ================================ MasterData自定义索引 ================================ #
@@ -568,9 +567,8 @@ def convert_compact_data(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     return ret
             
 @MasterDataManager.download_function("resourceBoxes", regions=COMPACT_DATA_REGIONS)
-async def resource_boxes_download_fn(region:str, source:str):
-    resbox = await download_masterdata(region,source,"resourceBoxes")
-    resbox_detail = await download_masterdata(region,source,"resourceBoxDetails")
+async def resource_boxes_download_fn(region:str, source:str | None = None):
+    resbox_and_detail = await download_masterdata(region, source, "resourceBoxes", "resourceBoxDetails")
     def convert(resbox, resbox_detail):
         details = {}
         for item in resbox_detail:
@@ -582,7 +580,7 @@ async def resource_boxes_download_fn(region:str, source:str):
             key = f"{item['resourceBoxPurpose']}_{item['id']}"
             item['details'] = details.get(key, [])
         return resbox
-    return await run_in_pool(convert, resbox, resbox_detail)
+    return await run_in_pool(convert, resbox_and_detail['resourceBoxes'], resbox_and_detail['resourceBoxDetails'])
 
 
 # ================================ MasterData自定义转换 ================================ #
@@ -668,6 +666,7 @@ RIP_IMG_CACHE_MAX_RES_CFG = asset_config.item('rip_img_cache_max_res')
 ONDEMAND_PREFIXES = ['event', 'gacha', 'music/long', 'mysekai', 'virtual_live']
 STARTAPP_PREFIXES = ['bonds_honor', 'honor', 'thumbnail', 'character', 'music', 'rank_live', 'stamp', 'home/banner', 'player_frame', 'areaitem']
 
+# 这些都不用了，使用server来管理
 def sekai_best_url_map(url: str) -> str:
     # 移除_rip
     url = url.replace("_rip", "")
@@ -734,18 +733,18 @@ DEFAULT_URL_MAP_METHODS = {
     "unipjsk": unipjsk_url_map,
 }
 
-class RegionRipAssetSource:
-    """
-    区服解包资源数据源
-    """
-    def __init__(self, name: str, url_map_method_name: str = None, prefixes: List[str] = None):
-        self.name = name
-        self.url_map_method = lambda x: x
-        if url_map_method_name:
-            self.url_map_method = DEFAULT_URL_MAP_METHODS[url_map_method_name]
-        elif self.name in DEFAULT_URL_MAP_METHODS:
-            self.url_map_method = DEFAULT_URL_MAP_METHODS[self.name]
-        self.prefixes = prefixes
+# class RegionRipAssetSource:
+#     """
+#     区服解包资源数据源
+#     """
+#     def __init__(self, name: str, url_map_method_name: str = None, prefixes: List[str] = None):
+#         self.name = name
+#         self.url_map_method = lambda x: x
+#         if url_map_method_name:
+#             self.url_map_method = DEFAULT_URL_MAP_METHODS[url_map_method_name]
+#         elif self.name in DEFAULT_URL_MAP_METHODS:
+#             self.url_map_method = DEFAULT_URL_MAP_METHODS[self.name]
+#         self.prefixes = prefixes
 
 class RegionRipAssetManger:
     """
@@ -754,9 +753,8 @@ class RegionRipAssetManger:
     """
     _all_mgrs = {}
 
-    def __init__(self, region: str, sources: List[RegionRipAssetSource]):
+    def __init__(self, region: str):
         self.region = region
-        self.sources = sources
         self.cache_dir = pjoin(DEFAULT_RIP_ASSET_DIR, region)
         self.cached_images: Dict[str, Image.Image] = {}
         create_folder(self.cache_dir)
@@ -765,12 +763,11 @@ class RegionRipAssetManger:
     def get(cls, region: str) -> "RegionRipAssetManger":
         if region not in cls._all_mgrs:
             # 从本地配置中获取
-            config = asset_config.get_all()
-            assert region in config and 'rip' in config[region], f"未找到 {region} 的 RipAsset 配置"
-            region_config = config[region]['rip']
+            regions = asset_config.get('asset')
+            assert region in regions, f"未找到 {region} 的 Asset 配置"
             cls._all_mgrs[region] = RegionRipAssetManger(
                 region=region, 
-                sources=[RegionRipAssetSource(**source) for source in region_config["sources"]]
+                # sources=[RegionRipAssetSource(**source) for source in region_config["sources"]]
             )
         return cls._all_mgrs[region]
 

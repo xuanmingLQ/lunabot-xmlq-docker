@@ -303,25 +303,36 @@ async def sync_music_alias():
     logger.info(f"开始从haruki同步 {cfg.regions} 的 {len(mids)} 首歌曲的别名")
     alias_db = MusicAliasDB.get_instance()
     alias_db.backup()
-    async def sync(mid: int) -> bool:
+    async def sync(mids: list)->int:
+        updated_num = 0
         try:
-            data = await get_music_alias(mid)
-            await asyncio.sleep(cfg.sync_batch_interval)  
-            assert data['music_id'] == mid
-            aliases = data['aliases']
-            # 排除韩语别名
-            aliases = [a for a in aliases if not any('\uac00' <= c <= '\ud7af' for c in a)]
-            added, removed = alias_db.update(mid, aliases, verbose=False)
-            if added or removed:
-                log_msg = f"同步歌曲 {mid} 的别名"
-                if added: log_msg += f"，添加 {len(added)} 条: {added}"
-                if removed: log_msg += f"，删除 {len(removed)} 条: {removed}"
-                logger.info(log_msg)
-                return True
-            return False
+            data = await get_music_alias(*mids)
         except Exception as e:
-            logger.warning(f"同步歌曲 {mid} 的别名失败: {get_exc_desc(e)}")
-    updated_num = sum(await batch_gather(*[sync(mid) for mid in mids], batch_size=cfg.sync_batch_size))
+            logger.warning(f"同步歌曲的别名失败: {get_exc_desc(e)}")
+            return updated_num
+        # 一次性请求多个歌曲
+        for mid in mids:
+            try:
+                music_alias = data[str(mid)]
+                assert music_alias['music_id'] == mid
+                aliases = music_alias['aliases']
+                # 排除韩语别名
+                aliases = [a for a in aliases if not any('\uac00' <= c <= '\ud7af' for c in a)]
+                added, removed = alias_db.update(mid, aliases, verbose=False)
+                if added or removed:
+                    log_msg = f"同步歌曲 {mid} 的别名"
+                    if added: log_msg += f"，添加 {len(added)} 条: {added}"
+                    if removed: log_msg += f"，删除 {len(removed)} 条: {removed}"
+                    logger.info(log_msg)
+                    updated_num += 1
+            except Exception as e:
+                logger.warning(f"同步歌曲 {mid} 的别名失败: {get_exc_desc(e)}")
+                continue
+        return updated_num
+    updated_num = 0
+    # 分批同步，因为一次可以请求多个，而且后台服务器也会分批请求，所以此处的sync_batch_size可以放大一点
+    for i in range(0, len(mids), cfg.sync_batch_size):
+        updated_num += await sync(mids[i:i+cfg.sync_batch_size])
     logger.info(f"别名同步完成，{updated_num} 首歌曲的别名发生变更")
     
 

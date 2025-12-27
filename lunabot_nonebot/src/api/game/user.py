@@ -29,8 +29,8 @@ def get_profile(region:str, user_id:str):
         }
     )
 def get_mysekai_photo():
-    raise ApiError("","暂不支持获取烤森照片")
+    raise ApiError("","暂不支持获取烤森照片", None)
 def get_mysekai_upload_time():
-    raise ApiError("","暂不支持获取烤森上传时间")
+    raise ApiError("","暂不支持获取烤森上传时间", None)
 def create_account():
-    raise ApiError("","不支持创建账号")
+    raise ApiError("","不支持创建账号", None)

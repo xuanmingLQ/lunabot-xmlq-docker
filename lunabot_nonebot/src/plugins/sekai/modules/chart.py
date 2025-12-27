@@ -4,11 +4,11 @@ from ..handler import *
 from ..asset import *
 from ..draw import *
 from .music import *
-import sekaiworld.scores
+from src.sekaiworld import scores as sekaiworld_scores
 
 # ======================= 处理逻辑 ======================= #
 
-CHART_CACHE_PATH = SEKAI_ASSET_DIR + "/chart/{region}/{mid}_{diff}.png"
+CHART_CACHE_PATH = SEKAI_ASSET_DIR + "/chart/{region}/{mid}_{diff}_{style}.png"
 CHART_ASSET_DIR = f"{SEKAI_ASSET_DIR}/chart_asset"
 
 NOTE_SIZES = {
@@ -30,10 +30,11 @@ async def generate_music_chart(
     style_sheet: str = 'black',
     use_cache: bool = True,
     refresh: bool = False,
+    skill: bool = False,
 ) -> Image.Image:
     if use_cache:
         await ctx.block_region(f"chart_{music_id}_{difficulty}")
-    cache_path = CHART_CACHE_PATH.format(region=ctx.region, mid=music_id, diff=difficulty)
+    cache_path = CHART_CACHE_PATH.format(region=ctx.region, mid=music_id, diff=difficulty, style=style_sheet)
     create_parent_folder(cache_path)
     if use_cache and not refresh and os.path.exists(cache_path):
         return open_image(cache_path)
@@ -73,7 +74,7 @@ async def generate_music_chart(
 
     with TempFilePath('svg') as svg_path:
         def get_svg(style_sheet):
-            score = sekaiworld.scores.Score.open(sus_path, encoding='UTF-8')
+            score = sekaiworld_scores.Score.open(sus_path, encoding='UTF-8')
 
             if random_clip_length_rate is not None:
                 clip_len = int(len(score.notes) * random_clip_length_rate)
@@ -84,9 +85,9 @@ async def generate_music_chart(
                     note.bar -= start_note_bar
                 score.events = []
                 score._init_notes()
-                score._init_events()    
+                score._init_events()
 
-            score.meta = sekaiworld.scores.score.Meta(
+            score.meta = sekaiworld_scores.score.Meta(
                 title=f"[{ctx.region.upper()}-{music_id}] {music_title}",
                 artist=artist,
                 difficulty=difficulty,
@@ -95,10 +96,11 @@ async def generate_music_chart(
                 songid=str(music_id),
             )
             style_sheet = Path(f'{CHART_ASSET_DIR}/css/{style_sheet}.css').read_text()
-            drawing = sekaiworld.scores.Drawing(
+            drawing = sekaiworld_scores.Drawing(
                 score=score,
                 style_sheet=style_sheet,
                 note_host=f'file://{note_host}',
+                skill=skill
             )
             drawing.svg().saveas(svg_path)
         await run_in_pool(get_svg, style_sheet)
@@ -130,7 +132,13 @@ pjsk_chart.check_cdrate(cd).check_wblist(gbl)
 async def _(ctx: SekaiHandlerContext):
     query = ctx.get_args().strip()
     assert_and_reply(query, MUSIC_SEARCH_HELP)
-    
+
+    style_sheet = 'black'
+    skill = False
+    if '技能' in query:
+        skill = True
+        style_sheet = 'white'
+        query = query.replace('技能', '').strip()
     refresh = False
     if 'refresh' in query:
         refresh = True
@@ -144,7 +152,7 @@ async def _(ctx: SekaiHandlerContext):
     msg = ""
     try:
         msg = await get_image_cq(
-            await generate_music_chart(ctx, mid, diff, refresh=refresh, use_cache=True),
+            await generate_music_chart(ctx, mid, diff, refresh=refresh, use_cache=True, style_sheet=style_sheet, skill=skill),
             low_quality=True,
         )
     except Exception as e:

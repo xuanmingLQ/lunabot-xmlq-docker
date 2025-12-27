@@ -35,7 +35,7 @@ pjsk_update.check_cdrate(cd).check_wblist(gbl)
 async def _(ctx: SekaiHandlerContext):
     mgr = RegionMasterDbManager.get(ctx.region)
     msg = f"{get_region_name(ctx.region)}MasterData数据源"
-    for source in await mgr.get_all_sources(force_update=True):
+    for source in await mgr.update():
         msg += f"\n[{source.name}] {source.version}"
     return await ctx.asend_reply_msg(msg.strip())
 
@@ -337,7 +337,7 @@ async def send_masterdata_update_notify(
         try:
             await send_group_msg_by_bot(bot, group_id, msg)
         except Exception as e:
-            logger.print_exc(f"在群聊发送 {group_id} 发送 {region} MasterData更新通知失败")
+            logger.print_exc(f"在群聊 {group_id} 发送 {region} MasterData更新通知失败")
             continue
 
 
