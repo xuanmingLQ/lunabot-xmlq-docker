@@ -4,6 +4,7 @@ from ..handler import *
 from ..asset import *
 from ..draw import *
 from .music import *
+from .deck import musicmetas_json
 from src.sekaiworld import scores as sekaiworld_scores
 
 # ======================= 处理逻辑 ======================= #
@@ -71,7 +72,16 @@ async def generate_music_chart(
     note_host = os.path.abspath(f'{CHART_ASSET_DIR}/notes')
 
     sus_path = await ctx.rip.get_asset_cache_path(f"music/music_score/{music_id:04d}_01_rip/{difficulty}", allow_error=False)
-
+    # music_meta
+    music_metas = find_by(await musicmetas_json.get(), "music_id", music_id, mode='all')
+    music_meta = None
+    if music_metas:
+        for music_meta in music_metas:
+            if music_meta['difficulty'] == difficulty:
+                break
+        else:
+            music_meta = None
+        
     with TempFilePath('svg') as svg_path:
         def get_svg(style_sheet):
             score = sekaiworld_scores.Score.open(sus_path, encoding='UTF-8')
@@ -100,7 +110,8 @@ async def generate_music_chart(
                 score=score,
                 style_sheet=style_sheet,
                 note_host=f'file://{note_host}',
-                skill=skill
+                skill=skill,
+                music_meta=music_meta
             )
             drawing.svg().saveas(svg_path)
         await run_in_pool(get_svg, style_sheet)

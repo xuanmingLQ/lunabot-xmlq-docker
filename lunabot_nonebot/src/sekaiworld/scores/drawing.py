@@ -113,7 +113,7 @@ class Drawing:
                         e.bar, "fever-duration", self.score.get_bar_by_time(self.music_meta["fever_end_time"])
                     ))
                     self.special_cover_objects.append(CoverText(
-                        e.bar, "skill-score", "+%.2f%%" % (self.music_meta['fever_score'] * 100)
+                        e.bar, "skill-score", "multi+%.2f%%" % (self.music_meta['fever_score'] * 100)
                     ))
 
             # Add skill cover object
@@ -138,8 +138,8 @@ class Drawing:
                     self.score.get_bar_by_time(self.score.get_time(e.bar) + 5)
                 ))
                 if self.music_meta:
-                    solo_skill_score = "+%.2f%%" % (self.music_meta['skill_score_solo'][skill_i] + 100)
-                    multi_skill_score = "+%.2f%%" % (self.music_meta['skill_score_multi'][skill_i] + 100)
+                    solo_skill_score = "+%.2f%%" % (self.music_meta['skill_score_solo'][skill_i] * 100)
+                    multi_skill_score = "+%.2f%%" % (self.music_meta['skill_score_multi'][skill_i] * 100)
                     append_text = solo_skill_score
                     if solo_skill_score != multi_skill_score:
                         append_text = "solo%s multi%s" % (solo_skill_score, multi_skill_score)

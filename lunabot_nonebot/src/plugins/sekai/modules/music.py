@@ -1197,8 +1197,8 @@ async def get_music_chart_length(ctx: SekaiHandlerContext, music_id: int, diffic
     sus_path = await ctx.rip.get_asset_cache_path(f"music/music_score/{music_id:04d}_01_rip/{difficulty}")
     if not sus_path:
         return None
-    import sekaiworld.scores
-    score = sekaiworld.scores.Score.open(sus_path, encoding='UTF-8')
+    from src.sekaiworld import scores as sekaiworld_scores
+    score = sekaiworld_scores.Score.open(sus_path, encoding='UTF-8')
     return timedelta(seconds=float(score.timed_events[-1][0]))
 
 # 合成简要歌曲列表图片

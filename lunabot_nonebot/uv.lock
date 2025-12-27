@@ -1034,8 +1034,8 @@ dependencies = [
     { name = "scikit-learn" },
     { name = "scipy" },
     { name = "sekai-deck-recommend-cpp" },
-    { name = "sekaiworld-scores" },
     { name = "setproctitle" },
+    { name = "svgwrite" },
     { name = "tenacity" },
     { name = "tencentcloud-sdk-python" },
     { name = "uvloop" },
@@ -1085,8 +1085,8 @@ requires-dist = [
     { name = "scikit-learn", specifier = ">=1.8.0" },
     { name = "scipy" },
     { name = "sekai-deck-recommend-cpp" },
-    { name = "sekaiworld-scores" },
     { name = "setproctitle" },
+    { name = "svgwrite", specifier = ">=1.4.3" },
     { name = "tenacity" },
     { name = "tencentcloud-sdk-python", specifier = ">=3.1.15" },
     { name = "uvloop" },
@@ -2553,18 +2553,6 @@ wheels = [
     { url = "https://mirrors.aliyun.com/pypi/packages/52/da/df52fcbba5dc9447001ef7b3d5ab1dae8c8fb36cfe974ec4ce0773cc0130/sekai_deck_recommend_cpp-0.2.21-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:277f7896c51de95d15ad266400eb2ea89a04f40c4aed3dfa9101a23e0dc2c738" },
     { url = "https://mirrors.aliyun.com/pypi/packages/9b/c9/f9383d65e76f8a6f2dc063b963c4da383ce41a4a0dbf35e08d7400748b02/sekai_deck_recommend_cpp-0.2.21-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:64dc426e0dfb6fe83c80fb7d446e3dc3cfa1c0cdb187a7262f2a67679a2bdc31" },
     { url = "https://mirrors.aliyun.com/pypi/packages/e5/bc/726c68401cd43714942605ab336b500bad825707ae4fae67ba1fc3eef425/sekai_deck_recommend_cpp-0.2.21-cp314-cp314t-win_amd64.whl", hash = "sha256:e2d0a03c7ffaf1378dffcc0fb95f1eeaf671cb8ad4fa1a97bf883125062b4e48" },
-]
-
-[[package]]
-name = "sekaiworld-scores"
-version = "0.1.10"
-source = { registry = "https://mirrors.aliyun.com/pypi/simple" }
-dependencies = [
-    { name = "svgwrite" },
-]
-sdist = { url = "https://mirrors.aliyun.com/pypi/packages/70/fd/ecee814e517bf4ce3417a470ffc9c88d813c1a8cf4840059b3cb137b1a82/sekaiworld_scores-0.1.10.tar.gz", hash = "sha256:f8ca2b1c6acecc23264962d7ea9443cc45fe06812e571d0029fe5a3f488c55bd" }
-wheels = [
-    { url = "https://mirrors.aliyun.com/pypi/packages/de/f2/488b37c3276cdacc923bae2196aa9819631c5dfe6385d39d1172e851c54c/sekaiworld.scores-0.1.10-py3-none-any.whl", hash = "sha256:cccf58e51ea2e56a4529744133828e200e5e401a6aa13e5866e996d4d30553ce" },
 ]
 
 [[package]]
