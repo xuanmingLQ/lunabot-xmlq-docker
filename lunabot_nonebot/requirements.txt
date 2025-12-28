@@ -6,8 +6,9 @@ asteval>=1.0.8
 bs4
 colour-science
 emoji==2.0.0
-ffmpeg
+ffmpeg-python
 google-genai
+imageio[ffmpeg]
 jieba>=0.42.1
 matplotlib
 mistune

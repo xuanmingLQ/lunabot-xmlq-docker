@@ -28,7 +28,18 @@ RUN --mount=type=cache,target=$UV_CACHE_DIR \
 
 # 配置环境变量
 # 确保虚拟环境中的 python 路径在最前面
-ENV PATH="/app/lunabot_autochat/.venv/bin:$PATH"
+ENV PATH="/app/lunabot_autochat/.venv/bin:$PATH" \
+    TZ=Asia/Shanghai
+# 设置时区
+RUN echo "deb https://mirrors.aliyun.com/debian/ bookworm main" > /etc/apt/sources.list \
+    && echo "deb https://mirrors.aliyun.com/debian/ bookworm-updates main" >> /etc/apt/sources.list \
+    && echo "deb https://mirrors.aliyun.com/debian-security bookworm-security main" >> /etc/apt/sources.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    -o Acquire::http::Timeout="120" \
+    -o Acquire::http::Max-Retries="5" \
+    tzdata openntpd \
+    && ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
 
 # 挂载卷 docker run -d -v /home/xmlq/codes/pycodes/nonebot/lunabot-sekai/data:/app/deck_recommender/data -p 45556:45556 --name deck-recommender deck-recommender:latest
 VOLUME ["/app/lunabot_autochat/config/", "/app/lunabot_autochat/data"]

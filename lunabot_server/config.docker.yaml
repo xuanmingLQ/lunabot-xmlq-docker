@@ -1,6 +1,6 @@
 disk-list:
     - mount-point: /
-xxx-api:
+haruki-api:
     token: "xxx"
     suite-api:
         endpoint: "https://xxx"

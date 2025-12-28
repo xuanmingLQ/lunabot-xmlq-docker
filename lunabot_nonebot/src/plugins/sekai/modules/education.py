@@ -699,7 +699,7 @@ async def compose_leader_count_image(ctx: SekaiHandlerContext, qid: int) -> Imag
 # 挑战信息
 pjsk_challenge_info = SekaiCmdHandler([
     "/pjsk challenge info", "/pjsk_challenge_info",
-    "/挑战信息", "/挑战详情", "/挑战进度", "/挑战一览", 
+    "/挑战信息", "/挑战详情", "/挑战进度", "/挑战一览", "/每日挑战", 
 ])
 pjsk_challenge_info.check_cdrate(cd).check_wblist(gbl)
 @pjsk_challenge_info.handle()

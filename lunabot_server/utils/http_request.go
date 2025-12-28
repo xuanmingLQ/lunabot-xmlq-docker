@@ -52,7 +52,9 @@ func HttpRequest(
 	case DataTypeJson:
 		// 解码jsons
 		var result interface{}
-		err = json.NewDecoder(resp.Body).Decode(&result)
+		decoder := json.NewDecoder(resp.Body)
+		decoder.UseNumber()
+		err = decoder.Decode(&result)
 		return result, err
 	case DataTypeBytes:
 		// 把即将关闭的body读出

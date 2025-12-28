@@ -1,4 +1,4 @@
-from typing import Union, Tuple, List, Optional
+from typing import Union, Tuple, List, Optional, Callable
 from PIL import Image, ImageFilter, ImageEnhance
 import threading
 import contextvars
@@ -145,6 +145,8 @@ class Widget:
         self._calc_h = None
         
         self.draw_funcs = []
+        
+        self.userdata = {}
 
         if Widget.get_current_widget():
             Widget.get_current_widget().add_item(self)
@@ -439,10 +441,10 @@ class HSplit(Widget):
         self.item_size_mode = mode
         return self
 
-    def set_item_bg(self, bg: WidgetBg):
+    def set_item_bg(self, bg: WidgetBg | Callable[[int, Widget], WidgetBg]):
         self.item_bg = bg
         return self
-
+    
     def _get_item_sizes(self):
         ratios = self.ratios if self.ratios else [item._get_self_size()[0] for item in self.items]
         if self.item_size_mode == 'expand':
@@ -471,12 +473,15 @@ class HSplit(Widget):
             return
         sizes = self._get_item_sizes()
         cur_x = 0
-        for item, (w, h) in zip(self.items, sizes):
+        for i, item, (w, h) in zip(range(len(sizes)), self.items, sizes):
             iw, ih = item._get_self_size()
             p.move_region((cur_x, 0), (w, h))
             x, y = 0, 0
             if self.item_bg and not item.omit_parent_bg:
-                self.item_bg.draw(p)
+                if callable(self.item_bg):
+                    self.item_bg(i, item).draw(p)
+                else:
+                    self.item_bg.draw(p)
             if self.item_halign == 'l':
                 x += 0
             elif self.item_halign == 'r':
@@ -542,7 +547,7 @@ class VSplit(Widget):
         self.item_size_mode = mode
         return self
 
-    def set_item_bg(self, bg: WidgetBg):
+    def set_item_bg(self, bg: WidgetBg | Callable[[int, Widget], WidgetBg]):
         self.item_bg = bg
         return self
 
@@ -574,11 +579,14 @@ class VSplit(Widget):
             return
         sizes = self._get_item_sizes()
         cur_y = 0
-        for item, (w, h) in zip(self.items, sizes):
+        for i, item, (w, h) in zip(range(len(sizes)), self.items, sizes):
             iw, ih = item._get_self_size()
             p.move_region((0, cur_y), (w, h))
             if self.item_bg and not item.omit_parent_bg:
-                self.item_bg.draw(p)
+                if callable(self.item_bg):
+                    self.item_bg(i, item).draw(p)
+                else:
+                    self.item_bg.draw(p)
             x, y = 0, 0
             if self.item_halign == 'l':
                 x += 0
@@ -662,7 +670,7 @@ class Grid(Widget):
         self.item_size_mode = mode
         return self
 
-    def set_item_bg(self, bg: WidgetBg):
+    def set_item_bg(self, bg: WidgetBg | Callable[[int, int, Widget], WidgetBg]):
         self.item_bg = bg
         return self
 
@@ -698,7 +706,10 @@ class Grid(Widget):
             y = i * (gh + self.vsep)
             p.move_region((x, y), (gw, gh))
             if self.item_bg and not item.omit_parent_bg:
-                self.item_bg.draw(p)
+                if callable(self.item_bg):
+                    self.item_bg(i, j, item).draw(p)
+                else:
+                    self.item_bg.draw(p)
             x, y = 0, 0
             iw, ih = item._get_self_size()
             if self.item_halign == 'l':

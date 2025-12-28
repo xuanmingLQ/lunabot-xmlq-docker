@@ -915,7 +915,10 @@ async def extract_bonus_options(ctx: SekaiHandlerContext, args: str) -> Dict:
         options.target_bonus_list = list(map(int, args.split()))
         assert options.target_bonus_list
     except:
-        raise ReplyException("使用方式: /加成组卡 其他参数 100 200 300 ...")
+        raise ReplyException("""
+使用方式: /加成组卡 加成 其他参数...
+例如: /加成组卡 120
+""".strip())
 
     return {
         'options': options,

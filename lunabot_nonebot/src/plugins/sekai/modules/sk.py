@@ -372,10 +372,14 @@ async def compose_skp_image(ctx: SekaiHandlerContext) -> Image.Image:
                 TextBox('-', item_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('c').set_padding((0, 0))
                 for source in sources.keys():
                     forcast_time_text = "-"
+                    style = item_style
                     if forecast := find_by_predicate(forecasts, lambda x: x.source == source):
                         if forecast.forecast_ts:
-                            forcast_time_text = get_readable_datetime(datetime.fromtimestamp(forecast.forecast_ts), show_original_time=False)
-                    TextBox(forcast_time_text, item_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('c').set_padding((0, 0))
+                            forecast_time = datetime.fromtimestamp(forecast.forecast_ts)
+                            forcast_time_text = get_readable_datetime(forecast_time, show_original_time=False)
+                            if datetime.now() - forecast_time > timedelta(hours=3):
+                                style = style.replace(color=(200, 0, 0))
+                    TextBox(forcast_time_text, style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('c').set_padding((0, 0))
 
                 bg = bg2 if bg == bg1 else bg1
                 TextBox("获取时间", title_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('c')

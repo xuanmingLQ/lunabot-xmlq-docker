@@ -226,3 +226,8 @@ sk:
       error_retry_minutes: 10
       url: https://jiiku831.github.io/{region}data/sekarun.js
       ranks: [10, 30, 50, 100, 500, 1000, 5000, 10000, 50000, 100000]
+  
+chart:
+  style_sheet_name: black
+  target_segment_seconds: 6.0
+  max_resolution: [4096, 4096]
