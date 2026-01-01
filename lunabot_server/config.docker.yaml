@@ -6,7 +6,7 @@ haruki-api:
         endpoint: "https://xxx"
         suite: "/public/{region}/suite/{user_id}"
         mysekai: "/public/{region}/mysekai/{user_id}"
-        default-suite-keys: ['userCards', 'userDecks', 'userGamedata', 'userMusics', 'userMusicResults', 'userMysekaiMaterials','userAreas','userChallengeLiveSoloDecks','userCharacters','userMysekaiCanvases','userMysekaiFixtureGameCharacterPerformanceBonuses','userMysekaiGates','userWorldBloomSupportDecks','userHonors','userMysekaiCharacterTalks','userChallengeLiveSoloResults','userChallengeLiveSoloStages','userChallengeLiveSoloHighScoreRewards','userEvents','userWorldBlooms','userMusicAchievements','userPlayerFrames','userMaterials','upload_time']
+        default-suite-keys: ['userCards', 'userDecks', 'userGamedata', 'userMusics', 'userMusicResults', 'userMysekaiMaterials','userAreas','userChallengeLiveSoloDecks','userCharacters','userMysekaiCanvases','userMysekaiFixtureGameCharacterPerformanceBonuses','userMysekaiGates','userWorldBloomSupportDecks','userHonors','userMysekaiCharacterTalks','userChallengeLiveSoloResults','userChallengeLiveSoloStages','userChallengeLiveSoloHighScoreRewards','userEvents','userWorldBlooms','userMusicAchievements','userPlayerFrames','userMaterials','upload_time','userCharacterMissionV2s', 'userCharacterMissionV2Statuses']
         allow-regions: [ 'jp', '...' ]
     public-api:
         endpoint: "https://xxx"
@@ -16,12 +16,13 @@ haruki-api:
         ranking-top100: "/api/{region}/event/{event_id}/ranking-top100"
         ranking-record-interval: 180
         allow-regions: [ 'jp', '...' ]
-    music-alias: 
-        base-url: "https://xxx/alias/v1/music/{music_id}"
-        # 此处的batch-interval是毫秒，每发出一个请求后等待多少毫秒再发出下一个
-        batch-interval: 200 # ms
-        batch-size: 8
-    timeout: 30
+    music-alias: "https://xxx/alias/v1/music/{music_id}"
+    # 此处的batch-interval是毫秒，每发出一个请求后等待多少毫秒再发出下一个
+    batch-interval: 10 # ms
+    # 同一时间最多有多少个线程请求haruki api
+    batch-size: 8
+    # timeout是秒，一次请求harukiapi的超时时间
+    timeout: 30 # s
 # sekai masterdata
 masterdata:
     timeout: 30
@@ -61,3 +62,16 @@ zap:
     show-line: true
     log-in-console: true
     retention-day: -1
+# 注意，这里的配置要和docker-compose.yaml中的一致
+# 在生产环境中，请将username和password修改掉
+pgsql:
+    path: "pgsql"
+    port: "5432"
+    config: "sslmode=disable TimeZone=Asia/Shanghai"
+    db-name: "lunabot"
+    username: "lunabot"
+    password: "lunabot"
+    max-idle-conns: 10
+    max-open-conns: 100
+    log-mode: "error"
+    log-zap: false

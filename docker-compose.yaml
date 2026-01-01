@@ -68,9 +68,9 @@ services:
     ports:
       - '18888:8888'
     # 如果你有配置数据库，在这里等待数据库启动完毕之后再启动，避免不必要的连接失败
-    # depends_on:
-    #   pgsql:
-    #     condition: service_healthy
+    depends_on:
+      pgsql:
+        condition: service_healthy
     #   redis:
     #     condition: service_healthy
     networks:
@@ -93,22 +93,45 @@ services:
     volumes:
       - ./data/sekai/deckrec:/app/deck_recommender/data/sekai/deckrec # 必须和nonebot挂载到同一位置
   
-  # autochat服务，这一项是可选的，如果你需要autochat服务可以将这一项取消注释
+  # autochat服务，这一项是可选的，如果你不需要autochat服务可以将这一项注释掉
   
-  # autochat:
-  #   build:
-  #     context: ./autochat
-  #     dockerfile: ./Dockerfile
-  #   container_name: lunabot-autochat
-  #   restart: always
-  #   # ports: # 这个服务没有开放端口
-  #   networks:
-  #     network:
-  #       ipv4_address: 172.8.0.16
-  #   volumes:
-  #     - ./lunabot_autochat/config:/app/lunabot_autochat/config
-  #     - ./data:/app/lunabot_autochat/data # 总之是同一个data
-  
-  # 如果你需要数据库，自行添加
-  # pgsql:
+  autochat:
+    build:
+      context: ./autochat
+      dockerfile: ./Dockerfile
+    container_name: lunabot-autochat
+    restart: always
+    # ports: # 这个服务没有开放端口
+    networks:
+      network:
+        ipv4_address: 172.8.0.16
+    volumes:
+      - ./lunabot_autochat/config:/app/lunabot_autochat/config
+      - ./data:/app/lunabot_autochat/data # 总之是同一个data
+    # pgsql数据库
+  pgsql:
+    image: postgres:18-alpine
+    container_name: lunabot-pgsql
+    restart: always
+    environment:
+      # 配置要和config.docker.yaml中一致
+      # 在生产环境中，请将username和password修改掉
+      POSTGRES_USER: lunabot           # 设置超级用户用户名
+      POSTGRES_PASSWORD: lunabot  # 设置超级用户密码
+      POSTGRES_DB: lunabot      # 设置初始创建的数据库名
+    healthcheck:
+      # pg_isready 是官方自带的工具，无需额外安装
+      # -U 指定用户名，-d 指定数据库（提高准确性）
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s      # 每 10 秒检查一次
+      timeout: 5s       # 每次检查超过 5 秒视为超时
+      retries: 5        # 连续失败 5 次后标记为 unhealthy
+      start_period: 10s # 容器启动后的前 10 秒不计入失败次数（给数据库启动时间）
+    ports:
+      - "15432:5432"
+    volumes:
+      - ./data/pgsql:/var/lib/postgresql
+    networks:
+      network:
+        ipv4_address: 172.8.0.21
   # redis:
