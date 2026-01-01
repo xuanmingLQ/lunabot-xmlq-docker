@@ -45,63 +45,89 @@ def simplify_msg(msg):
     return msg
 
 
+# 待插入数据库消息缓存
+msgs_to_insert: list[dict] = []
+
 # 记录消息
 async def record_message(bot: Bot, event: GroupMessageEvent):
-    if event.message_id in message_id_set: return
-    if not is_group_msg(event) and event.user_id == event.self_id: return
+    if event.message_id in message_id_set: 
+        return
+    if not is_group_msg(event) and event.user_id == event.self_id: 
+        return
+    if on_safe_mode() and not check_superuser(event):
+        return
+    
     message_id_set.add(event.message_id)
 
-    for hook in before_record_hook_funcs:
-        try: await hook(bot, event)
-        except: logger.print_exc(f"记录消息前hook {hook.__name__} 执行失败")
+    with ProfileTimer("record.total"):
+        with ProfileTimer("record.hooks.before"):
+            before_hook_tasks = []
+            for hook in before_record_hook_funcs:
+                async def run_before_hook(hook, bot, event):
+                    try: await hook(bot, event)
+                    except: logger.print_exc(f"记录消息前hook {hook.__name__} 执行失败")
+                before_hook_tasks.append(run_before_hook(hook, bot, event))
+            await asyncio.gather(*before_hook_tasks)
 
-    if record_msg_gbl.check(event, allow_super=False) or event.user_id == event.self_id:
-        time = datetime.fromtimestamp(event.time)
+        if record_msg_gbl.check(event, allow_super=False) or event.user_id == event.self_id:
+            with ProfileTimer("record.format_msg"):
+                time = datetime.fromtimestamp(event.time)
 
-        msg = get_msg(event)
-        msg_id = event.message_id
-        user_id = event.user_id
-        is_group = is_group_msg(event)
+                msg = get_msg(event)
+                msg_id = event.message_id
+                user_id = event.user_id
+                is_group = is_group_msg(event)
 
-        if is_group:
-            group_id = event.group_id
-            user_name = get_user_name_by_event(event)
-        else:
-            group_id = 0
-            user_name = (await get_stranger_info(user_id)).get('nickname', '')
+                if is_group:
+                    group_id = event.group_id
+                else:
+                    group_id = 0
+                user_name = get_user_name_by_event(event)
 
-        if is_group:
-            try: group_name = truncate(await get_group_name(bot, group_id), 16)
-            except: group_name = "未知群聊"
+                with ProfileTimer("record.get_group_name"):
+                    if is_group:
+                        try: group_name = truncate(await get_group_name(bot, group_id), 16)
+                        except: group_name = "未知群聊"
 
-        msg_for_log = simplify_msg(msg)
-        if not is_group:
-            logger.info(f"[{msg_id}] {user_name}({user_id}): {str(msg_for_log)}")
-        elif check_self_reply(event):
-            logger.info(f"[{msg_id}] {group_name}({group_id}) 自身回复: {str(msg_for_log)}")
-        elif check_self(event):
-            logger.info(f"[{msg_id}] {group_name}({group_id}) 自身消息: {str(msg_for_log)}")
-        else:
-            logger.info(f"[{msg_id}] {group_name}({group_id}) {user_name}({user_id}): {str(msg_for_log)}")
+                msg_for_log = simplify_msg(msg)
+                if not is_group:
+                    logger.info(f"[{msg_id}] {user_name}({user_id}): {str(msg_for_log)}")
+                elif check_self_reply(event):
+                    logger.info(f"[{msg_id}] {group_name}({group_id}) 自身回复: {str(msg_for_log)}")
+                elif check_self(event):
+                    logger.info(f"[{msg_id}] {group_name}({group_id}) 自身消息: {str(msg_for_log)}")
+                else:
+                    logger.info(f"[{msg_id}] {group_name}({group_id}) {user_name}({user_id}): {str(msg_for_log)}")
 
-        if record_msg_gbl.check(event, allow_super=False):
-            await insert_msg(
-                group_id=group_id,
-                time=time,
-                msg_id=msg_id,
-                user_id=user_id,
-                nickname=user_name,
-                msg=msg,
-            )
+            if record_msg_gbl.check(event, allow_super=False):
+                msgs_to_insert.append(dict(
+                    group_id=group_id,
+                    time=time,
+                    msg_id=msg_id,
+                    user_id=user_id,
+                    nickname=user_name,
+                    msg=msg,
+                ))
 
-    for hook in after_record_hook_funcs:
-        try: await hook(bot, event)
-        except: logger.print_exc(f"记录消息后hook {hook.__name__} 执行失败")
+        for hook in after_record_hook_funcs:
+            async def run_after_hook(hook, bot, event):
+                try: await hook(bot, event)
+                except: logger.print_exc(f"记录消息后hook {hook.__name__} 执行失败")
+            asyncio.create_task(run_after_hook(hook, bot, event))
 
-
+# 插入数据库消息定时任务
+@repeat_with_interval(config.get('insert_msg_loop_interval_seconds'), '插入消息到数据库', logger)
+async def insert_msg_task():
+    try:
+        if msgs_to_insert:
+            await insert_msgs(msgs_to_insert)
+    except Exception as e:
+        logger.print_exc(f"插入 {len(msgs_to_insert)} 条消息到数据库失败")
+    finally:
+        msgs_to_insert.clear()
 
 # 记录消息
-add = on_message(block=False, priority=-10000)
+add = on_message(block=False, priority=-1)
 @add.handle()
 async def _(bot: Bot, event: MessageEvent):
     if not gbl.check(event, allow_private=True, allow_super=False): return

@@ -2,8 +2,18 @@ log_level: "INFO"
 superuser:
   - 12345678
 
-group_member_name_cache_expire_seconds: 60  # 群成员名称缓存过期时间（秒）
-bot_group_ids_cache_expire_seconds: 60      # bot所在群ID缓存过期时间（秒）
+# 性能分析
+timer:
+  enable: false
+  log_prefix:
+    - handler
+    - sekaihandler
+
+group_member_name_cache_expire_seconds: 300   # 群成员名称缓存过期时间（秒）
+stranger_name_cache_expire_seconds: 300       # 陌生人名称缓存过期时间（秒）
+group_name_cache_expire_seconds: 3600         # 群名称缓存过期时间（秒）
+bot_group_cache_expire_seconds: 60            # bot所在群缓存过期时间（秒）
+bot_friend_cache_expire_seconds: 60           # bot好友缓存过期时间（秒）
 
 msg_send:
   rate_limit:

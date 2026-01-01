@@ -340,7 +340,7 @@ async def get_card_story_summary(ctx: SekaiHandlerContext, card: dict, refresh: 
     card_thumbs = await get_image_cq(resize_keep_ratio(concat_images(card_thumbs, 'h'), 80, mode='short'))
 
     summary_db = get_file_db(f"{SEKAI_DATA_DIR}/story_summary/card/{ctx.region}/{cid}.json", logger)
-    summary = summary_db.get("summary", {})
+    summary = summary_db.get_copy("summary", {})
     if not summary or refresh:
         await ctx.asend_reply_msg(f"{card_thumbs}正在生成卡面剧情总结...")
 

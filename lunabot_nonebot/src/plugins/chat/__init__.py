@@ -256,8 +256,7 @@ query_msg_ids = set()
 # 询问
 CHAT_CMDS = ["/chat", ]
 chat_request = CmdHandler(
-    [""], logger, 
-    block=False, priority=0, 
+    [""], logger, block=False, 
     help_command="/chat", help_trigger_condition=trigger_chat_help_condition,
 )
 @chat_request.handle()
@@ -266,6 +265,12 @@ async def _(ctx: HandlerContext):
     global sessions, query_msg_ids
     session = None
     try:
+        # 群组名单检测
+        if not gwl.check(event, allow_private=True, allow_super=True): return
+
+        # 自己回复指令的消息不回复
+        if check_self_reply(event): return
+
         # 获取内容
         query_msg = ctx.get_msg()
         query_text = extract_text(query_msg)
@@ -273,9 +278,6 @@ async def _(ctx: HandlerContext):
         query_cqs = extract_cq_code(query_msg)
         reply_msg = ctx.get_reply_msg()
         reply_id = ctx.get_reply_msg_id()
-
-        # 自己回复指令的消息不回复
-        if check_self_reply(event): return
 
         # 是否是/chat触发的消息
         triggered_by_chat_cmd = False
@@ -299,9 +301,6 @@ async def _(ctx: HandlerContext):
         # 空消息不回复
         if query_text.replace(f"@{bot_name}", "").strip() == "" or query_text is None:
             return
-
-        # 群组名单检测
-        if not gwl.check(event, allow_private=True, allow_super=True): return
 
         # 如果不是/chat触发的消息，并且在群组内或者自己对自己的私聊，则只有at机器人的消息才会被回复
         has_true_at = False

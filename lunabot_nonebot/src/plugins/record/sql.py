@@ -12,7 +12,7 @@ _conn: aiosqlite.Connection = None         # 连接
 _created_table_group_ids = set()             # 是否创建过表
 
 # 获得连接 
-async def get_conn(group_id):
+async def get_conn(group_id: int | list[int]):
     global _conn, _created_table_group_ids
     if _conn is None:
         create_parent_folder(DB_PATH)
@@ -20,19 +20,26 @@ async def get_conn(group_id):
         logger.info(f"连接sqlite数据库 {DB_PATH} 成功")
 
     # 创建消息表 (ID, 时间戳, 消息ID, 用户ID, 昵称, json内容)
-    if group_id not in _created_table_group_ids:
-        await _conn.execute(f"""
-            CREATE TABLE IF NOT EXISTS {MSG_TABLE_NAME.format(group_id)} (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                time INTEGER,
-                msg_id INTEGER,
-                user_id INTEGER,
-                nickname TEXT,
-                content TEXT
-            )
-        """)
+    table_created = False
+    if isinstance(group_id, int):
+        group_id = [group_id]
+    for gid in group_id:
+        if gid not in _created_table_group_ids:
+            await _conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {MSG_TABLE_NAME.format(gid)} (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    time INTEGER,
+                    msg_id INTEGER,
+                    user_id INTEGER,
+                    nickname TEXT,
+                    content TEXT
+                )
+            """)
+            _created_table_group_ids.add(gid)
+            table_created = True
+    if table_created:
         await _conn.commit()
-        _created_table_group_ids.add(group_id)
+
     return _conn
 
 # 插入到消息表
@@ -48,7 +55,34 @@ async def insert_msg(group_id, time: datetime, msg_id: int, user_id: int, nickna
     await conn.execute(insert_query, (time, msg_id, user_id, nickname, content))
     await conn.commit()
     logger.debug(f"插入消息 {msg_id} 到 {MSG_TABLE_NAME.format(group_id)} 表")
+
+# 插入多条消息到消息表
+async def insert_msgs(msgs: list):
+    group_id_msgs = {}
+    for msg in msgs:
+        group_id = msg['group_id']
+        group_id_msgs.setdefault(group_id, []).append(msg)
     
+    conn = await get_conn(list(group_id_msgs.keys()))
+
+    for group_id, group_msgs in group_id_msgs.items():
+        insert_query = f'''
+            INSERT INTO {MSG_TABLE_NAME.format(group_id)} (time, msg_id, user_id, nickname, content)
+            VALUES (?, ?, ?, ?, ?)
+        '''
+        values = []
+        for msg in group_msgs:
+            time = msg['time'].timestamp()
+            msg_id = msg['msg_id']
+            user_id = msg['user_id']
+            nickname = msg['nickname']
+            content = dumps_json(msg['msg'])
+            values.append((time, msg_id, user_id, nickname, content))
+        await conn.executemany(insert_query, values)
+
+    await conn.commit()
+
+
 # 消息表row转换为返回值
 def msg_row_to_ret(row):
     return {

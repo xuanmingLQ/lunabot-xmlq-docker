@@ -37,11 +37,11 @@ func (*UserApi) GetSuite(c *gin.Context) {
 	idTime, err := suiteService.GetUploadTime(c, userInfo.Region, userInfo.UserId)
 	localUploadTime := idTime[userInfo.UserId]
 	if err != nil {
-		global.LOG.Error("获取本地的 suite 上传时间失败", zap.Error(err))
+		global.LOG.Error(fmt.Sprintf("获取 %s 本地的 suite 上传时间失败", userInfo.UserId), zap.Error(err))
 	}
 	harukiUploadTime, err := harukiApiService.GetSuiteUploadTime(c, userInfo.Region, userInfo.UserId)
 	if err != nil {
-		global.LOG.Error("获取 Haruki 工具箱的 suite 上传时间失败", zap.Error(err))
+		global.LOG.Error(fmt.Sprintf("从 Haruki 工具箱获取 %s 的 suite 上传时间失败", userInfo.UserId), zap.Error(err))
 	}
 
 	// 如果本地的上传时间较新
@@ -50,7 +50,7 @@ func (*UserApi) GetSuite(c *gin.Context) {
 
 		if err != nil {
 			// 本地获取失败可以再尝试从haruki获取一次，因为可能本地数据有问题
-			global.LOG.Error("获取本地的 suite 数据失败", zap.Error(err))
+			global.LOG.Error(fmt.Sprintf("获取 %s 本地的 suite 数据失败", userInfo.UserId), zap.Error(err))
 		} else {
 			for _, f := range userInfo.Filter {
 				if v := suite[f]; v == nil {
@@ -69,7 +69,7 @@ func (*UserApi) GetSuite(c *gin.Context) {
 	// 如果haruki上传时间较新，从Haruki获取所有数据之后，保存到本地，同时把请求的数据返回
 	suite, err := harukiApiService.GetSuite(c, userInfo.Region, userInfo.UserId)
 	if err != nil {
-		global.LOG.Error("从 Haruki 工具箱获取 suite 数据失败", zap.Error(err))
+		global.LOG.Error(fmt.Sprintf("从 Haruki 工具箱获取 %s 的 suite 数据失败", userInfo.UserId), zap.Error(err))
 		response.FailWithMessage(fmt.Sprintf("从 Haruki 工具箱获取 suite 数据失败 %s", err.Error()), c)
 		return
 	}
@@ -152,17 +152,17 @@ func (*UserApi) GetMysekai(c *gin.Context) {
 	idTime, err := mysekaiService.GetUploadTime(c, userInfo.Region, userInfo.UserId)
 	localUploadTime := idTime[userInfo.UserId]
 	if err != nil {
-		global.LOG.Error("获取本地的 mysekai 上传时间失败", zap.Error(err))
+		global.LOG.Error(fmt.Sprintf("获取 %s 本地的 mysekai 上传时间失败", userInfo.UserId), zap.Error(err))
 	}
 	harukiUploadTime, err := harukiApiService.GetMysekaiUploadTime(c, userInfo.Region, userInfo.UserId)
 	if err != nil {
-		global.LOG.Error("从 Haruki 工具箱获取 mysekai 上传时间失败", zap.Error(err))
+		global.LOG.Error(fmt.Sprintf("从 Haruki 工具箱获取 %s 的 mysekai 上传时间失败", userInfo.UserId), zap.Error(err))
 	}
 	// 本地上传时间较新
 	if localUploadTime != nil && !localUploadTime.IsZero() && (harukiUploadTime == nil || localUploadTime.After(*harukiUploadTime)) {
 		mysekai, err := mysekaiService.GetDataWithFilter(c, userInfo)
 		if err != nil {
-			global.LOG.Error("获取本地的 mysekai 数据失败", zap.Error(err))
+			global.LOG.Error(fmt.Sprintf("获取 %s 本地的 mysekai 数据失败", userInfo.UserId), zap.Error(err))
 		} else {
 			response.OkWithData(mysekai, c)
 		}
@@ -170,7 +170,7 @@ func (*UserApi) GetMysekai(c *gin.Context) {
 	}
 	result, err := getAndSaveMysekai(c, userInfo)
 	if err != nil {
-		global.LOG.Error("从 Haruki 工具箱获取 mysekai 数据失败", zap.Error(err))
+		global.LOG.Error(fmt.Sprintf("从 Haruki 工具箱获取 %s 的 mysekai 数据失败", userInfo.UserId), zap.Error(err))
 		response.FailWithMessage(fmt.Sprintf("从 Haruki 工具箱获取 mysekai 数据失败: %s", err.Error()), c)
 		return
 	}
@@ -191,7 +191,7 @@ func (*UserApi) GetProfile(c *gin.Context) {
 		return
 	}
 	if profile, err := harukiApiService.GetProfile(c, userInfo.Region, userInfo.UserId); err != nil {
-		global.LOG.Error("请求 Haruki Api 获取 Profile 数据失败！", zap.Error(err))
+		global.LOG.Error(fmt.Sprintf("请求 Haruki Api 获取 %s 的 Profile 数据失败！", userInfo.UserId), zap.Error(err))
 		response.FailWithMessage("请求 Haruki Api 获取 Profile 数据失败！", c)
 		return
 	} else {
@@ -216,11 +216,11 @@ func (*UserApi) GetMysekaiUploadTime(c *gin.Context) {
 	idTime, localErr := mysekaiService.GetUploadTime(c, userInfo.Region, userInfo.UserId)
 	localUploadTime := idTime[userInfo.UserId]
 	if localErr != nil {
-		global.LOG.Error("获取本地的 mysekai 上传时间失败", zap.Error(localErr))
+		global.LOG.Error(fmt.Sprintf("获取 %s 本地的 mysekai 上传时间失败", userInfo.UserId), zap.Error(localErr))
 	}
 	harukiUploadTime, harukiErr := harukiApiService.GetMysekaiUploadTime(c, userInfo.Region, userInfo.UserId)
 	if harukiErr != nil {
-		global.LOG.Error("从 Haruki 工具箱获取 mysekai 上传时间失败", zap.Error(harukiErr))
+		global.LOG.Error(fmt.Sprintf("从 Haruki 工具箱获取 %s 的 mysekai 上传时间失败", userInfo.UserId), zap.Error(harukiErr))
 	}
 
 	response.OkWithData(
@@ -234,7 +234,7 @@ func (*UserApi) GetMysekaiUploadTime(c *gin.Context) {
 	if harukiUploadTime != nil && !harukiUploadTime.IsZero() && (localUploadTime == nil || harukiUploadTime.After(*localUploadTime)) {
 		_, err := getAndSaveMysekai(c, userInfo)
 		if err != nil {
-			global.LOG.Error("从 Haruki 工具箱获取 mysekai 数据失败", zap.Error(err))
+			global.LOG.Error(fmt.Sprintf("从 Haruki 工具箱获取 %s 的 mysekai 数据失败", userInfo.UserId), zap.Error(err))
 			return
 		}
 	}

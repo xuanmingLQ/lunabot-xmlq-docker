@@ -144,7 +144,7 @@ async def get_word_statistic(group_id, days, word):
 
 
 # 发送每日统计图
-sta = CmdHandler(["/sta day",], logger, priority=100)
+sta = CmdHandler(["/sta day",], logger)
 sta.check_cdrate(cd).check_wblist(gbl).check_group()
 @sta.handle()
 async def _(ctx: HandlerContext):
@@ -163,7 +163,7 @@ async def _(ctx: HandlerContext):
 
 
 # 发送长时间统计图
-sta_sum = CmdHandler(["/sta_sum", "/sta_summary"], logger, priority=101)
+sta_sum = CmdHandler(["/sta_sum", "/sta_summary"], logger)
 sta_sum.check_cdrate(cd).check_wblist(gbl).check_group()
 @sta_sum.handle()
 async def _(ctx: HandlerContext):
@@ -200,7 +200,7 @@ async def _(ctx: HandlerContext):
 
 
 # 发送总消息量关于时间的统计图
-sta_time = CmdHandler(["/sta_time"], logger, priority=101)
+sta_time = CmdHandler(["/sta_time"], logger)
 sta_time.check_cdrate(cd).check_wblist(gbl).check_group()
 @sta_time.handle()
 async def _(ctx: HandlerContext):
@@ -218,7 +218,7 @@ async def _(ctx: HandlerContext):
 
 
 # 发送某个词的统计图
-sta_word = CmdHandler(["/sta_word"], logger, priority=101)
+sta_word = CmdHandler(["/sta_word"], logger)
 sta_word.check_cdrate(cd).check_wblist(gbl).check_group()
 @sta_word.handle()
 async def _(ctx: HandlerContext):
@@ -294,7 +294,7 @@ async def cron_statistic():
 
 
 # 取消今天的统计自动发送
-cancel_today = CmdHandler("/sta_cancel_today", logger, priority=101)
+cancel_today = CmdHandler("/sta_cancel_today", logger)
 cancel_today.check_superuser().check_group().check_wblist(gbl).check_wblist(notify_gwl)
 @cancel_today.handle()
 async def _(ctx: HandlerContext):

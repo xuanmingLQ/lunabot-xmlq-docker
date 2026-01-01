@@ -177,7 +177,7 @@ class MasterDataManager:
         """
         cache_path = self.get_cache_path(region)
         assert os.path.exists(cache_path), "缓存不存在"
-        versions = file_db.get("master_data_cache_versions", {}).get(region, {})
+        versions = file_db.get_copy("master_data_cache_versions", {}).get(region, {})
         assert self.name in versions, "缓存版本无效"
         self.version[region] = versions[self.name]
         self.data[region] = await aload_json(cache_path)

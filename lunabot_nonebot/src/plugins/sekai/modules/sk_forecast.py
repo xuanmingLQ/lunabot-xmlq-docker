@@ -395,9 +395,9 @@ async def run_local_forecast(region: str, event_id: int) -> ForecastData | None:
     event_start = datetime.fromtimestamp(event['startAt'] / 1000)
     event_end = datetime.fromtimestamp(event['aggregateAt'] / 1000 + 1)
     if datetime.now() - event_start < timedelta(hours=cfg['start_after_hours']):
-        raise Exception(f"活动开始不足 {cfg['start_after_hours']} 小时，取消本地预测")
+        raise GetForecastException(f"活动开始不足 {cfg['start_after_hours']} 小时，取消本地预测")
     if event_end - datetime.now() < timedelta(hours=cfg['end_before_hours']):
-        raise Exception(f"距离活动结束不足 {cfg['end_before_hours']} 小时，取消本地预测")
+        raise GetForecastException(f"距离活动结束不足 {cfg['end_before_hours']} 小时，取消本地预测")
 
     with TempFilePath('.csv') as current_csv:
         await save_rankings_to_csv(region, event_id, current_csv)

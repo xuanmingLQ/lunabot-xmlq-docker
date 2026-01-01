@@ -1076,6 +1076,7 @@ dependencies = [
     { name = "tencentcloud-sdk-python" },
     { name = "uvloop" },
     { name = "wordcloud" },
+    { name = "yappi" },
     { name = "yt-dlp" },
     { name = "zhconv" },
     { name = "zhon" },
@@ -1127,8 +1128,9 @@ requires-dist = [
     { name = "tenacity" },
     { name = "tencentcloud-sdk-python", specifier = ">=3.1.15" },
     { name = "uvloop" },
-    { name = "wordcloud", specifier = ">=1.9.4" },
-    { name = "yt-dlp", specifier = ">=2025.12.8" },
+    { name = "wordcloud" },
+    { name = "yappi" },
+    { name = "yt-dlp" },
     { name = "zhconv", specifier = ">=1.4.3" },
     { name = "zhon" },
     { name = "zstandard" },
@@ -2996,6 +2998,32 @@ wheels = [
     { url = "https://mirrors.aliyun.com/pypi/packages/9f/9e/8d3cade7d9f18a8e406e3e9d701e721d1e41d1ac15bf292e71c817545a59/wordcloud-1.9.4-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:046300566df97b48640bd3efd94957a56941ada98cc23f811bc3f9b6a0ac1350" },
     { url = "https://mirrors.aliyun.com/pypi/packages/1d/d8/bdaf902471c3f0cc3538c8183cdd0ac61624c9552e5414d8d78ddedb6ce8/wordcloud-1.9.4-cp313-cp313-win32.whl", hash = "sha256:22357990a01d87579dbd38a06c2a5c7b601179c4e17517b1b8f73d25faa6a5ed" },
     { url = "https://mirrors.aliyun.com/pypi/packages/84/47/d482f7d2decc6e59e69e105b12c53d6d2967f0d703e664484c5f2f87fca8/wordcloud-1.9.4-cp313-cp313-win_amd64.whl", hash = "sha256:8c9a5af2fbcf029a19e827adbee58e86efe7536dca7a42380a8601113a86069b" },
+]
+
+[[package]]
+name = "yappi"
+version = "1.7.3"
+source = { registry = "https://mirrors.aliyun.com/pypi/simple" }
+sdist = { url = "https://mirrors.aliyun.com/pypi/packages/00/76/264b149c6a11bb9094336c87d904953d4ba05eb0a4172e7e2d6523285a48/yappi-1.7.3.tar.gz", hash = "sha256:bef71ad0595b600261668dcb1e18b935a7117a724c04d7be60d9d246e32d0928" }
+wheels = [
+    { url = "https://mirrors.aliyun.com/pypi/packages/cb/31/5a474c37184b5202afd52fcc669f05af830a856b54191b5889fce9f67c1c/yappi-1.7.3-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:3150e3a19f42baa5438b1b171d8b6f71a6c1da04bc6a4a494508b9acdda4f280" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/f7/67/34cb8bc23d57574e552ad14c5b414d05b97ff9fe82083b88d42d8519c4e8/yappi-1.7.3-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:30aaabee21b03920de502e6b975feb6d801e04ccbfd5a726b9cb6f86d5162ea9" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/d6/0a/01f50739e0a386988f53772cf7cdc7ff118e33c50c23a2e8171dba7d4d2d/yappi-1.7.3-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:e900c3d923e669ffbd6a1f25b1d066a74f2eb813e628e49b867b191cff406b9d" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/e2/88/a16244166d5dfac2eddf6fc41d02a827e1ed9840abce98caa228edb7a29d/yappi-1.7.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:585977229d6f5caa0c7680885b75de0ced391c69cc97fbea09982618ddb76750" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/dc/8e/3da20e2d0745a2ad15ee64ae4174d87acc885933b942fda91eb5af4b9148/yappi-1.7.3-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:286f4126bf83c861dbf16d1f6623d07e88e38e3872e763c94ace8eade1c63cc4" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/f3/01/5a864164459e7e83d693507662b3edea362f7652158d65f140b966520ba8/yappi-1.7.3-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:629c448699e9cd00c8a66e35b2fee829cac45a481ba1135ac26a54fc8d763d18" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/db/57/ff6320cc5bfca6f65bb17d82e2b11efadb433463d0dae70008a4753e4ad7/yappi-1.7.3-cp313-cp313-win32.whl", hash = "sha256:78a314b0a6dddc037e6abbde2658396c53a082f379b8bb8a4ded520796215044" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/9d/03/1f2dfe19e564fd270dc4aed475405e9136be7d10e77b1c114c1dbdfa9012/yappi-1.7.3-cp313-cp313-win_amd64.whl", hash = "sha256:9170c4ca0abd57fc21e0cde1dc01a940114194671c492758725eb2d3ce63050f" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/0e/c3/f88f5fe35ef23096c78822ea12c7e3321ef13a64a0487878b117f467c110/yappi-1.7.3-cp313-cp313-win_arm64.whl", hash = "sha256:e1331a3bef949c51edbe319090b9b1c6cc62315a766559ae901d1abd609216da" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/a2/61/e55f9d690e02fe21e082e771804fafa44877ddb6a0b6b909d9b1797f429b/yappi-1.7.3-cp314-cp314-macosx_10_15_x86_64.whl", hash = "sha256:80740ec24a41a1345af0b48dfc3d3a76c4fcde1d4b4182f385fe7b90b6a907c7" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/80/c7/f7d05e99eb36f526d509d9bbbc2edb0629e2261abda6f0406e8d7334d41e/yappi-1.7.3-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:3071be6efb8eb2dd6104dd3afb6e95d05229494c48fcffd3e14546302438974b" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/64/3a/1e03393f754af27e0f750f51600f6dad527625d66a762cba1d0525655585/yappi-1.7.3-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:5f4d2111cb748c5ba41b833a7e55dca9f2d3bc4bfaadc015e60580d3fc00b6db" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/8d/96/344db24ec28e8e2d0a55dadba03481f5c4ec4f9ac3ef59535337b92a8e41/yappi-1.7.3-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:73752b0386af72464fc9d574dc17f51db495780aee60faa49fe138018efad12e" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/4e/00/5b70fe11fdfe6e1cbdaff2e315e542767d35798304730498d5e0e56c9922/yappi-1.7.3-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:172da2c41c768edec9071028b12d34773aef7b109d0d642662170cd925d86e83" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/62/79/8609f6992ef8d7b20eab3f5ed3821390092e8b7207beee53eec7e82ac089/yappi-1.7.3-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:2849c2f0f21628cfbcd5a7fa3175ae52340735624775ffb263a86ac5c6706e91" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/14/84/011f2df98543ee41837b473af69839b60b8401beff9e1083c39e58441bb6/yappi-1.7.3-cp314-cp314-win32.whl", hash = "sha256:2622e3ebf0a07cbcaca70800aa6090317182c6a7389e1428c913b5c82f77d352" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/1d/58/e11f0a7b762eeb8a089e7d5627412a55a6b5227bf35aa8055081ee1fc8e6/yappi-1.7.3-cp314-cp314-win_amd64.whl", hash = "sha256:056bdebc61eb394f53c74cae208ae0ab3811147a5671921dd1fa126d682d8337" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/72/8a/766065664ee74d2820f0b84fa89585ecdb61674dd1414c639c2bc063cd95/yappi-1.7.3-cp314-cp314-win_arm64.whl", hash = "sha256:a7d3227bfa4adbd65f6f9ad3b487534b040f2232ab2465af00a2122df15eacc5" },
 ]
 
 [[package]]

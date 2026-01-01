@@ -42,7 +42,7 @@ class RpcSession(aiorpcx.RPCSession):
         self._logger.info(f'{self.name}RPC服务的客户端 {self.id} 断开连接')
 
     async def handle_request(self, request):
-        self._logger.debug(f'收到{self.name}RPC服务的客户端 {self.id} 的请求 {request}')
+        self._logger.debug(f'收到{self.name}RPC服务的客户端 {self.id} 的请求 {request.method}')
         handler_fn = _rpc_handlers.get(self.name + "." + request.method)
         token = get_cfg_or_value(_rpc_service_tokens[self.name])
 
@@ -51,10 +51,11 @@ class RpcSession(aiorpcx.RPCSession):
             await asyncio.sleep(1.0)
             raise aiorpcx.RPCError(-32000, 'Invalid or missing token')
 
-        request.args = [self.id] + request.args[1:]
-        coro = aiorpcx.handler_invocation(handler_fn, request)()
-        self._logger.debug(f'{self.name}RPC服务的客户端 {self.id} 的请求 {request} 返回: {coro}')
-        return await coro
+        args = request.args[1:]
+        request.args = [self.id] + args
+        resp = await aiorpcx.handler_invocation(handler_fn, request)()
+        self._logger.debug(f'{self.name}RPC服务的客户端 {self.id} 的请求 {request.method} {args} 返回: {resp}')
+        return resp
     
 
 def get_session_factory(

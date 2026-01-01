@@ -722,7 +722,7 @@ async def _(ctx: SekaiHandlerContext):
 pjsk_custom_room_score_control = SekaiCmdHandler([
     "/pjsk custom room score", "/custom room score",
     "/自定义房间控分", "/自定义房控分", "/自定义控分"
-], regions=["jp"], priority=101)
+], regions=["jp"])
 pjsk_custom_room_score_control.check_cdrate(cd).check_wblist(gbl)
 @pjsk_custom_room_score_control.handle()
 async def _(ctx: SekaiHandlerContext):
@@ -747,7 +747,7 @@ async def _(ctx: SekaiHandlerContext):
 pjsk_music_meta = SekaiCmdHandler([
     "/pjsk music meta", "/music meta",
     "/歌曲meta", 
-], regions=["jp"], priority=101)
+], regions=["jp"], priority=1)
 pjsk_music_meta.check_cdrate(cd).check_wblist(gbl)
 @pjsk_music_meta.handle()
 async def _(ctx: SekaiHandlerContext):
@@ -775,7 +775,7 @@ async def _(ctx: SekaiHandlerContext):
 pjsk_music_board = SekaiCmdHandler([
     "/pjsk music board", "/music board",
     "/歌曲排行", "/歌曲比较", "/歌曲排名",
-], regions=["jp"], priority=101)
+], regions=["jp"], priority=1)
 pjsk_music_board.check_cdrate(cd).check_wblist(gbl)
 @pjsk_music_board.handle()
 async def _(ctx: SekaiHandlerContext):

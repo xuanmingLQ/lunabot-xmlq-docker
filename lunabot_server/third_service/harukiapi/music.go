@@ -53,6 +53,7 @@ func (*MusicService) GetMusicAlias(ctx context.Context, MusicIds []string) (v ma
 				return
 			}
 			req.Header.Set("Accept-Language", "en")
+			req.Header.Set("Connection", "keep-alive")
 			result, err := utils.HttpRequest(
 				req,
 				utils.DataTypeJson,

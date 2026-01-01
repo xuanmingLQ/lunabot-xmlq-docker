@@ -1,6 +1,6 @@
 from src.utils import *
 from ..record import before_record_hook, after_record_hook
-from .sql import insert_hash, query_by_hash, query_by_unique_id
+from .sql import insert_hashes, query_by_hash, query_by_unique_id
 from asyncio import CancelledError, Queue
 
 config = Config("water")
@@ -336,7 +336,7 @@ async def _(ctx: HandlerContext):
 
 # ------------------------------------------ Hash记录 ------------------------------------------ #
 
-task_queue = Queue()
+msgs_to_insert: list[dict] = []
 MAX_TASK_NUM = 10
 
 # 添加HASH记录任务
@@ -346,58 +346,58 @@ async def record_new_message(bot: Bot, event: MessageEvent):
     if not is_group_msg(event): return
     group_id = event.group_id
     nickname = get_user_name_by_event(event)
-    task_queue.put_nowait({
+    msgs_to_insert.append({
+        'group_id': group_id,
         'msg_id': event.message_id,
         'time': event.time,
-        'group_id': group_id,
         'user_id': event.user_id,
         'nickname': nickname,
         'msg': get_msg(event),
     })
+    while len(msgs_to_insert) > MAX_TASK_NUM:
+        msgs_to_insert.pop(0)
+        logger.info(f'任务队列大小超过限制，丢弃最早的任务')
 
 # HASH记录任务任务处理
-@async_task('Hash记录', logger)
+@repeat_with_interval(config.get('insert_hashes_interval_seconds'), '插入Hash记录', logger)
 async def handle_task():
-    while True:
-        while task_queue.qsize() > MAX_TASK_NUM:
-            task_queue.get_nowait()
-            logger.info(f'任务队列大小超过限制: {task_queue.qsize()}>{MAX_TASK_NUM} 丢弃任务')
-        try:
-            task = await task_queue.get()
-        except CancelledError:
-            break
-        if not task: break 
+    try:
+        if msgs_to_insert:
+            hashes = []
+            for msg in msgs_to_insert:
+                try:
+                    hs = await get_hash_from_msg(msg['group_id'], msg['msg'])
+                    for h in hs:
+                        hashes.append({
+                            'group_id': msg['group_id'],
+                            'type': h['type'],
+                            'hash': h['hash'],
+                            'msg_id': msg['msg_id'],
+                            'user_id': msg['user_id'],
+                            'nickname': msg['nickname'],
+                            'time': msg['time'],
+                            'unique_id': h.get('file_unique', ""),
+                        })
+                except Exception as e:
+                    logger.print_exc(f'获取消息 {msg["msg_id"]} 的Hash失败')
+            await insert_hashes(hashes)
+            logger.debug(f'插入由 {len(msgs_to_insert)} 条消息生成的 {len(hashes)} 条Hash记录')
+    finally:
+        msgs_to_insert.clear()
 
-        try:
-            hashes = await get_hash_from_msg(task['group_id'], task['msg'])
-            for hash in hashes:
-                await insert_hash(
-                    group_id=task['group_id'],
-                    type=hash['type'],
-                    hash=hash['hash'],
-                    msg_id=task['msg_id'],
-                    user_id=task['user_id'],
-                    nickname=task['nickname'],
-                    time=task['time'],
-                    unique_id=hash.get('file_unique', ""),
-                )
-                logger.debug(f'添加hash记录: {task["msg_id"]} {hash["type"]} {hash["hash"]}')
-
-        except Exception as e:
-            logger.print_exc(f'记录消息 {task["msg_id"]} 的Hash失败')
 
 
 # ------------------------------------------ 自动水果 ------------------------------------------ #
 
 @after_record_hook
 async def check_auto_water(bot: Bot, event: MessageEvent):
+    await asyncio.sleep(3)
+
     if not is_group_msg(event): return
 
     if event.user_id == int(bot.self_id): return
     excluded_users = set(file_db.get('excluded_users', {}).get(str(event.group_id), []))
     if event.user_id in excluded_users: return
-
-    await asyncio.sleep(1)
 
     group_id = event.group_id
     check_types = {t for t, gwl in autowater_gwls.items() if gwl.check_id(group_id)}

@@ -92,5 +92,6 @@ func (*Masterdata) get(ctx context.Context, Url string) (v interface{}, err erro
 		return
 	}
 	req.Header.Set("Accept-Language", "en")
+	req.Header.Set("Connection", "keep-alive")
 	return utils.HttpRequest(req, utils.DataTypeJson)
 }

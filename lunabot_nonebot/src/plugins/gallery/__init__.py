@@ -147,7 +147,7 @@ class GalleryManager:
         return True
 
     async def _async_check_duplicated(self, pic: GalleryPic, gallery: Gallery) -> int | None:
-        with Timer("check_duplicated", logger):
+        with ProfileTimer("gallery.check_duplicated"):
             def check():
                 for p in gallery.pics:
                     if pic.is_same(p):
@@ -445,11 +445,11 @@ def process_image_for_gallery(path: str, sub_type: int):
     filesize_mb = os.path.getsize(path) / (1024 * 1024)
     if filesize_mb > size_limit:
         pixels = get_image_pixels(img)
-        with Timer("limit_image_by_pixels", logger):
+        with ProfileTimer("gallery.limit_image_by_pixels"):
             img = limit_image_by_pixels(img, int(pixels * size_limit / filesize_mb))
         scaled = True
 
-    with Timer("save_image", logger):
+    with ProfileTimer("gallery.save_image"):
         if need_to_gif:
             # 转换为静态gif
             save_transparent_static_gif(img, path)
@@ -635,7 +635,7 @@ async def _(ctx: HandlerContext):
 
 gall_alias_add = CmdHandler([
     '/gall alias add', '/gall add alias',
-], logger, priority=200)
+], logger, priority=1)
 gall_alias_add.check_cdrate(cd).check_wblist(gbl).check_superuser()
 @gall_alias_add.handle()
 async def _(ctx: HandlerContext):
@@ -1068,7 +1068,7 @@ async def _(ctx: HandlerContext):
 
 gall_download_all = CmdHandler([
     '/gall download link', '/下载图包', '/下载看', '/下载画廊',
-], logger, priority=101)
+], logger, priority=1)
 gall_download_all.check_cdrate(cd).check_wblist(gbl)
 @gall_download_all.handle()
 async def _(ctx: HandlerContext):

@@ -351,7 +351,7 @@ async def operate_image(ctx: HandlerContext) -> Image.Image:
         return await ctx.asend_reply_msg(await get_image_cq(img))
 
 # 图片操作Handler
-img_op = CmdHandler(["/img", "/imgtool"], logger, priority=100)
+img_op = CmdHandler(["/img", "/imgtool"], logger, priority=1)
 img_op.check_cdrate(cd).check_wblist(gbl)
 @img_op.handle()
 async def _(ctx: HandlerContext):
@@ -359,35 +359,35 @@ async def _(ctx: HandlerContext):
     await operate_image(ctx)
 
 # push图片列表Handler
-img_push = CmdHandler(["/img push", "/imgpush"], logger, priority=101)
+img_push = CmdHandler(["/img push", "/imgpush"], logger, priority=1)
 img_push.check_cdrate(cd).check_wblist(gbl)
 @img_push.handle()
 async def _(ctx: HandlerContext):
     await add_image_to_list(ctx)
 
 # pop图片列表Handler
-img_pop = CmdHandler(["/img pop", "/imgpop"], logger, priority=101)
+img_pop = CmdHandler(["/img pop", "/imgpop"], logger, priority=1)
 img_pop.check_cdrate(cd).check_wblist(gbl)
 @img_pop.handle()
 async def _(ctx: HandlerContext):
     await pop_image_from_list(ctx)
 
 # 清空图片列表Handler
-img_clear = CmdHandler(["/img clear", "/imgclear"], logger, priority=101)
+img_clear = CmdHandler(["/img clear", "/imgclear"], logger, priority=1)
 img_clear.check_cdrate(cd).check_wblist(gbl)
 @img_clear.handle()
 async def _(ctx: HandlerContext):
     await clear_image_list(ctx)
 
 # 翻转图片列表Handler
-img_reverse = CmdHandler(["/img rev", "/imgrev"], logger, priority=101)
+img_reverse = CmdHandler(["/img rev", "/imgrev"], logger, priority=1)
 img_reverse.check_cdrate(cd).check_wblist(gbl)
 @img_reverse.handle()
 async def _(ctx: HandlerContext):
     await reverse_image_list(ctx)
 
 # 图片操作帮助handler
-img_help = CmdHandler(["/img help", "/imghelp", "/imgh"], logger, priority=101)
+img_help = CmdHandler(["/img help", "/imghelp", "/imgh"], logger, priority=1)
 img_help.check_cdrate(cd).check_wblist(gbl)
 @img_help.handle()
 async def _(ctx: HandlerContext):
@@ -1264,7 +1264,7 @@ register_all_ops()
 
 
 # 检查图片消息
-img_check = CmdHandler(["/img check", '/img_check', '/img info', '/img_info'], logger, priority=101)
+img_check = CmdHandler(["/img check", '/img_check', '/img info', '/img_info'], logger, priority=1)
 img_check.check_cdrate(cd).check_wblist(gbl)
 @img_check.handle()
 async def _(ctx: HandlerContext):
@@ -1483,7 +1483,7 @@ async def _(ctx: HandlerContext):
     return await ctx.asend_reply_msg(await get_image_cq(img))
 
 # 取色器
-color_picker = CmdHandler(['/pick', '/取色'], logger, priority=101)
+color_picker = CmdHandler(['/pick', '/取色'], logger, priority=1)
 color_picker.check_cdrate(cd).check_wblist(gbl)
 @color_picker.handle()
 async def _(ctx: HandlerContext):

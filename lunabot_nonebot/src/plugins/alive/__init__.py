@@ -75,7 +75,7 @@ async def alive_check():
         if not st.group_reported and st.cur_state == CONNECT_STATE:
             for group_id in REPORT_GROUPS_CFG.get():
                 try:
-                    await send_group_msg_by_bot(group_id, f"{self_id}恢复连接")
+                    await send_group_msg_by_bot(group_id, f"{self_id} 恢复连接")
                 except Exception as e:
                     logger.print_exc(f"向群 {group_id} 发送恢复连接通知失败")
             st.group_reported = True
@@ -117,7 +117,7 @@ async def get_status_image_cq():
     return await get_image_cq(await render_current_template(collected=collected, bg=bg))
 
 
-status = CmdHandler(["status", "状态"], logger, only_to_me=True, block=True, priority=1000)
+status = CmdHandler(["status", "状态"], logger, only_to_me=True, block=True)
 status.check_cdrate(cd)
 @status.handle()
 async def _(ctx: HandlerContext):

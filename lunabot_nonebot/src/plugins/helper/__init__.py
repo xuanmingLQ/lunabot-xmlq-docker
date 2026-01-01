@@ -14,7 +14,7 @@ HELP_IMG_SCALE = 0.8
 HELP_IMG_WIDTH = 600
 HELP_IMG_INTERSECT = 20
 
-help = CmdHandler(['/help', '/帮助'], logger, block=True, priority=99999)
+help = CmdHandler(['/help', '/帮助'], logger, block=True)
 help.check_wblist(gbl).check_cdrate(cd)
 @help.handle()
 async def _(ctx: HandlerContext):

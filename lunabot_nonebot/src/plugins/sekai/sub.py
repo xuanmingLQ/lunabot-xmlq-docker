@@ -47,7 +47,7 @@ class SekaiGroupSubHelper:
 
     def _register_handlers(self):
         sub_commands = [cmd.format(id=self.id) for cmd in GROUP_SUB_COMMANDS]
-        sub = SekaiCmdHandler(sub_commands, regions=self.regions, priority=101, help_command='/pjsk订阅')
+        sub = SekaiCmdHandler(sub_commands, regions=self.regions, priority=1, help_command='/pjsk订阅')
         sub.check_cdrate(cd).check_wblist(gbl).check_superuser()
         @sub.handle()
         async def _(ctx: SekaiHandlerContext):
@@ -55,7 +55,7 @@ class SekaiGroupSubHelper:
             return await ctx.asend_reply_msg(f"开启本群 {self.name}({get_region_name(ctx.region)})")
         
         unsub_commands = [cmd.format(id=self.id) for cmd in GROUP_UNSUB_COMMANDS]
-        unsub = SekaiCmdHandler(unsub_commands, regions=self.regions, priority=101, help_command='/pjsk取消订阅')
+        unsub = SekaiCmdHandler(unsub_commands, regions=self.regions, priority=1, help_command='/pjsk取消订阅')
         unsub.check_cdrate(cd).check_wblist(gbl).check_superuser()
         @unsub.handle()
         async def _(ctx: SekaiHandlerContext):
@@ -96,7 +96,7 @@ group_sub_list = CmdHandler([
     "/pjsk群聊订阅",
     "/pjsk 群聊订阅",
     "/pjsk开启",
-], logger, priority=100)
+], logger)
 group_sub_list.check_cdrate(cd).check_wblist(gbl)
 @group_sub_list.handle()
 async def _(ctx: HandlerContext):
@@ -173,7 +173,7 @@ class SekaiUserSubHelper:
 
     def _register_handlers(self):
         sub_commands = [cmd.format(id=self.id) for cmd in USER_SUB_COMMANDS]
-        sub = SekaiCmdHandler(sub_commands, regions=self.regions, priority=101)
+        sub = SekaiCmdHandler(sub_commands, regions=self.regions, priority=1)
         sub.check_cdrate(cd).check_wblist(gbl)
         @sub.handle()
         async def _(ctx: SekaiHandlerContext):
@@ -195,7 +195,7 @@ class SekaiUserSubHelper:
             return await ctx.asend_reply_msg(msg.strip())
         
         unsub_commands = [cmd.format(id=self.id) for cmd in USER_UNSUB_COMMANDS]
-        unsub = SekaiCmdHandler(unsub_commands, regions=self.regions, priority=101)
+        unsub = SekaiCmdHandler(unsub_commands, regions=self.regions, priority=1)
         unsub.check_cdrate(cd).check_wblist(gbl)
         @unsub.handle()
         async def _(ctx: SekaiHandlerContext):
@@ -235,7 +235,7 @@ class SekaiUserSubHelper:
 user_sub_list = SekaiCmdHandler([
     "/pjsk_sub_list", "/pjsk sub list", "/pjsk_subs", "/pjsk subs",
     "/pjsk订阅", "/pjsk 订阅", "/pjsk用户订阅", "/pjsk 用户订阅",
-], priority=100)
+], priority=1)
 user_sub_list.check_cdrate(cd).check_wblist(gbl)
 @user_sub_list.handle()
 async def _(ctx: HandlerContext):

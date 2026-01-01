@@ -20,8 +20,6 @@ import requests
 from .data import get_data_path
 
 SUPERUSER_CFG = global_config.item('superuser')
-GROUP_MEMBER_NAME_CACHE_EXPIRE_SECONDS_CFG = global_config.item('group_member_name_cache_expire_seconds')
-BOT_GROUP_IDS_CACHE_EXPIRE_SECONDS_CFG = global_config.item('bot_group_ids_cache_expire_seconds')
 
 DEFAULT_LQ_IMAGE_QUALITY_CFG = global_config.item('msg_send.low_quality_image.default_quality')
 DEFAULT_LQ_IMAGE_SUBSAMPLING_CFG = global_config.item('msg_send.low_quality_image.default_subsampling')
@@ -205,30 +203,32 @@ bot_module._check_reply = _mp_check_reply
 
 # ============================ API调用 ============================ #
 
-@dataclass
-class GroupMemberNameCache:
-    name: str
-    expire_time: datetime
-_group_member_name_cache: dict[tuple[int, int], GroupMemberNameCache] = {}
+class ExpirableCache:
+    def __init__(self, default_expire_seconds: int | ConfigItem):
+        self.cache: dict[Any, tuple[Any, datetime]] = {}
+        self.default_expire_seconds = default_expire_seconds
+    
+    def get(self, key: Any) -> Any | None:
+        for k in list(self.cache.keys()):
+            if self.cache[k][1] <= datetime.now():
+                del self.cache[k]
+        if key in self.cache:
+            value, expire_time = self.cache[key]
+            if expire_time > datetime.now():
+                return value
+            else:
+                del self.cache[key]
+        return None
 
-@dataclass
-class StrangerNameCache:
-    name: str
-    expire_time: datetime
-_stranger_name_cache: dict[int, StrangerNameCache] = {}
+    def set(self, key: Any, value: Any, expire_seconds: int | None = None):
+        expire_seconds = expire_seconds or get_cfg_or_value(self.default_expire_seconds)
+        self.cache[key] = (value, datetime.now() + timedelta(seconds=expire_seconds))
 
-@dataclass
-class BotGroupsCache:
-    group_ids: set[int]
-    expire_time: datetime
-_bot_group_cache: dict[int, BotGroupsCache] = {}
-
-@dataclass
-class BotFriendsCache:
-    friend_ids: set[int]
-    expire_time: datetime
-_bot_friend_cache: dict[int, BotFriendsCache] = {}
-
+_group_member_name_cache = ExpirableCache(global_config.item('group_member_name_cache_expire_seconds'))
+_stranger_name_cache = ExpirableCache(global_config.item('stranger_name_cache_expire_seconds'))
+_group_name_cache = ExpirableCache(global_config.item('group_name_cache_expire_seconds'))
+_bot_group_cache = ExpirableCache(global_config.item('bot_group_cache_expire_seconds'))
+_bot_friend_cache = ExpirableCache(global_config.item('bot_friend_cache_expire_seconds'))
 
 def get_user_name_by_event(event_or_reply: MessageEvent | Reply) -> str:
     """
@@ -245,41 +245,28 @@ async def get_group_member_name(group_id: int, user_id: int) -> str:
     调用API获取群聊中的用户名（带缓存） 如果有群名片则返回群名片 否则返回昵称
     """
     global _group_member_name_cache
-    # 清空过期缓存
-    for key in list(_group_member_name_cache.keys()):
-        if _group_member_name_cache[key].expire_time <= datetime.now():
-            del _group_member_name_cache[key]
-
-    group_id, user_id = int(group_id), int(user_id)
-    cache = _group_member_name_cache.get((group_id, user_id))
-    if cache and cache.expire_time > datetime.now():
-        return cache.name
-    
+    key = (group_id, user_id)
+    if cache := _group_member_name_cache.get(key):
+        return cache
     bot = await aget_group_bot(group_id, raise_exc=True)
     info = await bot.call_api('get_group_member_info', **{'group_id': group_id, 'user_id': user_id})
     name = info.get('card') or info.get('nickname', str(user_id))
-    _group_member_name_cache[(group_id, user_id)] = GroupMemberNameCache(
-        name=name,
-        expire_time=datetime.now() + timedelta(seconds=GROUP_MEMBER_NAME_CACHE_EXPIRE_SECONDS_CFG.get())
-    )
+    _group_member_name_cache.set(key, name)
     return name
 
 async def get_group_ids(bot: Bot, refresh: bool = False) -> set[int]:
     """
     获取加入的所有群id
     """
-    bot_id = int(bot.self_id)
-    if bot_id in _bot_group_cache:
-        cache = _bot_group_cache[bot_id]
-        if cache.expire_time > datetime.now() and not refresh:
-            return cache.group_ids
+    global _bot_group_cache
+    key = int(bot.self_id)
+    if not refresh:
+        if cache := _bot_group_cache.get(key):
+            return cache
     group_list = await bot.call_api('get_group_list')
-    cache = BotGroupsCache(
-        group_ids=set(int(group['group_id']) for group in group_list),
-        expire_time=datetime.now() + timedelta(seconds=BOT_GROUP_IDS_CACHE_EXPIRE_SECONDS_CFG.get()),
-    )
-    _bot_group_cache[bot_id] = cache
-    return cache.group_ids
+    group_ids = set(int(group['group_id']) for group in group_list)
+    _bot_group_cache.set(key, group_ids)
+    return group_ids
 
 async def get_group_list(bot: Bot) -> List[dict]:
     """
@@ -306,40 +293,25 @@ async def get_stranger_info(bot: Bot, user_id: int) -> dict:
     获取陌生人信息
     """
     global _stranger_name_cache
-    # 清空过期缓存
-    for key in list(_stranger_name_cache.keys()):
-        if _stranger_name_cache[key].expire_time <= datetime.now():
-            del _stranger_name_cache[key]
-    
-    user_id = int(user_id)
-    cache = _stranger_name_cache.get(user_id)
-    if cache and cache.expire_time > datetime.now():
-        return {'user_id': int, 'nickname': cache.name }
-    
-    info = await bot.call_api('get_stranger_info', **{'user_id': user_id})
+    if cache := _stranger_name_cache.get(int(user_id)):
+        return {'user_id': int(user_id), 'nickname': cache}
+    info = await bot.call_api('get_stranger_info', **{'user_id': int(user_id)})
     name = info.get('nickname', str(user_id))
-    _stranger_name_cache[user_id] = StrangerNameCache(
-        name=name,
-        expire_time=datetime.now() + timedelta(seconds=GROUP_MEMBER_NAME_CACHE_EXPIRE_SECONDS_CFG.get())
-    )
+    _stranger_name_cache.set(int(user_id), name)
     return info
 
-async def get_friend_ids(bot: Bot) -> List[int]:
+async def get_friend_ids(bot: Bot) -> set[int]:
     """
     获取好友列表id
     """
-    bot_id = int(bot.self_id)
-    if bot_id in _bot_friend_cache:
-        cache = _bot_friend_cache[bot_id]
-        if cache.expire_time > datetime.now():
-            return list(cache.friend_ids)
+    global _bot_friend_cache
+    key = int(bot.self_id)
+    if cache := _bot_friend_cache.get(key):
+        return cache
     friend_list = await bot.call_api('get_friend_list')
-    cache = BotFriendsCache(
-        friend_ids=set(int(friend['user_id']) for friend in friend_list),
-        expire_time=datetime.now() + timedelta(seconds=BOT_GROUP_IDS_CACHE_EXPIRE_SECONDS_CFG.get()),
-    )
-    _bot_friend_cache[bot_id] = cache
-    return list(cache.friend_ids)
+    friend_ids = set(int(friend['user_id']) for friend in friend_list)
+    _bot_friend_cache.set(key, friend_ids)
+    return friend_ids
 
 async def get_group_users(bot: Bot, group_id: int) -> List[dict]:
     """
@@ -351,8 +323,13 @@ async def get_group_name(bot: Bot, group_id: int) -> str:
     """
     获取群聊名
     """
+    global _group_name_cache
+    if cache := _group_name_cache.get(int(group_id)):
+        return cache
     group_info = await bot.call_api('get_group_info', **{'group_id': int(group_id)})
-    return group_info['group_name']
+    name = group_info.get('group_name', str(group_id))
+    _group_name_cache.set(int(group_id), name)
+    return name
 
 async def get_group(bot: Bot, group_id: int) -> dict:
     """
@@ -833,6 +810,11 @@ def check_self_reply(event: MessageEvent):
     """
     return int(event.message_id) in _bot_reply_msg_ids
 
+def on_safe_mode() -> bool:
+    """
+    检查当前是否处于安全模式
+    """
+    return utils_file_db.get('safe_mode')
 
 # ============================ 消息发送 ============================ #
 
@@ -2016,7 +1998,7 @@ class CmdHandler:
             commands: Union[str, SegCmd, List[Union[str, SegCmd]]], 
             logger: Logger, 
             error_reply=True, 
-            priority=100, 
+            priority=0, 
             block=True, 
             only_to_me=False, 
             disabled=False, 
@@ -2189,87 +2171,90 @@ class CmdHandler:
 
                 if self.disabled:
                     return
-                
+
                 # 安全模式
-                if utils_file_db.get('safe_mode') and not check_superuser(event):
-                    return
-
-                # 禁止私聊自己的指令生效
-                if not is_group_msg(event) and event.user_id == event.self_id:
-                    self.logger.warning(f'取消私聊自己的指令处理')
+                if on_safe_mode() and not check_superuser(event):
                     return
                 
-                # 禁止bot回复自己的消息重复触发
-                if not self.allow_bot_reply_msg and event.message_id in _bot_reply_msg_ids:
-                    return
-                
-                # 检测群聊是否启用
-                if self.check_group_enabled and is_group_msg(event) and check_group_disabled(event.group_id):
-                    # self.logger.warning(f'取消未启用群聊 {event.group_id} 的指令处理')
-                    return
-
-                # 检测黑名单
-                if check_in_blacklist(event.user_id):
-                    self.logger.warning(f'取消黑名单用户 {event.user_id} 的指令处理')
-                    return
-
-                # 权限检查
-                if self.private_group_check == "group" and not is_group_msg(event):
-                    return
-                if self.private_group_check == "private" and is_group_msg(event):
-                    return
-                if self.superuser_check and not check_superuser(event, **self.superuser_check):
-                    return
-                for wblist, kwargs in self.wblist_checks:
-                    if not wblist.check(event, **kwargs):
+                with ProfileTimer("handler.check_privilege"):
+                    # 禁止私聊自己的指令生效
+                    if not is_group_msg(event) and event.user_id == event.self_id:
+                        self.logger.warning(f'取消私聊自己的指令处理')
+                        return
+                    
+                    # 禁止bot回复自己的消息重复触发
+                    if not self.allow_bot_reply_msg and event.message_id in _bot_reply_msg_ids:
+                        return
+                    
+                    # 检测群聊是否启用
+                    if self.check_group_enabled and is_group_msg(event) and check_group_disabled(event.group_id):
+                        # self.logger.warning(f'取消未启用群聊 {event.group_id} 的指令处理')
                         return
 
-                # 每日上限检查
-                if not check_send_msg_daily_limit() and not check_superuser(event, **self.superuser_check):
-                    return
-
-                # cd检查
-                for cdrate, kwargs in self.cdrate_checks:
-                    if not (await cdrate.check(event, **kwargs)):
+                    # 检测黑名单
+                    if check_in_blacklist(event.user_id):
+                        self.logger.warning(f'取消黑名单用户 {event.user_id} 的指令处理')
                         return
 
-                # 上下文构造
-                context = HandlerContext()
-                context.time = datetime.now()
-                context.handler = self
-                context.nonebot_handler = self.handler
-                context.bot = bot
-                context.event = event
-                context.logger = self.logger
+                    # 权限检查
+                    if self.private_group_check == "group" and not is_group_msg(event):
+                        return
+                    if self.private_group_check == "private" and is_group_msg(event):
+                        return
+                    if self.superuser_check and not check_superuser(event, **self.superuser_check):
+                        return
+                    for wblist, kwargs in self.wblist_checks:
+                        if not wblist.check(event, **kwargs):
+                            return
 
-                plain_text = event.message.extract_plain_text()
-                cmd_starts = []
-                for cmd in sorted(self.commands, key=len, reverse=True):
-                    start = plain_text.find(cmd)
-                    cmd_starts.append((cmd, start if start != -1 else float('inf')))
-                cmd_starts.sort(key=lambda x: x[1])
-                context.trigger_cmd = cmd_starts[0][0]
-                context.arg_text = plain_text[cmd_starts[0][1] + len(context.trigger_cmd):]
+                    # 每日上限检查
+                    if not check_send_msg_daily_limit() and not check_superuser(event, **self.superuser_check):
+                        return
 
-                if any([banned_cmd in context.trigger_cmd for banned_cmd in self.banned_cmds]):
-                    return
+                    # cd检查
+                    for cdrate, kwargs in self.cdrate_checks:
+                        if not (await cdrate.check(event, **kwargs)):
+                            return
 
-                context.message_id = event.message_id
-                context.user_id = event.user_id
-                if is_group_msg(event):
-                    context.group_id = event.group_id
+                with ProfileTimer("handler.construct_context"):
+                    # 上下文构造
+                    context = HandlerContext()
+                    context.time = datetime.now()
+                    context.handler = self
+                    context.nonebot_handler = self.handler
+                    context.bot = bot
+                    context.event = event
+                    context.logger = self.logger
 
-                # 记录到历史
-                global _cmd_history, MAX_CMD_HISTORY
-                if context.trigger_cmd:
-                    _cmd_history.append(context)
-                    if len(_cmd_history) > MAX_CMD_HISTORY:
-                        _cmd_history = _cmd_history[-MAX_CMD_HISTORY:]
+                    plain_text = event.message.extract_plain_text()
+                    cmd_starts = []
+                    for cmd in sorted(self.commands, key=len, reverse=True):
+                        start = plain_text.find(cmd)
+                        cmd_starts.append((cmd, start if start != -1 else float('inf')))
+                    cmd_starts.sort(key=lambda x: x[1])
+                    context.trigger_cmd = cmd_starts[0][0]
+                    context.arg_text = plain_text[cmd_starts[0][1] + len(context.trigger_cmd):]
+
+                    if any([banned_cmd in context.trigger_cmd for banned_cmd in self.banned_cmds]):
+                        return
+
+                    context.message_id = event.message_id
+                    context.user_id = event.user_id
+                    if is_group_msg(event):
+                        context.group_id = event.group_id
+
+                    # 记录到历史
+                    global _cmd_history, MAX_CMD_HISTORY
+                    if context.trigger_cmd:
+                        _cmd_history.append(context)
+                        if len(_cmd_history) > MAX_CMD_HISTORY:
+                            _cmd_history = _cmd_history[-MAX_CMD_HISTORY:]
 
                 try:
-                    # 额外处理，用于子类自定义
-                    context = await self.additional_context_process(context)
-                    assert context, "额外处理返回值不能为空"
+                    with ProfileTimer("handler.additional_context_process"):
+                        # 额外处理，用于子类自定义
+                        context = await self.additional_context_process(context)
+                        assert context, "额外处理返回值不能为空"
 
                     # 帮助文档
                     if not self.disable_help:

@@ -126,7 +126,7 @@ class Translator:
     async def translate(self, img: Image.Image, lang=None, debug=False) -> TranslationResult:
         self.model_name = get_model_preset("translator")
         
-        with Timer() as t_total:
+        with ProfileTimer() as t_total:
             if not self.model_loaded:
                 raise Exception('OCR模型未加载')
             if lang is None:
@@ -149,7 +149,7 @@ class Translator:
             logger.info(f'开始图片翻译任务{tid} lang={lang}')
 
             # ocr
-            with Timer() as t_ocr:
+            with ProfileTimer() as t_ocr:
                 try:
                     npy_img = np.array(img)
                     ocr_result = await run_in_pool(reader.readtext, npy_img, pool=ocr_pool_executor)
@@ -170,7 +170,7 @@ class Translator:
             logger.info(f'翻译任务{tid}OCR框绘制完成')
 
             # merge
-            with Timer() as t_merge:
+            with ProfileTimer() as t_merge:
                 if self.merge_method == 'llm':
                     # query llm to merge
                     @retry(reraise=True, stop=stop_after_attempt(self.llm_retry), wait=wait_fixed(3))
@@ -244,7 +244,7 @@ class Translator:
             logger.info(f'翻译任务{tid}合并框绘制完成')
                 
             # query llm to translate
-            with Timer() as t_trans:
+            with ProfileTimer() as t_trans:
                 @retry(reraise=True, stop=stop_after_attempt(self.llm_retry), wait=wait_fixed(3))
                 async def query_trans():
                     session = ChatSession()
@@ -270,7 +270,7 @@ class Translator:
                 logger.info(f'翻译任务{tid}LLM翻译结果请求完成')
 
             # query llm to correct
-            with Timer() as t_correct:
+            with ProfileTimer() as t_correct:
                 @retry(reraise=True, stop=stop_after_attempt(self.llm_retry), wait=wait_fixed(3))
                 async def query_correct():
                     session = ChatSession()

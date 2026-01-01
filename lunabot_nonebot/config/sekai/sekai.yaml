@@ -135,6 +135,7 @@ gacha:
     pickup: 100
 
 mysekai:
+  msr_push_interval_seconds: 3
   msr_push_concurrency: 4
 
   map_image_scale: 0.75

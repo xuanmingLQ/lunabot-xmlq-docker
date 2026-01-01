@@ -82,65 +82,68 @@ class SekaiCmdHandler(CmdHandler):
 
     async def additional_context_process(self, context: HandlerContext):
         # 处理指令区服前缀
-        cmd_region = None
-        original_trigger_cmd = context.trigger_cmd
-        for region in ALL_SERVER_REGIONS:
-            if context.trigger_cmd.strip().startswith(f"/{region}"):
-                cmd_region = region
-                context.trigger_cmd = context.trigger_cmd.replace(f"/{region}", "/")
-                break
-        
-        # 处理前缀参数
-        prefix_arg = None
-        for prefix in self.prefix_args:
-            if context.trigger_cmd.startswith(f"/{prefix}"):
-                prefix_arg = prefix
-                context.trigger_cmd = context.trigger_cmd.replace(f"/{prefix}", "/")
-                break
+        with ProfileTimer("sekaihandler.parse_prefix"):
+            cmd_region = None
+            original_trigger_cmd = context.trigger_cmd
+            for region in ALL_SERVER_REGIONS:
+                if context.trigger_cmd.strip().startswith(f"/{region}"):
+                    cmd_region = region
+                    context.trigger_cmd = context.trigger_cmd.replace(f"/{region}", "/")
+                    break
+            
+            # 处理前缀参数
+            prefix_arg = None
+            for prefix in self.prefix_args:
+                if context.trigger_cmd.startswith(f"/{prefix}"):
+                    prefix_arg = prefix
+                    context.trigger_cmd = context.trigger_cmd.replace(f"/{prefix}", "/")
+                    break
 
-        user_default_region = get_user_default_region(context.user_id, None)
-        cmd_default_region = self.available_regions[0]
+            user_default_region = get_user_default_region(context.user_id, None)
+            cmd_default_region = self.available_regions[0]
 
-        # 如果没有指定区服，并且用户有默认区服，并且用户默认区服在可用区服列表中，则使用用户的默认区服
-        if not cmd_region and user_default_region and user_default_region in self.available_regions:
-            cmd_region = user_default_region
-        # 如果没有指定区服，并且用户没有默认区服，则使用指令的默认区服
-        elif not cmd_region:
-            cmd_region = cmd_default_region
+            # 如果没有指定区服，并且用户有默认区服，并且用户默认区服在可用区服列表中，则使用用户的默认区服
+            if not cmd_region and user_default_region and user_default_region in self.available_regions:
+                cmd_region = user_default_region
+            # 如果没有指定区服，并且用户没有默认区服，则使用指令的默认区服
+            elif not cmd_region:
+                cmd_region = cmd_default_region
 
         assert_and_reply(
             cmd_region in self.available_regions, 
             f"该指令不支持 {cmd_region} 服务器，可用的服务器有: {', '.join(self.available_regions)}"
         )
 
-        # 处理账号指定参数
-        args = context.get_args()
-        uid_arg = None
-        if self.parse_uid_arg:
-            # 匹配 u数字 并且前一个字母不能是m
-            index_match = re.search(r'(?<!m)u(\d{1,2})', args)
-            if index_match:
-                uid_arg = f"u{index_match.group(1)}"
-                args = args.replace(index_match.group(0), '', 1).strip()
-            # 匹配游戏id
-            uid_match = re.search(r'(\d{14,20})', args)
-            if uid_match:
-                uid_arg = uid_match.group(1)
-                args = args.replace(uid_match.group(0), '', 1).strip()
+        with ProfileTimer("sekaihandler.parse_account"):
+            # 处理账号指定参数
+            args = context.get_args()
+            uid_arg = None
+            if self.parse_uid_arg:
+                # 匹配 u数字 并且前一个字母不能是m
+                index_match = re.search(r'(?<!m)u(\d{1,2})', args)
+                if index_match:
+                    uid_arg = f"u{index_match.group(1)}"
+                    args = args.replace(index_match.group(0), '', 1).strip()
+                # 匹配游戏id
+                uid_match = re.search(r'(\d{14,20})', args)
+                if uid_match:
+                    uid_arg = uid_match.group(1)
+                    args = args.replace(uid_match.group(0), '', 1).strip()
         
-        # 构造新的上下文
-        params = context.__dict__.copy()
-        params['arg_text'] = args
-        params['region'] = cmd_region
-        params['original_trigger_cmd'] = original_trigger_cmd
-        params['md'] = RegionMasterDataCollection(cmd_region)
-        params['rip'] = RegionRipAssetManger.get(cmd_region)
-        params['static_imgs'] = StaticImageRes()
-        params['create_from_region'] = False
-        params['prefix_arg'] = prefix_arg
-        params['uid_arg'] = uid_arg
+        with ProfileTimer("sekaihandler.construct_ctx"):
+            # 构造新的上下文
+            params = context.__dict__.copy()
+            params['arg_text'] = args
+            params['region'] = cmd_region
+            params['original_trigger_cmd'] = original_trigger_cmd
+            params['md'] = RegionMasterDataCollection(cmd_region)
+            params['rip'] = RegionRipAssetManger.get(cmd_region)
+            params['static_imgs'] = StaticImageRes()
+            params['create_from_region'] = False
+            params['prefix_arg'] = prefix_arg
+            params['uid_arg'] = uid_arg
 
-        return SekaiHandlerContext(**params)
+            return SekaiHandlerContext(**params)
 
 
 

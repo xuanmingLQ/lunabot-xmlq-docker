@@ -696,7 +696,7 @@ async def compose_mysekai_harvest_map_image(ctx: SekaiHandlerContext, harvest_ma
 
 # 合成mysekai资源图片 返回图片列表
 async def compose_mysekai_res_image(ctx: SekaiHandlerContext, qid: int, show_harvested: bool, check_time: bool) -> List[Image.Image]:
-    with Timer("msr:get_basic_profile", logger):
+    with ProfileTimer("msr.get_basic_profile"):
         uid = get_player_bind_id(ctx)
 
         # 字节服额外验证
@@ -708,7 +708,7 @@ async def compose_mysekai_res_image(ctx: SekaiHandlerContext, qid: int, show_har
 
         basic_profile = await get_basic_profile(ctx, uid)
 
-    with Timer("msr:get_mysekai_info", logger):
+    with ProfileTimer("msr.get_mysekai_info"):
         mysekai_info, pmsg = await get_mysekai_info(ctx, qid, raise_exc=True)
 
     upload_time = datetime.fromtimestamp(mysekai_info['upload_time'])
@@ -841,7 +841,7 @@ async def compose_mysekai_res_image(ctx: SekaiHandlerContext, qid: int, show_har
         site_res_num[i] = (site_id, [x[0] for x in res_nums])
 
     # 绘制资源位置图
-    with Timer("msr:compose_harvest_map", logger):
+    with ProfileTimer("msr.compose_harvest_map"):
         for i in range(len(site_res_num)):
             site_id, res_num = site_res_num[i]
             site_harvest_map = find_by(harvest_maps, "mysekaiSiteId", site_id)
@@ -948,7 +948,7 @@ async def compose_mysekai_res_image(ctx: SekaiHandlerContext, qid: int, show_har
         add_watermark(canvas)
         add_watermark(canvas2, text=DEFAULT_WATERMARK_CFG.get() + ", map view from MiddleRed")
 
-    with Timer("msr:get_imgs", logger):
+    with ProfileTimer("msr.get_imgs"):
         return await asyncio.gather(canvas.get_img(), canvas2.get_img())
 
 # 获取mysekai家具类别的名称和图片
@@ -1971,11 +1971,11 @@ def update_bd_msr_limit_uid(ctx: SekaiHandlerContext, qid: int) -> str:
 pjsk_mysekai_res = SekaiCmdHandler([
     "/pjsk mysekai res", "/msr", "/msmap", "/msa",
     "/mysekai 资源", 
-], regions=MYSEKAI_REGIONS, priority=101)
+], regions=MYSEKAI_REGIONS, priority=1)
 pjsk_mysekai_res.check_cdrate(cd).check_wblist(gbl)
 @pjsk_mysekai_res.handle()
 async def _(ctx: SekaiHandlerContext):
-    with Timer("msr", logger):
+    with ProfileTimer("msr.total"):
         if ctx.region in bd_msr_sub.regions and not bd_msr_sub.is_subbed(ctx.region, ctx.group_id): 
             raise ReplyException(f"不支持{get_region_name(ctx.region)}的msr查询")
         await ctx.block_region(key=f"{ctx.user_id}", timeout=0, err_msg="正在处理你的msr查询，请稍候")
@@ -2220,8 +2220,8 @@ async def _(ctx: SekaiHandlerContext):
 
 # ======================= 定时任务 ======================= #
 
-# MSR自动推送 & MSR订阅更新
-@repeat_with_interval(200, 'MSR自动推送', logger)
+# MSR自动推送 & MSR订阅更新 关了吧
+# @repeat_with_interval(config.get('mysekai.msr_push_interval_seconds'), 'MSR自动推送', logger)
 async def msr_auto_push():
     for region in ALL_SERVER_REGIONS:
         region_name = get_region_name(region)

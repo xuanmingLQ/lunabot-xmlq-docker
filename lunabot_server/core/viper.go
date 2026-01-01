@@ -3,11 +3,13 @@ package core
 import (
 	"flag"
 	"fmt"
+	"lunabot/xmlq/server/core/internal"
 	"lunabot/xmlq/server/global"
 	"os"
 	"path/filepath"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
 )
 
@@ -48,9 +50,24 @@ func getConfigPath() (config string) {
 		fmt.Printf("正在使用命令行的 '-c' 参数传递的值, config 的路径为 %s\n", config)
 		return
 	}
+	if env := os.Getenv(internal.ConfigEnv); env != "" { // 判断环境变量 GVA_CONFIG
+		config = env
+		fmt.Printf("正在使用 %s 环境变量, config 的路径为 %s\n", internal.ConfigEnv, config)
+		return
+	}
+	switch gin.Mode() { // 根据 gin 模式文件名
+	case gin.DebugMode:
+		config = internal.ConfigDebugFile
+	case gin.ReleaseMode:
+		config = internal.ConfigReleaseFile
+	case gin.TestMode:
+		config = internal.ConfigTestFile
+	}
+	fmt.Printf("正在使用 gin 的 %s 模式运行, config 的路径为 %s\n", gin.Mode(), config)
+
 	_, err := os.Stat(config)
 	if err != nil || os.IsNotExist(err) {
-		config = "config.yaml"
+		config = internal.ConfigDefaultFile
 		fmt.Printf("配置文件路径不存在, 使用默认配置文件路径: %s\n", config)
 	}
 

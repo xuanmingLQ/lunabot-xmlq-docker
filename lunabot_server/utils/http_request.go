@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 const (
@@ -39,6 +40,15 @@ func HttpRequest(
 	if hc == nil {
 		hc = &http.Client{
 			Transport: &http.Transport{
+				// 整个连接池对所有主机的最大空闲连接数
+				MaxIdleConns: 100,
+				// 每个目标主机（Host）保持的最大空闲连接数
+				MaxIdleConnsPerHost: 20,
+				// 连接空闲多久后关闭
+				IdleConnTimeout: 90 * time.Second,
+				// 握手超时
+				TLSHandshakeTimeout: 30 * time.Second,
+				// 跳过tls验证， 危险，可能会受到中间人攻击
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: true,
 				},

@@ -210,7 +210,7 @@ func (hrk *GameApiService) GetMysekaiUploadTimeByIds(ctx context.Context, Region
 		go func(UserId string) {
 			uploadTime, err := hrk.GetMysekaiUploadTime(ctx, Region, UserId)
 			if err != nil {
-				global.LOG.Error("获取用户 %s 的 mysekai 上传时间失败", zap.Error(err))
+				global.LOG.Error(fmt.Sprintf("获取用户 %s 的 mysekai 上传时间失败", UserId), zap.Error(err))
 			} else {
 				mu.Lock()
 				result[UserId] = uploadTime
@@ -298,6 +298,7 @@ func (*GameApiService) request(ctx context.Context, Method string, Url string, D
 		return
 	}
 	req.Header.Set("X-Haruki-Sekai-Token", global.CONFIG.HarukiApi.Token)
+	req.Header.Set("Connection", "keep-alive")
 	return utils.HttpRequest(req,
 		DataType,
 	)

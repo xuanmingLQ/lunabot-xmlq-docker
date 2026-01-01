@@ -452,7 +452,7 @@ async def get_event_story_summary(ctx: SekaiHandlerContext, event: dict, refresh
     title = event['name']
     banner_img_cq = await get_image_cq(await get_event_banner_img(ctx, event))
     summary_db = get_file_db(f"{SEKAI_DATA_DIR}/story_summary/event/{ctx.region}/{eid}.json", logger)
-    summary = summary_db.get("summary", {})
+    summary = summary_db.get_copy("summary", {})
 
     ## 读取数据
     story = await ctx.md.event_stories.find_by('eventId', eid)

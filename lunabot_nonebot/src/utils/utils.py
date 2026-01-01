@@ -40,13 +40,11 @@ def get_exc_desc(e: Exception) -> str:
     if et and e: return f"{et}: {e}"
     else: return et + e
 
-class Timer:
-    def __init__(self, name: str = None, logger: 'Logger' = None, debug: bool = True):
+class ProfileTimer:
+    def __init__(self, name: str = None):
         self.name = name
-        self.logger = logger
         self.start_time = None
         self.end_time = None
-        self.debug = debug
 
     def get(self) -> float:
         if self.start_time is None:
@@ -61,11 +59,10 @@ class Timer:
     
     def end(self):
         self.end_time = datetime.now()
-        if self.logger:
-            if self.debug:
-                self.logger.debug(f"{self.name} 耗时 {self.get():.2f}秒")
-            else:
-                self.logger.info(f"{self.name} 耗时 {self.get():.2f}秒")
+        if self.name and global_config.get('timer.enable'):
+            log_prefixes = global_config.get('timer.log_prefix', [])
+            if log_prefixes and self.name.startswith(tuple(log_prefixes)):
+                profile_logger.profile(f"<{self.name}> cost {self.get():.3f}s ({self.start_time.strftime('%M:%S.%f')} - {self.end_time.strftime('%M:%S.%f')})")
 
     def __enter__(self):
         self.start()
@@ -678,11 +675,12 @@ class Logger:
     def __init__(self, name):
         self.name = name
 
-    def log(self, msg, flush=True, end='\n', level='INFO'):
-        if level not in LOG_LEVELS:
-            raise Exception(f'未知日志等级 {level}')
+    def log(self, msg, flush=True, end='\n', level='INFO', real_level=None):
+        real_level = real_level or level
+        if real_level not in LOG_LEVELS:
+            raise Exception(f'未知日志等级 {real_level}')
         log_level = global_config.get('log_level').upper()
-        if LOG_LEVELS.index(level) < LOG_LEVELS.index(log_level):
+        if LOG_LEVELS.index(real_level) < LOG_LEVELS.index(log_level):
             return
         time = datetime.now().strftime("%m-%d %H:%M:%S.%f")[:-3]
         print(f'{time} {level} [{self.name}] {msg}', flush=flush, end=end)
@@ -698,6 +696,9 @@ class Logger:
 
     def error(self, msg, flush=True, end='\n'):
         self.log(msg, flush=flush, end=end, level='ERROR')
+
+    def profile(self, msg, flush=True, end='\n'):
+        self.log(msg, flush=flush, end=end, level='PROFILE', real_level='INFO')
 
     def print_exc(self, msg=None):
         self.error(msg)
@@ -776,7 +777,7 @@ def get_logger(name: str) -> Logger:
     return _loggers[name]
 
 utils_logger = get_logger('Utils')
-
+profile_logger = get_logger('Profile')
 
 
 # ============================ 文件数据库 ============================ #
@@ -804,12 +805,20 @@ class FileDB:
         self.logger.debug(f'保存数据库 {self.path}')
 
     def get(self, key: str, default: Any=None) -> Any:
+        """
+        - 获取某个key的值，找不到返回default
+        - 直接返回缓存对象，若要进行修改又不影响DB内容则必须自行deepcopy
+        """
+        assert isinstance(key, str), f'key必须是字符串，当前类型: {type(key)}'
+        return self.data.get(key, default)
+
+    def get_copy(self, key: str, default: Any=None) -> Any:
         assert isinstance(key, str), f'key必须是字符串，当前类型: {type(key)}'
         return deepcopy(self.data.get(key, default))
 
     def set(self, key: str, value: Any):
         assert isinstance(key, str), f'key必须是字符串，当前类型: {type(key)}'
-        self.logger.debug(f'设置数据库 {self.path} {key} = {truncate(str(value), 32)}')
+        self.logger.debug(f'设置数据库 {self.path} {key}')
         self.data[key] = deepcopy(value)
         self.save()
 

@@ -459,7 +459,7 @@ async def verify_user_game_account(ctx: SekaiHandlerContext, triggered_by_not_ve
 
 # 获取用户验证过的游戏ID列表
 def get_user_verified_uids(ctx: SekaiHandlerContext) -> List[str]:
-    return profile_db.get(f"verify_accounts_{ctx.region}", {}).get(str(ctx.user_id), [])
+    return profile_db.get_copy(f"verify_accounts_{ctx.region}", {}).get(str(ctx.user_id), [])
 
 # 获取游戏id并检查用户是否验证过当前的游戏id，失败抛出异常
 async def get_uid_and_check_verified(ctx: SekaiHandlerContext, force: bool = False) -> str:
@@ -1856,7 +1856,7 @@ async def _(ctx: HandlerContext):
 # 查询绑定历史
 pjsk_bind_history = CmdHandler([
     "/pjsk bind history", "/pjsk bind his", "/绑定历史", "/绑定记录",
-], logger, priority=200)
+], logger, priority=1)
 pjsk_bind_history.check_cdrate(cd).check_wblist(gbl).check_superuser()
 @pjsk_bind_history.handle()
 async def _(ctx: HandlerContext):

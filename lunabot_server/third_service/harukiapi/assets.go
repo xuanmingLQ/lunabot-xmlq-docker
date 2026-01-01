@@ -57,6 +57,7 @@ func (hrk *AssetsService) DownloadAssets(ctx context.Context, BaseUrl, Path stri
 		return
 	}
 	req.Header.Set("Accept-Language", "en")
+	req.Header.Set("Connection", "keep-alive")
 	result, err := utils.HttpRequest(
 		req,
 		utils.DataTypeNone,

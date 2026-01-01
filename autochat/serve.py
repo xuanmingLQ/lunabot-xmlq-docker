@@ -579,7 +579,7 @@ async def main():
     info("开始监听新消息")
 
     while True:
-        await asyncio.sleep(3)
+        await asyncio.sleep(5)
         
         msgs = []
         try:
