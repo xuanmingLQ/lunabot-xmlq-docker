@@ -9,7 +9,7 @@ cd = ColdDown(file_db, logger)
 gbl = get_group_black_list(file_db, logger, 'math')
 
 
-aeval = Interpreter()
+_aeval = None
 
 eval = CmdHandler(["/eval", "/计算"], logger)
 eval.check_cdrate(cd).check_wblist(gbl)
@@ -18,8 +18,10 @@ async def _(ctx: HandlerContext):
     expr = ctx.get_args().strip()
     assert_and_reply(expr, "请输入表达式")
     logger.info(f"计算 {expr}")
-    global aeval
-    result = aeval(expr)
+    global _aeval
+    if _aeval is None:
+        _aeval = Interpreter()
+    result = _aeval(expr)
     return await ctx.asend_reply_msg(str(result))
 
 

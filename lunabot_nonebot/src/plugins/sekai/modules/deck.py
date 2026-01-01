@@ -35,6 +35,20 @@ from sekai_deck_recommend_cpp import (
 )
 
 
+BOOST_BONUS_DICT: Dict[int, int] = {
+    0: 1,
+    1: 5,
+    2: 10,
+    3: 15,
+    4: 20,
+    5: 25,
+    6: 27,
+    7: 29,
+    8: 31,
+    9: 33,
+    10: 35,
+}
+
 musicmetas_json = WebJsonRes(
     name="MusicMeta", 
     url = config.get("deck.music_meta_url"),
@@ -94,6 +108,9 @@ AVG_KEYWORDS = ('平均', '均值', '期望')
 
 SKILL_ORDER_KEYWORDS = ('技能顺序', '技能排列')
 SKILL_REF_KEYWORDS = ('技能抽取', '技能吸取')
+
+BOOST_KEYWORDS = ('boost', '火', '体力', '体',)
+AREA_ITEM_KEYWORDS = ('区域道具', '道具', 'areaitem', )
 
 DEFAULT_CARD_CONFIG_12 = DeckRecommendCardConfig()
 DEFAULT_CARD_CONFIG_12.disable = False
@@ -678,6 +695,29 @@ async def extract_music_and_diff(
 # 从args中提取不在options中的参数
 def extract_addtional_options(args: str) -> Tuple[dict, str]:
     ret = {}
+
+    for boost in reversed(BOOST_BONUS_DICT.keys()):
+        for keyword in BOOST_KEYWORDS:
+            kw = f"{boost}{keyword}"
+            if kw in args:
+                ret['boost'] = boost
+                args = args.replace(kw, "", 1).strip()
+                break
+
+    for level in reversed(range(1, 21)):
+        for keyword in AREA_ITEM_KEYWORDS:
+            if keyword not in args:
+                continue
+            for kw in (
+                f"{keyword}{level}级",
+                f"{level}级{keyword}",
+                f"{keyword}{level}",
+                f"{level}{keyword}",
+            ):
+                if kw in args:
+                    ret['area_item_level'] = level
+                    args = args.replace(kw, "", 1).strip()
+                    break
 
     for unit, keywords in UNIT_FILTER_KEYWORDS.items():
         for keyword in keywords:
@@ -1535,6 +1575,46 @@ async def compose_deck_recommend_image(
             options.music_id, options.music_diff = res
             use_recommended_challenge_music = True
 
+    # 体力加成
+    boost = additional.get('boost', None)
+    if options.live_type not in ('multi', 'auto', 'solo') or options.target != 'score':
+        boost = None
+    if boost is not None:
+        boost_bonus = BOOST_BONUS_DICT.get(boost, 1)
+
+    # 区域道具等级
+    area_item_level = additional.get('area_item_level', None)
+    if area_item_level is not None:
+        levels = {}
+        for item in await ctx.md.area_item_levels.get():
+            item_id = item['areaItemId']
+            lv = item['level']
+            if lv > area_item_level:
+                continue
+            levels[item_id] = max(levels.get(item_id, 0), lv)
+        # 检查区服还没有开放等级上限
+        for item_id, lv in levels.items():
+            if lv < area_item_level:
+                raise ReplyException(f"{get_region_name(ctx.region)}区域道具等级最多为{lv}")
+        # 已存在的区域道具等级覆盖
+        for area in profile['userAreas']:
+            for area_item in area['areaItems']:
+                item_id = area_item['areaItemId']
+                if item_id in levels:
+                    area_item['level'] = max(area_item['level'], levels[item_id])
+                    del levels[item_id]
+        # 不存在的添加
+        profile['userAreas'].append({
+            "userAreaStatus": {},
+            "areaItems": [
+                {
+                    "areaItemId": item_id,
+                    "level": lv,
+                } for item_id, lv in levels.items()
+            ]
+        })
+        
+
     # ---------------------------- 调用组卡服务 ---------------------------- #
 
     options.region = ctx.region
@@ -1838,6 +1918,8 @@ async def compose_deck_recommend_image(
                         info_text += "\"次顶配\"为该服截止当前的全卡满养成道具15级配置(并非基于你的卡组计算)\n"
                     if use_current_deck:
                         info_text += "活动组卡的“当前”队伍无需抓包更新，挑战组卡则需要抓包更新\n"
+                    if area_item_level:
+                        info_text += f"所有区域道具等级已提升为至少{area_item_level}级\n"
 
                     if info_text:  
                         TextBox(info_text.strip(), TextStyle(font=DEFAULT_BOLD_FONT, size=24, color=(200, 75, 75)), use_real_line_count=True)
@@ -1874,7 +1956,11 @@ async def compose_deck_recommend_image(
                                     target_score = options.target == "score"
                                     text = score_name + th_main_sign if target_score else score_name
                                     style = th_style1 if target_score else th_style2
-                                    TextBox(text, style).set_h(gh // 2).set_content_align('c')
+                                    with Frame().set_h(gh // 2).set_content_align('c'):
+                                        TextBox(text, style)
+                                        if boost is not None:
+                                            TextBox(f"{boost}🔥(x{boost_bonus})", TextStyle(font=DEFAULT_FONT, size=18, color=(75, 75, 75))) \
+                                                .set_content_align('c').set_offset((0, 28))
                                     Spacer(h=6)
                                     for i, (deck, alg) in enumerate(zip(result_decks, result_algs)):
                                         with Frame().set_content_align('rb'):
@@ -1893,6 +1979,8 @@ async def compose_deck_recommend_image(
                                                 score = deck.live_score 
                                             elif recommend_type == "mysekai":
                                                 score = deck.mysekai_event_point
+                                            if boost is not None:
+                                                score = int(score * boost_bonus)
                                             with Frame().set_content_align('c'):
                                                 TextBox(str(score), tb_style).set_h(gh).set_content_align('c').set_offset((0, -voffset))
 

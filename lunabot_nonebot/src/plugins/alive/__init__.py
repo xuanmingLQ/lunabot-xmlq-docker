@@ -96,8 +96,9 @@ alive.check_cdrate(cd)
 @alive.handle()
 async def _(ctx: HandlerContext):
     st = bot_states.get(int(ctx.bot.self_id))
+    assert_and_reply(st, '未监控该Bot账号的连接状态')
     dt = datetime.now() - st.cur_elapsed
-    await ctx.asend_reply_msg(f"当前连接持续时长: {get_readable_timedelta(st.cur_elapsed)}\n连接时间: {dt.strftime('%Y-%m-%d %H:%M:%S')}")
+    await ctx.asend_reply_msg(f"当前账号连接时长: {get_readable_timedelta(st.cur_elapsed)}\n连接时间: {dt.strftime('%Y-%m-%d %H:%M:%S')}")
 
 
 # kill命令

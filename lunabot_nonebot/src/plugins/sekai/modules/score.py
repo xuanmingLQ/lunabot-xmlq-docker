@@ -3,7 +3,7 @@ from ..common import *
 from ..handler import *
 from ..asset import *
 from ..draw import *
-from .deck import musicmetas_json
+from .deck import musicmetas_json, BOOST_BONUS_DICT
 from .music import (
     get_music_cover_thumb, 
     search_music, 
@@ -19,20 +19,6 @@ import pandas as pd
 
 # ==================== 活动点数计算 ==================== #
 # from https://github.com/rmc8/prsk_event_point_calc
-
-BOOST_BONUS_DICT: Dict[int, int] = {
-    0: 1,
-    1: 5,
-    2: 10,
-    3: 15,
-    4: 20,
-    5: 25,
-    6: 27,
-    7: 29,
-    8: 31,
-    9: 33,
-    10: 35,
-}
 
 def score_bonus(score: int) -> int:
     """

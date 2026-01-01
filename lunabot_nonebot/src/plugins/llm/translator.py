@@ -15,12 +15,6 @@ from concurrent.futures import ThreadPoolExecutor
 ocr_pool_executor = ThreadPoolExecutor(max_workers=1)
 
 
-try:
-    import easyocr
-except ImportError:
-    logger.warning("Easyocr未安装")
-
-
 @dataclass
 class TranslationResult:
     img: Image.Image
@@ -116,6 +110,10 @@ class Translator:
 
     def load_model(self) -> bool:
         if not self.model_loaded:
+            try:
+                import easyocr
+            except ImportError:
+                raise Exception('EasyOCR未安装')
             for lang in self.langs:
                 self.readers[lang] = easyocr.Reader(['en', lang])
                 logger.info(f'OCR模型{lang}加载成功')
@@ -133,7 +131,7 @@ class Translator:
                 lang = self.langs[0]
             if lang not in self.readers:
                 raise Exception(f'不支持的语言:{lang}, 支持语言有:{self.readers.keys()}')
-            reader: easyocr.Reader = self.readers[lang]
+            reader = self.readers[lang]
 
             tid = f"[{self.task_id_top}]"
             self.task_id_top += 1

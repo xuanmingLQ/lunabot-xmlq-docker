@@ -823,46 +823,53 @@ _current_msg_count = 0
 _current_msg_second = -1
 _send_msg_failed_last_mail_time = datetime.fromtimestamp(0)
 
-def check_send_msg_daily_limit() -> bool:
+def check_send_msg_daily_limit(bot_id: int) -> bool:
     """
     检查是否超过全局发送消息上限
     """
     date = datetime.now().strftime("%Y-%m-%d")
     send_msg_count = utils_file_db.get('send_msg_count', {})
-    count = send_msg_count.get('count', 0)
-    if send_msg_count.get('date', '') != date:
-        send_msg_count = {'date': date, 'count': 0}
+    bot_count = send_msg_count.get(str(bot_id), {})
+    count = bot_count.get('count', 0)
+    if bot_count.get('date', '') != date:
+        bot_count = {'date': date, 'count': 0}
+        send_msg_count[str(bot_id)] = bot_count
         utils_file_db.set('send_msg_count', send_msg_count)
         count = 0
     return count < global_config.get('msg_send.rate_limit.day')
 
-def record_daily_msg_send():
+def record_daily_msg_send(bot_id: int):
     """
     记录消息发送
     """
     date = datetime.now().strftime("%Y-%m-%d")
     send_msg_count = utils_file_db.get('send_msg_count', {})
-    count = send_msg_count.get('count', 0)
-    if send_msg_count.get('date', '') != date:
-        send_msg_count = {'date': date, 'count': 0}
+    bot_count = send_msg_count.get(str(bot_id), {})
+    count = bot_count.get('count', 0)
+    if bot_count.get('date', '') != date:
+        bot_count = {'date': date, 'count': 0}
+        send_msg_count[str(bot_id)] = bot_count
         utils_file_db.set('send_msg_count', send_msg_count)
         count = 0
     count += 1
-    send_msg_count['count'] = count
+    bot_count['count'] = count
+    send_msg_count[str(bot_id)] = bot_count
     utils_file_db.set('send_msg_count', send_msg_count)
     daily_limit = global_config.get('msg_send.rate_limit.day')
     if count == daily_limit:
-        utils_logger.warning(f'达到每日发送消息上限 {daily_limit}')
+        utils_logger.warning(f'Bot账号 {bot_id} 达到每日发送消息上限 {daily_limit}')
 
-def get_send_msg_daily_count() -> int:
+def get_send_msg_daily_count(bot_id: int) -> int:
     """
-    获取当日发送消息数量
+    获取bot账号当日发送消息数量
     """
     date = datetime.now().strftime("%Y-%m-%d")
     send_msg_count = utils_file_db.get('send_msg_count', {})
-    count = send_msg_count.get('count', 0)
-    if send_msg_count.get('date', '') != date:
-        send_msg_count = {'date': date, 'count': 0}
+    bot_count = send_msg_count.get(str(bot_id), {})
+    count = bot_count.get('count', 0)
+    if bot_count.get('date', '') != date:
+        bot_count = {'date': date, 'count': 0}
+        send_msg_count[str(bot_id)] = bot_count
         utils_file_db.set('send_msg_count', send_msg_count)
         count = 0
     return count
@@ -908,7 +915,12 @@ def send_msg_func(func):
             utils_logger.print_exc(f'记录发送消息的id失败')
 
         # 记录消息发送次数
-        record_daily_msg_send()
+        bot_id = None
+        for arg in list(args) + list(kwargs.values()):
+            if isinstance(arg, (MessageEvent, Bot)):
+                bot_id = int(arg.self_id)
+                break
+        record_daily_msg_send(bot_id)
             
         return ret
         
@@ -2208,7 +2220,7 @@ class CmdHandler:
                             return
 
                     # 每日上限检查
-                    if not check_send_msg_daily_limit() and not check_superuser(event, **self.superuser_check):
+                    if not check_send_msg_daily_limit(int(bot.self_id)) and not check_superuser(event, **self.superuser_check):
                         return
 
                     # cd检查
@@ -2433,8 +2445,8 @@ _handler = CmdHandler(['/send_count'], utils_logger)
 _handler.check_superuser()
 @_handler.handle()
 async def _(ctx: HandlerContext):
-    count = get_send_msg_daily_count()
-    return await ctx.asend_reply_msg(f'今日已发送消息数量: {count}')
+    count = get_send_msg_daily_count(int(ctx.bot.self_id))
+    return await ctx.asend_reply_msg(f'该账号今日已发送消息数量: {count}')
 
 # 删除Painter缓存
 _handler = CmdHandler(['/clear_pcache', '/clear pcache', '/pcache clear', '/pcache_clear'], utils_logger)
