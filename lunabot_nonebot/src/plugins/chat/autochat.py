@@ -62,18 +62,17 @@ start_rpc_service(
 # 获取自身信息
 @rpc_method(RPC_SERVICE, 'get_self_info')
 async def handle_get_self_info(cid: str, group_id: int):
-    bot = get_bot()
+    bot = await aget_group_bot(group_id, raise_exc=True)
     return {
         'self_id': int(bot.self_id),
-        'nickname': await get_group_member_name(bot, group_id, int(bot.self_id)),
+        'nickname': await get_group_member_name(group_id, int(bot.self_id)),
     }
 
 # 获取所有开启的群组列表
 @rpc_method(RPC_SERVICE, 'get_group_list')
 async def handle_get_group_list(cid: str):
-    bot = get_bot()
     group_ids = set(chat_gwl.get()).intersection(autochat_gwl.get())
-    return [g for g in await get_group_list(bot) if g['group_id'] in group_ids]
+    return [g for g in await get_all_bot_group_list() if int(g['group_id']) in group_ids]
 
 # 发送群消息
 @rpc_method(RPC_SERVICE, 'send_group_msg')
@@ -81,7 +80,7 @@ async def handle_send_group_msg(cid: str, group_id: int, message: list[dict] | s
     if not chat_gwl.check_id(group_id) or not autochat_gwl.check_id(group_id):
         logger.warning(f"自动聊天取消发送消息到未启用群组 {group_id}")
         return
-    bot = get_bot()
+    bot = await aget_group_bot(group_id, raise_exc=True)
     if isinstance(message, str):
         message=Message(message)
     logger.info(f"自动聊天RPC客户端 {cid} 发送消息到群 {group_id}: {message}")

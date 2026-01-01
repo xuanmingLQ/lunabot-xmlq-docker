@@ -1895,7 +1895,6 @@ async def _(ctx: SekaiHandlerContext):
 # 新曲上线提醒
 @repeat_with_interval(60, '新曲上线提醒', logger)
 async def new_music_notify():
-    bot = get_bot()
     notified_musics = file_db.get("notified_new_musics", {})
     updated = False
 
@@ -1931,7 +1930,7 @@ async def new_music_notify():
                     group_msg = msg
                     for uid in music_user_sub.get_all(region, group_id):
                         group_msg += f"[CQ:at,qq={uid}]"
-                    await send_group_msg_by_bot(bot, group_id, group_msg.strip())
+                    await send_group_msg_by_bot(group_id, group_msg.strip())
                 except:
                     logger.print_exc(f"发送新曲上线提醒: {region} 到群 {group_id} 失败")
                     continue
@@ -1962,7 +1961,7 @@ async def new_music_notify():
                         group_msg = msg
                         for uid in music_user_sub.get_all(region, group_id):
                             group_msg += f"[CQ:at,qq={uid}] "
-                        await send_group_msg_by_bot(bot, group_id, group_msg.strip())
+                        await send_group_msg_by_bot(group_id, group_msg.strip())
                     except:
                         logger.print_exc(f"发送新曲新曲上线提醒: {region} {music['id']} 到群 {group_id} 失败")
                         continue
@@ -1979,8 +1978,6 @@ async def new_music_notify():
 # 新APD上线提醒
 @repeat_with_interval(60, '新APD上线提醒', logger)
 async def new_apd_notify():
-    bot = get_bot()
-
     no_apd_musics = file_db.get("no_apd_musics", {})
     notified_new_apd = file_db.get("notified_new_apd", {})
     updated = False
@@ -2034,7 +2031,7 @@ async def new_apd_notify():
                         group_msg = msg
                         for uid in apd_user_sub.get_all(region, group_id):
                             group_msg += f"[CQ:at,qq={uid}] "
-                        await send_group_msg_by_bot(bot, group_id, group_msg.strip())
+                        await send_group_msg_by_bot(group_id, group_msg.strip())
                     except:
                         logger.print_exc(f"发送新APPEND上线提醒: {region} {music['id']} 到群 {group_id} 失败")
                         continue

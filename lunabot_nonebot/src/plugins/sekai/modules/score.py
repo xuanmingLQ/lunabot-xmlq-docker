@@ -11,6 +11,7 @@ from .music import (
     MusicSearchOptions,
     DIFF_COLORS,
     get_music_diff_level,
+    is_valid_music,
 )
 from decimal import Decimal, ROUND_DOWN
 import pandas as pd
@@ -179,7 +180,7 @@ async def compose_score_control_image(ctx: SekaiHandlerContext, target_point: in
             # 计算两次控分推荐
             interval = 300
             x, y = target_point // interval * interval, target_point % interval
-            if y < 120:
+            if y < 150:
                 x -= 100
                 y += 100
             msg += f"(例如{x}+{y})"
@@ -279,7 +280,7 @@ async def compose_custom_room_score_control_image(ctx: SekaiHandlerContext, targ
             raise ReplyException(f"该PT无法用自定义房间控分，控大于100的PT可使用\"/控分\"指令")
         else:
             raise ReplyException(f"该PT无法用自定义房间控分，可能是PT过小")
-    results.sort(key=lambda x: (x[1], x[0]))
+    results.sort(key=lambda x: (x[1], -x[0]))
 
     # 查找结果中出现的pt系数对应的歌曲
     music_metas = find_by(await musicmetas_json.get(), "difficulty", "master", mode='all')
@@ -289,6 +290,8 @@ async def compose_custom_room_score_control_image(ctx: SekaiHandlerContext, targ
     for event_rate, event_bonus in results:
         if event_rate not in event_rate_music_list_map:
             for meta in find_by(music_metas, "event_rate", event_rate, mode='all')[:MUSIC_NUM_PER_EVENT_RATE]:
+                if not await is_valid_music(ctx, meta['music_id'], leak=False):
+                    continue
                 music = await ctx.md.musics.find_by_id(meta['music_id'])
                 event_rate_music_list_map.setdefault(event_rate, []).append({
                     'music_id': meta['music_id'],
@@ -394,6 +397,7 @@ async def compose_music_meta_image(ctx: SekaiHandlerContext, mids: list[int]) ->
 
                                 best_skill_order_solo = list(range(5))
                                 best_skill_order_solo.sort(key=lambda x: skill_score_solo[x], reverse=True)
+                                best_skill_order_solo = [best_skill_order_solo.index(i) for i in range(5)]
 
                                 solo_skill, auto_skill, multi_skill = 1.0, 1.0, 1.8
 
@@ -437,7 +441,7 @@ async def compose_music_meta_image(ctx: SekaiHandlerContext, mids: list[int]) ->
                                     for s in skill_score_auto:
                                         TextBox(f"  {s*100:.1f}%", style2)
                                 with HSplit().set_content_align('lb').set_item_align('lb').set_sep(0):
-                                    TextBox(f"单人最优技能顺序（1-5从强到弱）", style1)
+                                    TextBox(f"单人最优技能顺序（1-5代表强到弱的卡牌）", style1)
                                     for idx in best_skill_order_solo:
                                         TextBox(f" {idx+1}", style2)
                                 with HSplit().set_content_align('lb').set_item_align('lb').set_sep(0):
@@ -719,7 +723,7 @@ pjsk_custom_room_score_control = SekaiCmdHandler([
     "/pjsk custom room score", "/custom room score",
     "/自定义房间控分", "/自定义房控分", "/自定义控分"
 ], regions=["jp"], priority=101)
-pjsk_score_control.check_cdrate(cd).check_wblist(gbl)
+pjsk_custom_room_score_control.check_cdrate(cd).check_wblist(gbl)
 @pjsk_custom_room_score_control.handle()
 async def _(ctx: SekaiHandlerContext):
     args = ctx.get_args().strip()
@@ -744,7 +748,7 @@ pjsk_music_meta = SekaiCmdHandler([
     "/pjsk music meta", "/music meta",
     "/歌曲meta", 
 ], regions=["jp"], priority=101)
-pjsk_score_control.check_cdrate(cd).check_wblist(gbl)
+pjsk_music_meta.check_cdrate(cd).check_wblist(gbl)
 @pjsk_music_meta.handle()
 async def _(ctx: SekaiHandlerContext):
     args = ctx.get_args().strip()
@@ -772,7 +776,7 @@ pjsk_music_board = SekaiCmdHandler([
     "/pjsk music board", "/music board",
     "/歌曲排行", "/歌曲比较", "/歌曲排名",
 ], regions=["jp"], priority=101)
-pjsk_score_control.check_cdrate(cd).check_wblist(gbl)
+pjsk_music_board.check_cdrate(cd).check_wblist(gbl)
 @pjsk_music_board.handle()
 async def _(ctx: SekaiHandlerContext):
     args = ctx.get_args().strip().lower()

@@ -24,7 +24,7 @@ from .profile import (
 )
 from .music import get_music_cover_thumb, is_valid_music
 from .card import get_character_sd_image
-from src.api.game.user import get_mysekai,get_mysekai_photo,get_mysekai_upload_time
+from src.api.game.user import get_mysekai,get_mysekai_photo,get_mysekai_upload_time, get_mysekai_upload_time_by_ids
 from src.api.subscribe.pjsk import set_msr_sub
 from ...imgtool import shrink_image
 
@@ -2113,24 +2113,35 @@ async def _(ctx: SekaiHandlerContext):
     cqs = extract_cq_code(ctx.get_msg())
     qid = int(cqs['at'][0]['qq']) if 'at' in cqs else ctx.user_id
     uid = get_player_bind_id(ctx)
-    (profile, err) = await get_mysekai_info(ctx, qid, raise_exc=False, mode="local", filter=['upload_time'])
+    try:
+        result = await get_mysekai_upload_time(ctx.region, uid)
+    except ApiError as e:
+        return await ctx.asend_reply_msg(f"获取 mysekai 数据上传时间失败 {e.msg}")
+    except HttpError as e:
+        return await ctx.asend_reply_msg(f"获取 mysekai 数据上传时间失败 {e.status_code} {e.message}")
+    except Exception as e:
+        return await ctx.asend_reply_msg(f"获取 mysekai 数据上传时间失败 {get_exc_desc(e)}")
     
     msg = f"{process_hide_uid(ctx, uid, keep=6)}({ctx.region.upper()}) Mysekai数据\n"
-    
-    if err:
-        err = err[err.find(']')+1:].strip()
-        msg += f"[Haruki工具箱]\n获取失败: {err}\n"
-    else:
-        msg += "[Haruki工具箱]\n"
-        upload_time = datetime.fromtimestamp(profile if isinstance(profile, int) else profile['upload_time'])
+    if result["localUploadTime"]:
+        msg += "[本地数据]\n"
+        upload_time = datetime.fromisoformat(result["localUploadTime"])
         upload_time_text = upload_time.strftime('%m-%d %H:%M:%S') + f"({get_readable_datetime(upload_time, show_original_time=False)})"
         msg += f"{upload_time_text}\n"
+    else:
+        msg += f"[本地数据]\n获取失败：{result["localError"]}\n"
+    if result["harukiUploadTime"]:
+        msg += "[Haruki工具箱]\n"
+        upload_time = datetime.fromisoformat(result["harukiUploadTime"])
+        upload_time_text = upload_time.strftime('%m-%d %H:%M:%S') + f"({get_readable_datetime(upload_time, show_original_time=False)})"
+        msg += f"{upload_time_text}\n"
+    else:
+        msg += f"[Haruki工具箱]\n获取失败: {result["harukiError"]}\n"
     mode = get_user_data_mode(ctx, ctx.user_id)
     msg += f"---\n"
     msg += f"该指令查询Mysekai数据，查询Suite数据请使用\"/{ctx.region}抓包状态\"\n"
     # msg += f"数据获取模式: {mode}，使用\"/{ctx.region}抓包模式\"来切换模式\n"
     msg += f"发送\"/抓包\"获取抓包教程"
-
     return await ctx.asend_reply_msg(msg)
 
 
@@ -2210,10 +2221,8 @@ async def _(ctx: SekaiHandlerContext):
 # ======================= 定时任务 ======================= #
 
 # MSR自动推送 & MSR订阅更新
-@repeat_with_interval(2, 'MSR自动推送', logger)
+@repeat_with_interval(200, 'MSR自动推送', logger)
 async def msr_auto_push():
-    bot = get_bot()
-
     for region in ALL_SERVER_REGIONS:
         region_name = get_region_name(region)
         ctx = SekaiHandlerContext.from_region(region)
@@ -2230,36 +2239,42 @@ async def msr_auto_push():
                 except:
                     pass
         if not uid_modes: continue
-
-        # 向api服务器更新msr订阅信息
-        try:
-             # await request_gameapi(update_msr_sub_url, json=uid_modes, method='PUT')
-            await set_msr_sub()
-        except ApiError as e:
-            logger.debug(f"更新{region_name}Mysekai订阅信息失败: {e.msg}")
-            continue 
-        except Exception as e:
-            logger.warning(f"更新{region_name}Mysekai订阅信息失败: {get_exc_desc(e)}")
+        # 先不要mode了
+        user_ids = [uid_mode[0] for uid_mode in uid_modes]
+        # 向api服务器更新msr订阅信息 暂且不要这一步，同时
+        # try:
+        #      # await request_gameapi(update_msr_sub_url, json=uid_modes, method='PUT')
+        #     await set_msr_sub()
+        # except ApiError as e:
+        #     logger.debug(f"更新{region_name}Mysekai订阅信息失败: {e.msg}")
+        #     continue 
+        # except Exception as e:
+        #     logger.warning(f"更新{region_name}Mysekai订阅信息失败: {get_exc_desc(e)}")
 
         # 获取不同uid_mode的Mysekai上传时间
         try:
             # upload_times: list[int] = await request_gameapi(get_upload_time_url, json=uid_modes)
-            upload_times: list[int] = await get_mysekai_upload_time()
+            # 两个值分别是userId和iso格式的datetime
+            upload_times:dict[str, str] = await get_mysekai_upload_time_by_ids(region=region, user_ids=user_ids)
+            # upload_times: list[int] = await get_mysekai_upload_time()
         except ApiError as e:
-            logger.debug(f"获取{region_name}Mysekai上传时间失败: {e.msg}")
+            logger.warning(f"获取{region_name}Mysekai上传时间失败: {e.msg}")
+            continue 
+        except HttpError as e:
+            logger.warning(f"获取{region_name}Mysekai上传时间失败: {e.status_code} {e.message}")
             continue 
         except Exception as e:
             logger.warning(f"获取{region_name}Mysekai上传时间失败: {get_exc_desc(e)}")
             continue
-        upload_times: dict[tuple[str, str], int] = { uid_mode: ts for uid_mode, ts in zip(uid_modes, upload_times) }
-
-        need_push_uid_modes = [] # 需要推送的uid_mode（有及时更新数据并且没有距离太久的）
+        # upload_times: dict[tuple[str, str], int] = { uid_mode: ts for uid_mode, ts in zip(uid_modes, upload_times) }
+        logger.info(upload_times)
+        need_push_uids = [] # 需要推送的uid_mode（有及时更新数据并且没有距离太久的）
         last_refresh_time = get_mysekai_last_refresh_time_and_reason(ctx)[0]
-        for uid_mode, ts in upload_times.items():
-            update_time = datetime.fromtimestamp(ts / 1000)
-            if update_time > last_refresh_time and datetime.now() - update_time < timedelta(minutes=10):
-                need_push_uid_modes.append(uid_mode)
-
+        for uid, isodate in upload_times.items():
+            update_time = datetime.fromisoformat(isodate)
+            if update_time.timestamp() > last_refresh_time.timestamp() and datetime.now(update_time.tzinfo) - update_time < timedelta(minutes=10):
+                need_push_uids.append(uid)
+        logger.info(need_push_uids)
         tasks = []
                 
         for qid, gid in msr_sub.get_all_gid_uid(region):
@@ -2271,10 +2286,10 @@ async def msr_auto_push():
                 msr_last_push_time = file_db.get(f"{region}_msr_last_push_time", {})
 
                 uid = get_player_bind_id(ctx, qid, index=i)
-                mode = get_user_data_mode(ctx, qid)
-                if not uid or (uid, mode) not in need_push_uid_modes:
+                # mode = get_user_data_mode(ctx, qid)
+                if not uid or uid not in need_push_uids:
                     continue
-
+                logger.info(uid)
                 # 检查这个uid-qid刷新后是否已经推送过
                 key = f"{uid}-{qid}"
                 if key in msr_last_push_time:
@@ -2285,7 +2300,7 @@ async def msr_auto_push():
                 file_db.set(f"{region}_msr_last_push_time", msr_last_push_time)
                 
                 tasks.append((gid, qid, uid))
-
+        logger.info(tasks)
         async def push(task):
             gid, qid, uid = task
             user_ctx = SekaiHandlerContext.from_region(region)
@@ -2303,12 +2318,12 @@ async def msr_auto_push():
                     await compose_mysekai_res_image(user_ctx, qid, False, True)
                 ]
                 contents = [f"[CQ:at,qq={qid}]的{region_name}MSR推送"] + contents
-                await send_group_msg_by_bot(bot, gid, "".join(contents))
+                await send_group_msg_by_bot(gid, "".join(contents))
             except MsrIdNotMatchException as e:
                 logger.warning(f'在 {gid} 中自动推送用户 {qid} 的{region_name}Mysekai资源查询失败: 限制id不匹配')
             except Exception as e:
                 logger.print_exc(f'在 {gid} 中自动推送用户 {qid} 的{region_name}Mysekai资源查询失败')
-                try: await send_group_msg_by_bot(bot, gid, f"自动推送用户 [CQ:at,qq={qid}] 的{region_name}Mysekai资源查询失败: {get_exc_desc(e)}")
+                try: await send_group_msg_by_bot(gid, f"自动推送用户 [CQ:at,qq={qid}] 的{region_name}Mysekai资源查询失败: {get_exc_desc(e)}")
                 except: pass
 
         await batch_gather(*[push(task) for task in tasks], batch_size=MSR_PUSH_CONCURRENCY_CFG.get())

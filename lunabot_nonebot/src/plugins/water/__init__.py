@@ -131,7 +131,7 @@ async def get_hash_from_msg(group_id, msg, types=None):
         elif stype == 'forward':
             if not check_type('forward'): continue
             try:
-                bot = get_bot()
+                bot = await aget_group_bot(group_id)
                 raw = ""
                 for forward_msg in (await get_forward_msg(bot, sdata['id']))['messages']:
                     raw += f"{forward_msg['user_id']} {forward_msg['time']}: "
@@ -425,11 +425,11 @@ async def check_auto_water(bot: Bot, event: MessageEvent):
         htype, brief, original_seg = hash['type'], hash['brief'], hash['original']
         if len(water_info) > 1:
             res += brief
-        nickname = await get_group_member_name(bot, group_id, int(fst['user_id']))
+        nickname = await get_group_member_name(group_id, int(fst['user_id']))
         res += f"已经水果{len(recs)}次！最早于{get_readable_datetime(fst['time'], show_original_time=False)}被 @{nickname} 水果\n"
     
     if res:
         res = f"[CQ:reply,id={event.message_id}]{res.strip()}"
-        await send_group_msg_by_bot(bot, group_id, res)
+        await send_group_msg_by_bot(group_id, res)
 
     

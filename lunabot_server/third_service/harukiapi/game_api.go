@@ -2,6 +2,7 @@ package harukiapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,7 +12,10 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"sync"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 type GameApiService struct{}
@@ -92,7 +96,44 @@ func (hrk *GameApiService) GetRanking(ctx context.Context, Region, EventId strin
 	rankingCaches[Region] = rankingCache
 	return
 }
-func (hrk *GameApiService) GetSuiteInfo(ctx context.Context, Region, UserId string, filter []string) (v interface{}, err error) {
+
+// 用于获取上传时间的工具函数
+func getUploadTimeInMap(data map[string]interface{}) (uploadTime *time.Time, err error) {
+	var resultUploadTime int64
+	upload_time := data["upload_time"]
+	if upload_time == nil {
+		err = errors.New("没有upload_time")
+		return
+	}
+	switch uploadTimeType := upload_time.(type) {
+	case float64:
+		resultUploadTime = int64(uploadTimeType)
+	case json.Number:
+		resultUploadTime, err = uploadTimeType.Int64()
+		if err != nil {
+			return
+		}
+	default:
+		err = fmt.Errorf("未知的数据类型: %v", uploadTimeType)
+		return
+	}
+	uploadTime = new(time.Time)
+	*uploadTime = time.Unix(resultUploadTime, 0)
+	return
+}
+func (hrk *GameApiService) GetSuiteUploadTime(ctx context.Context, Region, UserId string) (uploadTime *time.Time, err error) {
+	if UserId == "" {
+		err = errors.New("user id 不可为空")
+		return
+	}
+	result, err := hrk.GetSuite(ctx, Region, UserId, "upload_time")
+	if err != nil {
+		return
+	}
+	return getUploadTimeInMap(result)
+}
+
+func (hrk *GameApiService) GetSuite(ctx context.Context, Region, UserId string, filter ...string) (result map[string]interface{}, err error) {
 	if global.CONFIG.HarukiApi.SuiteApi.Endpoint == "" ||
 		global.CONFIG.HarukiApi.SuiteApi.Suite == "" {
 		return nil, errors.New("没有配置haruki-sekai-api Suite")
@@ -114,22 +155,86 @@ func (hrk *GameApiService) GetSuiteInfo(ctx context.Context, Region, UserId stri
 		Query.Add("key", strings.Join(filter, ","))
 	}
 	URL.RawQuery = Query.Encode() //编写到Url中
-	v, err = hrk.get(ctx,
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(global.CONFIG.HarukiApi.Timeout)*time.Second)
+	v, err := hrk.get(ctx,
 		URL.String(),
 		utils.DataTypeJson,
 	)
-	if vMap, ok := v.(map[string]interface{}); ok {
-		vMap["source"] = "haruki"
+	cancel()
+	result, ok := v.(map[string]interface{})
+	if ok {
+		result["source"] = HARUKI
+	} else if len(filter) == 1 {
+		result = map[string]interface{}{
+			filter[0]: v,
+			"source":  HARUKI,
+		}
+	}
+	return result, err
+}
+
+// 获取单个用户的上传时间
+func (hrk *GameApiService) GetMysekaiUploadTime(ctx context.Context, Region, UserId string) (uploadTime *time.Time, err error) {
+	if UserId == "" {
+		err = errors.New("user id 不可为空")
+		return
+	}
+	result, err := hrk.GetMysekai(ctx, Region, UserId, "upload_time")
+	if err != nil {
+		return
+	}
+	return getUploadTimeInMap(result)
+}
+
+// 获取多个用户的上传时间
+func (hrk *GameApiService) GetMysekaiUploadTimeByIds(ctx context.Context, Region string, UserIds ...string) (result map[string]*time.Time, err error) {
+	if len(UserIds) == 0 {
+		err = errors.New("user ids 不可为空")
+		return
+	}
+	result = make(map[string]*time.Time, len(UserIds))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	batchSize := make(chan struct{}, global.CONFIG.HarukiApi.BatchSize)
+	for _, userId := range UserIds {
+		if userId == "" {
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return result, ctx.Err()
+		default:
+		}
+		wg.Add(1)
+		batchSize <- struct{}{}
+		go func(UserId string) {
+			uploadTime, err := hrk.GetMysekaiUploadTime(ctx, Region, UserId)
+			if err != nil {
+				global.LOG.Error("获取用户 %s 的 mysekai 上传时间失败", zap.Error(err))
+			} else {
+				mu.Lock()
+				result[UserId] = uploadTime
+				mu.Unlock()
+			}
+			wg.Done()
+			<-batchSize
+		}(userId)
+		time.Sleep(time.Duration(global.CONFIG.HarukiApi.BatchInterval) * time.Millisecond)
+	}
+	wg.Wait()
+	if len(result) == 0 {
+		err = errors.New("获取 mysekai 上传时间全部失败")
 	}
 	return
 }
-func (hrk *GameApiService) GetMysekaiInfo(ctx context.Context, Region, UserId string, filter []string) (v interface{}, err error) {
+
+func (hrk *GameApiService) GetMysekai(ctx context.Context, Region, UserId string, filter ...string) (result map[string]interface{}, err error) {
 	if global.CONFIG.HarukiApi.SuiteApi.Endpoint == "" ||
 		global.CONFIG.HarukiApi.SuiteApi.Mysekai == "" {
 		return nil, errors.New("没有配置haruki-sekai-api Mysekai")
 	}
 	if !slices.Contains(global.CONFIG.HarukiApi.SuiteApi.AllowRegions, Region) {
-		return nil, fmt.Errorf("区域 %s 不在 Haruki Suite Api 允许的区域中", Region)
+		return nil, fmt.Errorf("服务器 %s 不在 Haruki Suite Api 允许的区服中", Region)
 	}
 	Url := global.CONFIG.HarukiApi.SuiteApi.Endpoint + strings.Replace(strings.Replace(global.CONFIG.HarukiApi.SuiteApi.Mysekai, "{region}", Region, 1), "{user_id}", UserId, 1)
 	URL, err := url.Parse(Url)
@@ -141,12 +246,20 @@ func (hrk *GameApiService) GetMysekaiInfo(ctx context.Context, Region, UserId st
 		Query.Add("key", strings.Join(filter, ","))
 	}
 	URL.RawQuery = Query.Encode()
-	v, err = hrk.get(ctx,
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(global.CONFIG.HarukiApi.Timeout)*time.Second)
+	v, err := hrk.get(ctx,
 		URL.String(),
 		utils.DataTypeJson,
 	)
-	if vMap, ok := v.(map[string]interface{}); ok {
-		vMap["source"] = "haruki"
+	cancel()
+	result, ok := v.(map[string]interface{})
+	if ok {
+		result["source"] = HARUKI
+	} else if len(filter) == 1 {
+		result = map[string]interface{}{
+			filter[0]: v,
+			"source":  HARUKI,
+		}
 	}
 	return
 }

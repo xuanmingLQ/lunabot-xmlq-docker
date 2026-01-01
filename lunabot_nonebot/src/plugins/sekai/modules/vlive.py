@@ -147,9 +147,7 @@ async def vlive_notify():
     notified_vlives: Dict[str, Dict[str, List[int]]] = file_db.get(f"notified_vlives", {})
     updated = False
 
-    for region in ALL_SERVER_REGIONS:
-        bot = get_bot()
-        
+    for region in ALL_SERVER_REGIONS: 
         ctx = SekaiHandlerContext.from_region(region)
         region_name = get_region_name(region)
 
@@ -184,7 +182,7 @@ async def vlive_notify():
                     group_msg = deepcopy(msg)
                     for uid in vlive_user_sub.get_all(region, group_id):
                         group_msg += f"[CQ:at,qq={uid}] "
-                    await send_group_msg_by_bot(bot, group_id, group_msg.strip())
+                    await send_group_msg_by_bot(group_id, group_msg.strip())
                 except:
                     logger.print_exc(f'发送 {region} 的 {len(start_vlives)} 个vlive开始提醒到群 {group_id} 失败')
                     continue
@@ -231,7 +229,7 @@ async def vlive_notify():
                     group_msg = deepcopy(msg)
                     for uid in vlive_user_sub.get_all(region, group_id):
                         group_msg += f"[CQ:at,qq={uid}] "
-                    await send_group_msg_by_bot(bot, group_id, group_msg.strip())
+                    await send_group_msg_by_bot(group_id, group_msg.strip())
                 except:
                     logger.print_exc(f'发送 {region} 的 {len(end_vlives)} 个vlive结束提醒到群 {group_id} 失败')
                     continue

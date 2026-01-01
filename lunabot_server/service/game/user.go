@@ -8,10 +8,6 @@ import (
 
 type UserService struct{}
 
-func (*UserService) GetSuiteWithKey(ctx context.Context, Req gameReq.User) (v interface{}, err error) {
-	return nil, errors.New("没有数据库")
-}
-
 func (*UserService) GetMysekaiWithKey(ctx context.Context, Req gameReq.User) (v interface{}, err error) {
 	return nil, errors.New("没有数据库")
 }

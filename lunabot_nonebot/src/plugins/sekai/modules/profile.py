@@ -5,7 +5,7 @@ from ..asset import *
 from ..draw import *
 from .honor import compose_full_honor_image
 from .resbox import get_res_box_info, get_res_icon
-from src.api.game.user import get_suite, get_profile, create_account
+from src.api.game.user import get_suite, get_profile, create_account, get_suite_upload_time
 from src.api.game.misc import get_service_status
 from src.utils.request import ApiError
 from ...imgtool import shrink_image
@@ -1392,8 +1392,9 @@ async def _(ctx: SekaiHandlerContext):
     args = ctx.get_args().strip()
     uid = get_player_bind_id(ctx)
     if 'snowy' in args:
+        unit, args = extract_unit(args)
         return await ctx.asend_reply_msg(await get_image_cq(
-            await get_sekaiprofile_image(ctx.region, uid),
+            await get_sekaiprofile_image(ctx.region, uid, unit),
             low_quality=True, quality=95,
         ))
     vertical = None
@@ -1507,16 +1508,30 @@ async def _(ctx: SekaiHandlerContext):
     cqs = extract_cq_code(ctx.get_msg())
     qid = int(cqs['at'][0]['qq']) if 'at' in cqs else ctx.user_id
     uid = get_player_bind_id(ctx)
-    msg = f"{process_hide_uid(ctx, uid, keep=6)}({ctx.region.upper()}) Suite数据\n"
     try:
-        upload_time = await get_suite(region=ctx.region,user_id=uid, filter='upload_time')
-        upload_time = datetime.fromtimestamp(upload_time)
-        upload_time_text = upload_time.strftime('%m-%d %H:%M:%S')+ f"({get_readable_datetime(upload_time, show_original_time=False)})"
-        msg += f"{upload_time_text}\n" 
+        result = await get_suite_upload_time(ctx.region, uid)
     except ApiError as e:
-        msg+=f"获取失败：{e.msg}\n"
+        return await ctx.asend_reply_msg(f"获取 suite 数据上传时间失败 {e.msg}")
+    except HttpError as e:
+        return await ctx.asend_reply_msg(f"获取 suite 数据上传时间失败 {e.status_code} {e.message}")
     except Exception as e:
-        msg+=f"获取失败：{get_exc_desc(e)}\n"
+        return await ctx.asend_reply_msg(f"获取 suite 数据上传时间失败 {get_exc_desc(e)}")
+    
+    msg = f"{process_hide_uid(ctx, uid, keep=6)}({ctx.region.upper()}) Suite数据\n"
+    if result["localUploadTime"]:
+        msg += "[本地数据]\n"
+        upload_time = datetime.fromisoformat(result["localUploadTime"])
+        upload_time_text = upload_time.strftime('%m-%d %H:%M:%S') + f"({get_readable_datetime(upload_time, show_original_time=False)})"
+        msg += f"{upload_time_text}\n"
+    else:
+        msg += f"[本地数据]\n获取失败：{result["localError"]}\n"
+    if result["harukiUploadTime"]:
+        msg += "[Haruki工具箱]\n"
+        upload_time = datetime.fromisoformat(result["harukiUploadTime"])
+        upload_time_text = upload_time.strftime('%m-%d %H:%M:%S') + f"({get_readable_datetime(upload_time, show_original_time=False)})"
+        msg += f"{upload_time_text}\n"
+    else:
+        msg += f"[Haruki工具箱]\n获取失败: {result["harukiError"]}\n"
     msg += f"---\n"
     msg += f"该指令查询Suite数据，查询Mysekai数据请使用\"/{ctx.region}msd\"\n"
     # msg += f"数据获取模式: {mode}，使用\"/{ctx.region}抓包模式\"来切换模式\n"

@@ -1509,6 +1509,8 @@ async def compose_deck_recommend_image(
                     value += item[key][i] * (1.8 if is_multi else 1.0)
                 if is_multi:
                     value += item['fever_score'] * 0.5
+                if recommend_type in ['event', 'wl', 'wl_fake', 'unit_attr'] and options.target == 'score':
+                    value *= item['event_rate'] / 100.0
                 music_values.append((value, music_id, diff))
             music_values = sorted(music_values, key=lambda x: x[0], reverse=True)[:MUSIC_COMPARE_CANDIDATE_MUSIC_NUM]
             for _, mid, diff in music_values:
@@ -1789,21 +1791,21 @@ async def compose_deck_recommend_image(
 
                     if recommend_type not in ["bonus", "wl_bonus", "mysekai"]:
                         if options.skill_order_choose_strategy == 'average':
-                            skill_order_text = "技能顺序: 平均情况"
+                            skill_order_text = "技能顺序: ⚖️平均情况"
                         elif options.skill_order_choose_strategy == 'max':
-                            skill_order_text = "技能顺序: 最优顺序"
+                            skill_order_text = "技能顺序: ⭐️最优顺序"
                         elif options.skill_order_choose_strategy == 'min':
-                            skill_order_text = "技能顺序: 最差顺序"
+                            skill_order_text = "技能顺序: 🥀最差顺序"
                         elif options.skill_order_choose_strategy == 'specific':
                             skill_order = options.specific_skill_order
                             skill_order_text = f"技能顺序: {''.join([str(s+1) for s in skill_order])}"
 
                         if options.skill_reference_choose_strategy == 'average':
-                            skill_reference_text = "BloomFes花前技能吸取: 平均值"
+                            skill_reference_text = "BloomFes花前技能吸取: ⚖️平均值"
                         elif options.skill_reference_choose_strategy == 'max':
-                            skill_reference_text = "BloomFes花前技能吸取: 最大值"
+                            skill_reference_text = "BloomFes花前技能吸取: ⭐️最大值"
                         elif options.skill_reference_choose_strategy == 'min':
-                            skill_reference_text = "BloomFes花前技能吸取: 最小值"
+                            skill_reference_text = "BloomFes花前技能吸取: 🥀最小值"
 
                         TextBox(skill_order_text + "  " + skill_reference_text, TextStyle(font=DEFAULT_BOLD_FONT, size=20, color=(70, 70, 70)))
                     

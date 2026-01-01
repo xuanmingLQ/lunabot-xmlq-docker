@@ -135,14 +135,13 @@ async def add_cron_job(task, verbose=False):
             logger.info(f"执行群组 {group_id} 的任务 {task_id} (第 {task['count']} 次)")
 
             # 发送消息
-            bot = get_bot()
             msg = task['content'].format(time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'), count=task['count']) + "\n"
             for user in task['sub_users']:
                 msg += f"[CQ:at,qq={user}]"
 
             msg += f"\n【{task['id']}】{get_task_next_run_time_str(group_id, task_id)}"
 
-            await send_group_msg_by_bot(bot, task['group_id'], msg.strip())
+            await send_group_msg_by_bot(task['group_id'], msg.strip())
 
             # 更新count
             task['count'] += 1
@@ -202,8 +201,7 @@ async def check_expired_tasks():
                         del_cron_task_from_file_db(group_id, task['id'])
                         logger.info(f"删除过期任务: {group_id}_{task['id']}")
 
-                        bot = get_bot()
-                        await send_group_msg_by_bot(bot, group_id, f"cron任务【{task['id']}】过期，已删除")
+                        await send_group_msg_by_bot(group_id, f"cron任务【{task['id']}】过期，已删除")
 
                 except Exception as e:
                     logger.print_exc(f"检查过期任务 {group_id}_{task['id']} 失败: {e}")
@@ -299,12 +297,12 @@ async def _(ctx: HandlerContext):
     if len(ok_users) > 0:
         resp += "添加订阅成功: "
         for user in ok_users:
-            resp += await get_group_member_name(ctx.bot, ctx.group_id, user) + " "
+            resp += await get_group_member_name(ctx.group_id, user) + " "
         resp += "\n"
     if len(already_users) > 0:
         resp += "已订阅: "
         for user in already_users:
-            resp += await get_group_member_name(ctx.bot, ctx.group_id, user) + " "
+            resp += await get_group_member_name(ctx.group_id, user) + " "
         resp += "\n"
     logger.info(f"为 {users} 订阅任务 {ctx.group_id}_{task['id']} 成功: 添加订阅成功 {ok_users} 已订阅 {already_users}")
     return await ctx.asend_reply_msg(resp.strip())
@@ -337,12 +335,12 @@ async def _(ctx: HandlerContext):
     if len(ok_users) > 0:
         resp += "取消订阅成功: "
         for user in ok_users:
-            resp += await get_group_member_name(ctx.bot, ctx.group_id, user) + " "
+            resp += await get_group_member_name(ctx.group_id, user) + " "
         resp += "\n"
     if len(already_users) > 0:
         resp += "未订阅: "
         for user in already_users:
-            resp += await get_group_member_name(ctx.bot, ctx.group_id, user) + " "
+            resp += await get_group_member_name(ctx.group_id, user) + " "
         resp += "\n"
     logger.info(f"为 {users} 取消订阅任务 {ctx.group_id}_{task['id']} 成功: 取消订阅成功 {ok_users} 未订阅 {already_users}")
     return await ctx.asend_reply_msg(resp.strip())
@@ -367,7 +365,7 @@ async def _(ctx: HandlerContext):
     task = find_task(ctx, check_permission=False)
     resp = f"任务 {task['id']} 的订阅者:\n"
     for user in task['sub_users']:
-        resp += f"{await get_group_member_name(ctx.bot, ctx.group_id, user)}({user})\n"
+        resp += f"{await get_group_member_name(ctx.group_id, user)}({user})\n"
     return await ctx.asend_reply_msg(resp.strip())
 
     

@@ -121,13 +121,13 @@ def json_msg_to_readable_text(mdata: dict):
             return "[转发消息(加载失败)]"
 
 # 转发聊天记录转换到文本
-async def get_forward_msg_text(model: str, forward_seg, indent: int = 0) -> str:
+async def get_forward_msg_text(bot: Bot, model: str, forward_seg, indent: int = 0) -> str:
     logger.info(f"chat开始总结聊天记录: {forward_seg['data']['id']}")
     
     forward_id = forward_seg['data']['id']
     forward_content = forward_seg['data'].get("content")
     if not forward_content:
-        forward_msg = await get_forward_msg(get_bot(), forward_id)
+        forward_msg = await get_forward_msg(bot, forward_id)
         if not forward_msg:
             logger.warning(f"chat获取聊天记录失败: {forward_id}")
             return "[转发消息(加载失败)]"
@@ -158,7 +158,7 @@ async def get_forward_msg_text(model: str, forward_seg, indent: int = 0) -> str:
             elif mtype == "reply":
                 text += f"[reply={mdata['id']}]"
             elif mtype == "forward":
-                text += await get_forward_msg_text(model, seg, indent + 4)
+                text += await get_forward_msg_text(bot, model, seg, indent + 4)
             elif mtype == "json":
                 text += json_msg_to_readable_text(mdata)
         text += "\n"
@@ -294,7 +294,7 @@ async def _(ctx: HandlerContext):
         if query_text.strip().startswith("/"):
             return
 
-        bot_name = await get_group_member_name(bot, event.group_id, bot.self_id)
+        bot_name = await get_group_member_name(event.group_id, bot.self_id)
 
         # 空消息不回复
         if query_text.replace(f"@{bot_name}", "").strip() == "" or query_text is None:
@@ -404,7 +404,7 @@ async def _(ctx: HandlerContext):
                 # 回复折叠内容
                 if "forward" in reply_cqs:
                     logger.info(reply_cqs["forward"][0]["id"])
-                    forward_text = await get_forward_msg_text(get_model_preset('chat.image_caption'), find_by(reply_msg, 'type', "forward"))
+                    forward_text = await get_forward_msg_text(ctx.bot, get_model_preset('chat.image_caption'), find_by(reply_msg, 'type', "forward"))
                     session.append_user_content(forward_text)
                 # 回复普通内容
                 elif len(reply_imgs) > 0 or reply_text.strip() != "":
@@ -728,5 +728,30 @@ async def _(ctx: HandlerContext):
 
     except Exception as e:
         raise Exception(f"翻译失败: {e}")
-
 '''
+
+# 查询autochat用户记忆
+autochat_usermemory = CmdHandler([
+    "/autochat um", "/um", "/autochat usermemory", "/usermemory"
+], logger)
+autochat_usermemory.check_cdrate(chat_cd).check_wblist(autochat_gwl)
+@autochat_usermemory.handle()
+async def _(ctx: HandlerContext):
+    qids = ctx.get_at_qids()
+    if not qids:
+        qid = ctx.user_id
+    else:
+        qid = qids[0]
+
+    nickname = await get_group_member_name(ctx.group_id, qid)
+
+    um = None
+    path = get_data_path(f"chat/autochat/memory_{ctx.group_id}.json")
+    if os.path.exists(path):
+        mem = load_json(path)
+        um = mem.get("ums", {}).get(str(qid), {}).get("text", None)
+    
+    if not um:
+        return await ctx.asend_reply_msg(f"对@{nickname}的印象: 无")
+
+    return await ctx.asend_reply_msg(f"对@{nickname}的印象:\n{um}")

@@ -1,5 +1,5 @@
 from src.utils import *
-from nonebot import get_bot, on_notice
+from nonebot import on_notice
 from nonebot.adapters.onebot.v11 import NoticeEvent
 import asyncio
 
@@ -18,11 +18,12 @@ decrease_notified = set()
 
 # 更新群成员信息
 async def update_member_info(group_id=None):
-    bot = get_bot()
     if group_id is not None:
+        bot = await aget_group_bot(group_id, raise_exc=True)
         groups = [await get_group(bot, group_id)]
     else:
-        groups = await get_group_list(bot)
+        gwl_group_ids = gwl.get()
+        groups = [g for g in await get_all_bot_group_list() if int(g['group_id']) in gwl_group_ids]
 
     for group in groups:
         try:
@@ -44,7 +45,7 @@ async def update_member_info(group_id=None):
 
 # 处理加群
 async def handle_increase(group_id, user_id, sub_type):
-    bot = get_bot()
+    bot = await aget_group_bot(group_id, raise_exc=True)
     if group_id not in gwl.get(): return
     if str(user_id) == str(bot.self_id): return
     group_id, user_id = group_id, user_id
@@ -56,7 +57,7 @@ async def handle_increase(group_id, user_id, sub_type):
     decrease_notified.discard(guid)
 
     try:
-        nickname = await get_group_member_name(bot, group_id, user_id)
+        nickname = await get_group_member_name(group_id, user_id)
         name = f"{nickname}({user_id})"
     except:
         nickname = ""
@@ -79,13 +80,13 @@ async def handle_increase(group_id, user_id, sub_type):
         else:
             msg = f"{name} 加入群聊"
 
-    await send_group_msg_by_bot(bot, group_id, msg)
+    await send_group_msg_by_bot(group_id, msg)
     await asyncio.sleep(3)
     return await update_member_info(group_id)
 
 # 处理退群
 async def handle_decrease(group_id, user_id, sub_type):
-    bot = get_bot()
+    bot = await aget_group_bot(group_id, raise_exc=True)
     if group_id not in gwl.get(): return
     if str(user_id) == str(bot.self_id): return
     group_id, user_id = group_id, user_id
@@ -99,7 +100,7 @@ async def handle_decrease(group_id, user_id, sub_type):
     members = file_db.get(f'{group_id}_members', {})
     name = members.get(str(user_id), '')
 
-    await send_group_msg_by_bot(bot, group_id, f"{name}({user_id}) 退出群聊")
+    await send_group_msg_by_bot(group_id, f"{name}({user_id}) 退出群聊")
     await asyncio.sleep(3)
     return await update_member_info(group_id)
 

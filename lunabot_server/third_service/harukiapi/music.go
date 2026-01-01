@@ -17,16 +17,16 @@ import (
 type MusicService struct{}
 
 func (*MusicService) GetMusicAlias(ctx context.Context, MusicIds []string) (v map[string]interface{}, err error) {
-	if global.CONFIG.HarukiApi.MusicAlias.BaseUrl == "" {
+	if global.CONFIG.HarukiApi.MusicAlias == "" {
 		return nil, errors.New("没有配置Haruki Sekai Api Music Alias Base Url")
 	}
-	v = make(map[string]interface{})
+	v = make(map[string]interface{}, len(MusicIds))
 	// 用来防止并发写入的锁
 	var mu sync.Mutex
 	// 等待所有goroutine都完成
 	var wg sync.WaitGroup
 	// 限制同时运行的goroutine数量
-	batchSize := make(chan struct{}, global.CONFIG.HarukiApi.MusicAlias.BatchSize)
+	batchSize := make(chan struct{}, global.CONFIG.HarukiApi.BatchSize)
 	for _, musicId := range MusicIds {
 		if musicId == "" {
 			continue
@@ -39,13 +39,13 @@ func (*MusicService) GetMusicAlias(ctx context.Context, MusicIds []string) (v ma
 		wg.Add(1)
 		batchSize <- struct{}{}
 		go func(MusicId string) {
-			ctx, cancel := context.WithTimeout(ctx, time.Duration(global.CONFIG.HarukiApi.Timeout))
+			ctx, cancel := context.WithTimeout(ctx, time.Duration(global.CONFIG.HarukiApi.Timeout)*time.Second)
 			defer func() {
 				cancel()
 				wg.Done()
 				<-batchSize
 			}()
-			Url := strings.Replace(global.CONFIG.HarukiApi.MusicAlias.BaseUrl, "{music_id}", MusicId, 1)
+			Url := strings.Replace(global.CONFIG.HarukiApi.MusicAlias, "{music_id}", MusicId, 1)
 			global.LOG.Debug(Url)
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, Url, nil)
 			if err != nil {
@@ -67,7 +67,7 @@ func (*MusicService) GetMusicAlias(ctx context.Context, MusicIds []string) (v ma
 			mu.Unlock()
 		}(musicId)
 		// 防止同时发出过多请求
-		time.Sleep(time.Duration(global.CONFIG.HarukiApi.MusicAlias.BatchInterval) * time.Millisecond)
+		time.Sleep(time.Duration(global.CONFIG.HarukiApi.BatchInterval) * time.Millisecond)
 	}
 	wg.Wait()
 	if len(v) == 0 {

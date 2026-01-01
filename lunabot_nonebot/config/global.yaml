@@ -1,30 +1,31 @@
-bot_name: "lunabot-xmlq"
 log_level: "INFO"
 superuser:
-  - 1234567
+  - 12345678
 
 group_member_name_cache_expire_seconds: 60  # 群成员名称缓存过期时间（秒）
+bot_group_ids_cache_expire_seconds: 60      # bot所在群ID缓存过期时间（秒）
 
 msg_send:
   rate_limit:
     second: 10  # 每秒限制发送消息的数量
     day: 4000   # 每天限制发送消息的数量
   failed_mail_interval: 600  # 发送消息发送异常邮件的间隔（秒）
-
-  default_fold_threshold: 25            # 默认折叠行数阈值
+  
+  default_fold_threshold: 20            # 默认折叠行数阈值
   default_fold_fallback_method: "none"  # 默认发送折叠消息失败时的回退方法
-  max_fold_msg_len: 4096                # 单层折叠消息长度限制 
-  max_fold_msg_segment_count: 4096 # 最大折叠消息段数
+  max_fold_msg_segment_count: 5         # 折叠消息分段数量限制
+  max_fold_msg_len: 6000                # 折叠消息长度限制 
+
   tmp_img_keep_minutes: 5  # 临时图片保存时间（分钟）
 
   low_quality_image:
     default_quality: 75
     default_subsampling: 2
     default_optimize: True
-    
+
 font:
   path: "utils/fonts/Microsoft YaHei.ttf"  # 中文字体路径
-  name: "Microsoft YaHei"     # Matplotlib库使用的中文字体名称
+  name: "Microsoft YaHei"                                  # Matplotlib库使用的中文字体名称
 
 default_cd: 2             # 默认指令处理冷却时间（秒）
 cd_verbose_interval: 30   # 间隔多少秒输出一次"当前正在冷却"提示
@@ -32,21 +33,20 @@ cd_verbose_interval: 30   # 间隔多少秒输出一次"当前正在冷却"提�
 exception_mail:   # 发送异常消息邮件的配置
   host: "smtp.qq.com"          # 邮箱服务器地址
   port: 587                    # 邮箱服务器端口
-  user: ""           # 邮箱发送者用户名
-  pass: ""                  # 邮箱密码
+  user: "xxx@qq.com"      # 邮箱发送者用户名
+  pass: "xxx"     # 邮箱密码
   receivers:                   # 邮箱接收者列表
-    - 
+    - xxx@qq.com
 
 default_thread_pool_size: 8
 
-playwright_context_num: 8 # 同时运行的浏览器context数量
+playwright_context_num: 8
 
 safety_check:
   enabled: false
   secret_id: xxx
   secret_key: xxx
   endpoint: ims.tencentcloudapi.com
-
 
 
 plot:
@@ -59,3 +59,6 @@ painter:
   process_num: 4  # 设置为0时在主进程使用多线程绘制
   log_operation: False
   roundrect_aa_target_radius: 32
+  emoji:
+    offset: [0, 2]
+    scale: 1.1

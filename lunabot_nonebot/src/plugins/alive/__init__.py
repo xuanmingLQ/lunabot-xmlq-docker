@@ -24,11 +24,16 @@ NONE_STATE = "none"
 CONNECT_STATE = "connect"
 DISCONNECT_STATE = "disconnect"
 
-cur_state = NONE_STATE      # 当前连接状态
-noti_state = NONE_STATE     # 认为的连接状态
-cur_elapsed = timedelta(seconds=0)  # 当前连接状态持续时间
-last_check_time = None      # 上次检测时间
-group_reported = False      # 群已报告 
+
+class BotState:
+    cur_state = NONE_STATE      # 当前连接状态
+    noti_state = NONE_STATE     # 认为的连接状态
+    cur_elapsed = timedelta(seconds=0)  # 当前连接状态持续时间
+    last_check_time = None      # 上次检测时间
+    group_reported = False      # 群已报告 
+
+bot_states: dict[int, BotState] = {}
+
 
 # 发送通知
 async def send_noti(state):
@@ -42,44 +47,47 @@ async def send_noti(state):
 # 存活检测
 @repeat_with_interval(CHECK_INTERVAL_CFG.get(), "存活检测", logger, start_offset=5, error_limit=999999)
 async def alive_check():
-    global cur_state, noti_state, cur_elapsed, last_check_time, group_reported
-    # 检测连接状态
-    try:
-        from nonebot import get_bot
-        bot = get_bot()
-        new_state = CONNECT_STATE
-    except:
-        new_state = DISCONNECT_STATE
+    for self_id in config.get('bot_ids'):
+        if int(self_id) not in bot_states:
+            bot_states[int(self_id)] = BotState()
+        st = bot_states[int(self_id)]
+        # 检测连接状态
+        try:
+            bot = get_bot_by_self_id(self_id)
+            assert bot
+            new_state = CONNECT_STATE
+        except:
+            new_state = DISCONNECT_STATE
 
-    # 第一次检测
-    if last_check_time is None:
-        last_check_time = datetime.now()
-        return
+        # 第一次检测
+        if st.last_check_time is None:
+            st.last_check_time = datetime.now()
+            return
 
-    # 更新elapsed
-    if new_state != cur_state:
-        cur_elapsed = timedelta(seconds=0)
-    else:
-        cur_elapsed += datetime.now() - last_check_time
-    cur_state = new_state
+        # 更新elapsed
+        if new_state != st.cur_state:
+            st.cur_elapsed = timedelta(seconds=0)
+        else:
+            st.cur_elapsed += datetime.now() - st.last_check_time
+        st.cur_state = new_state
 
-    # 如果获取链接，立刻报告群聊
-    if not group_reported and cur_state == CONNECT_STATE:
-        for group_id in REPORT_GROUPS_CFG.get():
-            try:
-                await send_group_msg_by_bot(bot, group_id, f"恢复连接")
-            except Exception as e:
-                logger.print_exc(f"向群 {group_id} 发送恢复连接通知失败")
-        group_reported = True
+        # 如果获取链接，立刻报告群聊
+        if not st.group_reported and st.cur_state == CONNECT_STATE:
+            for group_id in REPORT_GROUPS_CFG.get():
+                try:
+                    await send_group_msg_by_bot(group_id, f"{self_id}恢复连接")
+                except Exception as e:
+                    logger.print_exc(f"向群 {group_id} 发送恢复连接通知失败")
+            st.group_reported = True
 
-    # 如果当前状态不等于认为的状态且持续时间超过阈值，发送通知
-    if cur_state != noti_state and cur_elapsed >= timedelta(seconds=TIME_THRESHOLD_CFG.get()):
-        logger.info(f"存活检测发生变更：{noti_state} -> {cur_state}，持续时间：{cur_elapsed}")
-        if NOTIFY_AT_FIRST_CFG.get() or noti_state != NONE_STATE:
-            await send_noti(cur_state)
-        noti_state = cur_state
-    
-    last_check_time = datetime.now()
+        # 如果当前状态不等于认为的状态且持续时间超过阈值，发送通知
+        if st.cur_state != st.noti_state and st.cur_elapsed >= timedelta(seconds=TIME_THRESHOLD_CFG.get()):
+            logger.info(f"存活检测发生变更：{st.noti_state} -> {st.cur_state}，持续时间：{st.cur_elapsed}")
+            if NOTIFY_AT_FIRST_CFG.get() or st.noti_state != NONE_STATE:
+                await send_noti(st.cur_state)
+            st.noti_state = st.cur_state
+        
+        st.last_check_time = datetime.now()
 
 
 # 测试命令
@@ -87,8 +95,9 @@ alive = CmdHandler(["/alive"], logger)
 alive.check_cdrate(cd)
 @alive.handle()
 async def _(ctx: HandlerContext):
-    dt = datetime.now() - cur_elapsed
-    await ctx.asend_reply_msg(f"当前连接持续时长: {get_readable_timedelta(cur_elapsed)}\n连接时间: {dt.strftime('%Y-%m-%d %H:%M:%S')}")
+    st = bot_states.get(int(ctx.bot.self_id))
+    dt = datetime.now() - st.cur_elapsed
+    await ctx.asend_reply_msg(f"当前连接持续时长: {get_readable_timedelta(st.cur_elapsed)}\n连接时间: {dt.strftime('%Y-%m-%d %H:%M:%S')}")
 
 
 # kill命令
@@ -122,13 +131,12 @@ status_notify_gwl = get_group_white_list(file_db, logger, "status_notify", is_se
 STATUS_NOTIFY_TIME = config.get('status_notify_time')
 @scheduler.scheduled_job("cron", hour=STATUS_NOTIFY_TIME[0], minute=STATUS_NOTIFY_TIME[1], second=STATUS_NOTIFY_TIME[2])
 async def status_nofify():
-    bot = get_bot()
     if not status_notify_gwl.get():
         return
     msg = await get_status_image_cq()
     for group_id in status_notify_gwl.get():
         try:
-            await send_group_msg_by_bot(bot, group_id, msg)
+            await send_group_msg_by_bot(group_id, msg)
         except Exception as e:
             logger.print_exc(f"向群 {group_id} 定时推送状态图失败")
 
@@ -161,7 +169,7 @@ async def _(bot: Bot, event: NoticeEvent):
         if not imgs:
             return
         img = random.choice(imgs)
-        await send_group_msg_by_bot(bot, event.group_id, await get_image_cq(img))
+        await send_group_msg_by_bot(event.group_id, await get_image_cq(img))
 
     except:
         logger.print_exc("回复戳失败")

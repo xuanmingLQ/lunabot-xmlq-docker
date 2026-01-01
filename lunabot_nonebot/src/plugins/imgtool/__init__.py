@@ -1382,7 +1382,7 @@ async def _(ctx: HandlerContext):
         with HSplit().set_item_align('c').set_content_align('c').set_padding(16).set_sep(16):
             with VSplit().set_item_align('c').set_content_align('c'):
                 Spacer(10, 32)
-                ImageBox(await download_image(get_avatar_url_large(reply_user_id)), size=(256, 256)).set_margin(16)
+                ImageBox(await download_image(await get_avatar_url_large(ctx.bot, reply_user_id)), size=(256, 256)).set_margin(16)
                 Spacer(10, 32)
             
             with VSplit().set_item_align('c').set_content_align('c').set_sep(8):

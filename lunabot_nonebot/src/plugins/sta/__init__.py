@@ -22,7 +22,7 @@ STA_WORD_TOPK_CFG = config.item('sta_word_topk')
 
 
 # 获取某天统计图数据
-async def get_day_statistic(bot, group_id, date=None):
+async def get_day_statistic(group_id, date=None):
     if date is None: date = datetime.now().strftime("%Y-%m-%d")
     start_time = datetime.strptime(date, "%Y-%m-%d").strftime("%Y-%m-%d 00:00:00")
     end_time   = datetime.strptime(date, "%Y-%m-%d").strftime("%Y-%m-%d 23:59:59")
@@ -42,7 +42,7 @@ async def get_day_statistic(bot, group_id, date=None):
     topk_name = []
     for user in topk_user:
         try:
-            name = truncate(await get_group_member_name(bot, group_id, user), NAME_LEN_LIMIT_CFG.get())
+            name = truncate(await get_group_member_name(group_id, user), NAME_LEN_LIMIT_CFG.get())
             topk_name.append(name)
         except:
             topk_name.append(str(user))
@@ -52,7 +52,7 @@ async def get_day_statistic(bot, group_id, date=None):
     )
 
 # 获取长时间统计数据
-async def get_long_statistic(bot, group_id, start_date: datetime, end_date: datetime):
+async def get_long_statistic(group_id, start_date: datetime, end_date: datetime):
     start_time = start_date.strftime("%Y-%m-%d 00:00:00")
     end_time   = end_date.strftime("%Y-%m-%d 23:59:59")
     start_time = datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
@@ -73,7 +73,7 @@ async def get_long_statistic(bot, group_id, start_date: datetime, end_date: date
     topk_name = []
     for user in topk_user:
         try:
-            name = truncate(await get_group_member_name(bot, group_id, user), NAME_LEN_LIMIT_CFG.get())
+            name = truncate(await get_group_member_name(group_id, user), NAME_LEN_LIMIT_CFG.get())
             topk_name.append(name)
         except:
             topk_name.append(str(user))
@@ -84,7 +84,7 @@ async def get_long_statistic(bot, group_id, start_date: datetime, end_date: date
     )
 
 # 获取总消息量关于时间的统计图数据
-async def get_date_count_statistic(bot, group_id, days, user_id=None):
+async def get_date_count_statistic(group_id, days, user_id=None):
     t = datetime.now()
     dates, counts = [], []
     user_counts = None if user_id is None else []
@@ -108,7 +108,7 @@ async def get_date_count_statistic(bot, group_id, days, user_id=None):
         return await get_image_cq(save_path)
 
 # 获取某个词的统计图
-async def get_word_statistic(bot, group_id, days, word):
+async def get_word_statistic(group_id, days, word):
     words = word.split('，') if '，' in word else word.split(',')
     t = datetime.now()
     dates = []
@@ -132,7 +132,7 @@ async def get_word_statistic(bot, group_id, days, word):
     topk_name = []
     for user in topk_user:
         try:
-            name = await get_group_member_name(bot, group_id, user)
+            name = await get_group_member_name(group_id, user)
             topk_name.append(name)
         except:
             topk_name.append(str(user))
@@ -158,7 +158,7 @@ async def _(ctx: HandlerContext):
     except:
         logger.info(f'日期格式错误, 使用当前日期')
         date = None
-    res = await get_day_statistic(ctx.bot, ctx.group_id, date)
+    res = await get_day_statistic(ctx.group_id, date)
     return await ctx.asend_reply_msg(res)
 
 
@@ -195,7 +195,7 @@ async def _(ctx: HandlerContext):
 /sta_sum [天数]
 """.strip())
 
-    res = await get_long_statistic(ctx.bot, ctx.group_id, start_date, end_date)
+    res = await get_long_statistic(ctx.group_id, start_date, end_date)
     return await ctx.asend_reply_msg(res)
 
 
@@ -213,7 +213,7 @@ async def _(ctx: HandlerContext):
     except:
         logger.info(f'日期格式错误, 使用默认30天')
         days = 30
-    res = await get_date_count_statistic(ctx.bot, ctx.group_id, days, user_id)
+    res = await get_date_count_statistic(ctx.group_id, days, user_id)
     return await ctx.asend_reply_msg(res)
 
 
@@ -230,7 +230,7 @@ async def _(ctx: HandlerContext):
     except:
         logger.info(f'日期格式错误, 使用默认30天')
         days = 30
-    res = await get_word_statistic(ctx.bot, ctx.group_id, days, word)
+    res = await get_word_statistic(ctx.group_id, days, word)
     return await ctx.asend_reply_msg(res)
 
 
@@ -277,7 +277,6 @@ async def _(ctx: HandlerContext):
 # 定时统计消息
 @scheduler.scheduled_job("cron", hour=STATICSTIC_TIME[0], minute=STATICSTIC_TIME[1], second=STATICSTIC_TIME[2])
 async def cron_statistic():
-    bot = get_bot()
     for group_id in notify_gwl.get():
         if group_id in gbl.get(): continue
         
@@ -288,8 +287,8 @@ async def cron_statistic():
 
         logger.info(f'尝试发送 {group_id} 统计图', flush=True)
         try:
-            res = await get_day_statistic(bot, group_id)
-            await send_group_msg_by_bot(bot, group_id, res)
+            res = await get_day_statistic(group_id)
+            await send_group_msg_by_bot(group_id, res)
         except Exception as e:
             logger.print_exc(f'发送 {group_id} 统计图失败')
 

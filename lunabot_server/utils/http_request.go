@@ -18,8 +18,20 @@ var (
 	hc *http.Client
 )
 
+type HttpError struct {
+	Status  int    `json:"status"`
+	Message string `json:"message"`
+}
+
+func (he *HttpError) Error() string {
+	if he == nil {
+		return "未知错误"
+	}
+	return fmt.Sprintf("%d: %s", he.Status, he.Message)
+}
+
 // DataTypeNone 返回Response
-// DataTypeJson 返回json.Decode的结果
+// DataTypeJson 返回json.Decode的结果，其中的number会被解析为json.Number类型
 // DataTypeBytes 返回[]byte
 func HttpRequest(
 	Req *http.Request,
@@ -42,9 +54,12 @@ func HttpRequest(
 		defer resp.Body.Close()
 	}
 	if resp.StatusCode != http.StatusOK {
-		var detail map[string]string
-		_ = json.NewDecoder(resp.Body).Decode(&detail)
-		return nil, fmt.Errorf("请求第三方Api %s 失败：%s %s", Req.URL.String(), resp.Status, detail["detail"])
+		var httpError HttpError
+		_ = json.NewDecoder(resp.Body).Decode(&httpError)
+		if httpError.Status == 0 {
+			httpError.Status = resp.StatusCode
+		}
+		return nil, &httpError
 	}
 	switch DataType {
 	case DataTypeNone:

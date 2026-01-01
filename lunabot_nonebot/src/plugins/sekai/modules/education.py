@@ -470,11 +470,11 @@ async def compose_bonds_image(ctx: SekaiHandlerContext, qid: int, cid: int | Non
         return bgid // 100 % 100, bgid % 100
 
     # 收集羁绊等级需要的经验信息
-    bond_level_exps: dict[int, int] = {}
+    bond_level_total_exps: dict[int, int] = {}
     max_level = 0
     for item in await ctx.md.levels.find_by('levelType', 'bonds', mode='all'):
         lv, exp = item['level'], item['totalExp']
-        bond_level_exps[lv] = exp
+        bond_level_total_exps[lv] = exp
         max_level = max(max_level, lv)
     
     # 收集所有的羁绊角色
@@ -541,8 +541,8 @@ async def compose_bonds_image(ctx: SekaiHandlerContext, qid: int, cid: int | Non
                             level_text = str(level)
                         exp = bonds[key]['exp'] if bonds[key] else 0
                         if exp:
-                            next_level = level + 1
-                            need_exp_text = str(bond_level_exps[next_level] - exp) if next_level <= max_level else "MAX"
+                            level_exp = bond_level_total_exps[level + 1] - bond_level_total_exps[level] if level < max_level else 0
+                            need_exp_text = str(level_exp - exp) if level + 1 <= max_level else "MAX"
 
                     color1 = await get_chara_color(c1)
                     color2 = await get_chara_color(c2)

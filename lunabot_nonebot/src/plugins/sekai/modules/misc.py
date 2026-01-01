@@ -318,7 +318,6 @@ async def send_masterdata_update_notify(
     version: str, last_version: str,
     asset_version: str, last_asset_version: str,
 ):
-    bot = get_bot()
     region_name = get_region_name(region)
 
     # 防止重复通知
@@ -335,7 +334,7 @@ async def send_masterdata_update_notify(
     for group_id in md_update_group_sub.get_all(region):
         if not gbl.check_id(group_id): continue
         try:
-            await send_group_msg_by_bot(bot, group_id, msg)
+            await send_group_msg_by_bot(group_id, msg)
         except Exception as e:
             logger.print_exc(f"在群聊 {group_id} 发送 {region} MasterData更新通知失败")
             continue
@@ -344,9 +343,6 @@ async def send_masterdata_update_notify(
 # 广告奖励推送
 # @repeat_with_interval(5, '广告奖励推送', logger) # 不支持广告奖励
 async def msr_auto_push():
-    return
-    bot = get_bot()
-
     for region in ALL_SERVER_REGIONS:
         region_name = get_region_name(region)
         ctx = SekaiHandlerContext.from_region(region)
@@ -418,10 +414,10 @@ async def msr_auto_push():
                 msg += f"{datetime.fromtimestamp(res['time']).strftime('%Y-%m-%d %H:%M:%S')}\n"
                 msg += "\n".join(res['results'])
 
-                await send_group_msg_by_bot(bot, gid, msg.strip())
+                await send_group_msg_by_bot(gid, msg.strip())
             except Exception as e:
                 logger.print_exc(f'在 {gid} 中自动推送用户 {qid} 的{region_name}广告奖励失败')
-                try: await send_group_msg_by_bot(bot, gid, f"自动推送用户 [CQ:at,qq={qid}] 的{region_name}广告奖励失败: {get_exc_desc(e)}")
+                try: await send_group_msg_by_bot(gid, f"自动推送用户 [CQ:at,qq={qid}] 的{region_name}广告奖励失败: {get_exc_desc(e)}")
                 except: pass
 
         await batch_gather(*[push(task) for task in tasks])

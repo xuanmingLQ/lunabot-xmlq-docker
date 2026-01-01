@@ -22,6 +22,8 @@ func (uni *AssetsService) DownloadAssets(ctx context.Context, BaseUrl, Path stri
 	Path = strings.ReplaceAll(Path, "_rip", "")
 	// 替换.asset为.json
 	Path = strings.ReplaceAll(Path, ".asset", ".json")
+	// 去掉前缀
+	Path = strings.TrimPrefix(Path, "/")
 	// 添加类别
 	category := "ondemand"
 	if slices.ContainsFunc(

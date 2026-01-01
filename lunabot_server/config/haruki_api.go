@@ -1,11 +1,13 @@
 package config
 
 type HarukiApi struct {
-	Token      string              `mapstructure:"token" json:"token" yaml:"token"`
-	SuiteApi   HarukiSuiteApi      `mapstructure:"suite-api" json:"suite-api" yaml:"suite-api"`
-	PublicApi  HarukiPublicApi     `mapstructure:"public-api" json:"public-api" yaml:"public-api"`
-	MusicAlias HarukiMusicAliasApi `mapstructure:"music-alias" json:"music-alias" yaml:"music-alias"`
-	Timeout    int                 `mapstructure:"timeout" json:"timeout" yaml:"timeout"`
+	Token         string          `mapstructure:"token" json:"token" yaml:"token"`
+	SuiteApi      HarukiSuiteApi  `mapstructure:"suite-api" json:"suite-api" yaml:"suite-api"`
+	PublicApi     HarukiPublicApi `mapstructure:"public-api" json:"public-api" yaml:"public-api"`
+	MusicAlias    string          `mapstructure:"base-url" json:"base-url" yaml:"base-url"`
+	BatchInterval int             `mapstructure:"batch-interval" json:"batch-interval" yaml:"batch-interval"`
+	BatchSize     int             `mapstructure:"batch-size" json:"batch-size" yaml:"batch-size"`
+	Timeout       int             `mapstructure:"timeout" json:"timeout" yaml:"timeout"`
 }
 type HarukiSuiteApi struct {
 	Endpoint         string   `mapstructure:"endpoint" json:"endpoint" yaml:"endpoint"`
@@ -22,9 +24,4 @@ type HarukiPublicApi struct {
 	RankingTop100         string   `mapstructure:"ranking-top100" json:"ranking-top100" yaml:"ranking-top100"`
 	RankingRecordInterval int      `mapstructure:"ranking-record-interval" json:"ranking-record-interval" yaml:"ranking-record-interval"`
 	AllowRegions          []string `mapstructure:"allow-regions" json:"allow-regions" yaml:"allow-regions"`
-}
-type HarukiMusicAliasApi struct {
-	BaseUrl       string `mapstructure:"base-url" json:"base-url" yaml:"base-url"`
-	BatchInterval int    `mapstructure:"batch-interval" json:"batch-interval" yaml:"batch-interval"`
-	BatchSize     int    `mapstructure:"batch-size" json:"batch-size" yaml:"batch-size"`
 }

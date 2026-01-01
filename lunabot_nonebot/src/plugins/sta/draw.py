@@ -65,6 +65,7 @@ def get_cmap(gid, date, n=10, hue_range=0.2):
 # 饼图Frame控件
 async def get_pie_frame(gid, date_str, recs, topk_user: list[int], topk_name: list[int]) -> Frame:
     logger.info(f"开始绘制饼图")
+    bot = await aget_group_bot(gid, raise_exc=False)
 
     # 统计数量
     topk_user_set = set(topk_user)
@@ -157,7 +158,7 @@ async def get_pie_frame(gid, date_str, recs, topk_user: list[int], topk_name: li
             with HSplit().set_offset_anchor(offset_anchor).set_offset((x, y)).set_sep(0) as hs:
                 if topk_user[i] != "其他":
                     try:
-                        ImageBox(download_avatar(topk_user[i], circle=True), size=(None, 40))
+                        ImageBox(await download_avatar(bot, topk_user[i], circle=True), size=(None, 40))
                     except:
                         logger.print_exc(f"获取{topk_user[i]}头像失败")
                 with Frame().set_bg(label_bg).set_padding(5).set_content_align('l'):

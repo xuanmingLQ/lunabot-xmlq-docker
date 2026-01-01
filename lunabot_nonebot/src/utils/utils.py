@@ -383,7 +383,7 @@ def get_readable_datetime(t: datetime, show_original_time=True, use_en_unit=Fals
     将时间点转换为可读字符串
     """
     day_unit, hour_unit, minute_unit, second_unit = ("天", "小时", "分钟", "秒") if not use_en_unit else ("d", "h", "m", "s")
-    now = datetime.now()
+    now = datetime.now(t.tzinfo)
     diff = t - now
     text, suffix = "", "后"
     if diff.total_seconds() < 0:

@@ -19,5 +19,10 @@ func initializeSystem() {
 	initialize.OtherInit()
 	global.LOG = core.Zap()
 	zap.ReplaceGlobals(global.LOG)
+	global.DB = initialize.Gorm()
+	initialize.Timer()
 	initialize.SetupHandlers()
+	if global.DB != nil {
+		initialize.RegisterTables()
+	}
 }

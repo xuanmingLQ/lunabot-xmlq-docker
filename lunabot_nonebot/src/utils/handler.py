@@ -1,5 +1,7 @@
 from .utils import *
-from nonebot import on_command, get_bot, get_bots
+from nonebot import on_command
+from nonebot import get_bot as nb_get_bot
+from nonebot import get_bots as nb_get_bots
 from nonebot.rule import to_me as rule_to_me
 from nonebot.message import handle_event
 from nonebot.compat import model_dump, type_validate_python
@@ -19,10 +21,71 @@ from .data import get_data_path
 
 SUPERUSER_CFG = global_config.item('superuser')
 GROUP_MEMBER_NAME_CACHE_EXPIRE_SECONDS_CFG = global_config.item('group_member_name_cache_expire_seconds')
+BOT_GROUP_IDS_CACHE_EXPIRE_SECONDS_CFG = global_config.item('bot_group_ids_cache_expire_seconds')
 
 DEFAULT_LQ_IMAGE_QUALITY_CFG = global_config.item('msg_send.low_quality_image.default_quality')
 DEFAULT_LQ_IMAGE_SUBSAMPLING_CFG = global_config.item('msg_send.low_quality_image.default_subsampling')
 DEFAULT_LQ_IMAGE_OPTIMIZE_CFG = global_config.item('msg_send.low_quality_image.default_optimize')
+
+
+def get_all_bots() -> list[Bot]:
+    """
+    获取所有已连接的Bot对象列表
+    """
+    return list(nb_get_bots().values())
+
+def get_bot_by_self_id(self_id: int | str) -> Bot | None:
+    """
+    通过self_id获取Bot对象
+    """
+    return nb_get_bots().get(str(self_id), None)
+
+async def aget_group_bot(group_id: int, raise_exc: bool = False) -> Bot | None:
+    """
+    通过群号获取对应的Bot对象
+    """
+    group_id = int(group_id)
+    bots = get_all_bots()
+    valid_bots: list[Bot] = []
+    for bot in bots:
+        try:
+            group_ids = await get_group_ids(bot)
+            if group_id in group_ids:
+                valid_bots.append(bot)
+        except Exception as e:
+            utils_logger.warning(f'通过群号获取对应的Bot对象时获取Bot {bot.self_id} 的群列表失败: {get_exc_desc(e)}')
+    valid_bots.sort(key=lambda x: int(x.self_id))
+    if len(valid_bots) == 0:
+        if raise_exc:
+            raise Exception(f'未找到在群 {group_id} 中的可用Bot')
+        return None
+    if len(valid_bots) > 1:
+        utils_logger.warning(f'发现多个Bot在群 {group_id}，默认返回self_id最小的Bot {valid_bots[0].self_id}')
+    return valid_bots[0]
+
+async def aget_private_bot(user_id: int, raise_exc: bool = False) -> Bot | None:
+    """
+    通过用户号获取对应的Bot对象
+    """
+    user_id = int(user_id)
+    bots = get_all_bots()
+    valid_bots: list[Bot] = []
+    for bot in bots:
+        try:
+            friend_ids = await get_friend_ids(bot)
+            if user_id in friend_ids:
+                valid_bots.append(bot)
+        except Exception as e:
+            utils_logger.warning(f'通过用户号获取对应的Bot对象时获取Bot {bot.self_id} 的好友列表失败: {get_exc_desc(e)}')
+    valid_bots.sort(key=lambda x: int(x.self_id))
+    if len(valid_bots) == 0:
+        if raise_exc:
+            raise Exception(f'未找到可与用户 {user_id} 私聊的可用Bot')
+        return None
+    if len(valid_bots) > 1:
+        utils_logger.warning(f'发现多个Bot可与用户 {user_id} 私聊，默认返回self_id最小的Bot {valid_bots[0].self_id}')
+    return valid_bots[0]
+
 
 # ============================ MonkeyPatch ============================ #
 
@@ -148,6 +211,25 @@ class GroupMemberNameCache:
     expire_time: datetime
 _group_member_name_cache: dict[tuple[int, int], GroupMemberNameCache] = {}
 
+@dataclass
+class StrangerNameCache:
+    name: str
+    expire_time: datetime
+_stranger_name_cache: dict[int, StrangerNameCache] = {}
+
+@dataclass
+class BotGroupsCache:
+    group_ids: set[int]
+    expire_time: datetime
+_bot_group_cache: dict[int, BotGroupsCache] = {}
+
+@dataclass
+class BotFriendsCache:
+    friend_ids: set[int]
+    expire_time: datetime
+_bot_friend_cache: dict[int, BotFriendsCache] = {}
+
+
 def get_user_name_by_event(event_or_reply: MessageEvent | Reply) -> str:
     """
     通过event或reply获取发送者用户名，如果有群名片则返回群名片 否则返回昵称
@@ -158,7 +240,7 @@ def get_user_name_by_event(event_or_reply: MessageEvent | Reply) -> str:
         return card
     return nickname or str(event_or_reply.user_id)
     
-async def get_group_member_name(bot: Bot, group_id: int, user_id: int) -> str:
+async def get_group_member_name(group_id: int, user_id: int) -> str:
     """
     调用API获取群聊中的用户名（带缓存） 如果有群名片则返回群名片 否则返回昵称
     """
@@ -173,6 +255,7 @@ async def get_group_member_name(bot: Bot, group_id: int, user_id: int) -> str:
     if cache and cache.expire_time > datetime.now():
         return cache.name
     
+    bot = await aget_group_bot(group_id, raise_exc=True)
     info = await bot.call_api('get_group_member_info', **{'group_id': group_id, 'user_id': user_id})
     name = info.get('card') or info.get('nickname', str(user_id))
     _group_member_name_cache[(group_id, user_id)] = GroupMemberNameCache(
@@ -181,12 +264,22 @@ async def get_group_member_name(bot: Bot, group_id: int, user_id: int) -> str:
     )
     return name
 
-async def get_group_id_list(bot: Bot) -> List[int]:
+async def get_group_ids(bot: Bot, refresh: bool = False) -> set[int]:
     """
     获取加入的所有群id
     """
+    bot_id = int(bot.self_id)
+    if bot_id in _bot_group_cache:
+        cache = _bot_group_cache[bot_id]
+        if cache.expire_time > datetime.now() and not refresh:
+            return cache.group_ids
     group_list = await bot.call_api('get_group_list')
-    return [int(group['group_id']) for group in group_list]
+    cache = BotGroupsCache(
+        group_ids=set(int(group['group_id']) for group in group_list),
+        expire_time=datetime.now() + timedelta(seconds=BOT_GROUP_IDS_CACHE_EXPIRE_SECONDS_CFG.get()),
+    )
+    _bot_group_cache[bot_id] = cache
+    return cache.group_ids
 
 async def get_group_list(bot: Bot) -> List[dict]:
     """
@@ -194,11 +287,59 @@ async def get_group_list(bot: Bot) -> List[dict]:
     """
     return await bot.call_api('get_group_list')
 
+async def get_all_bot_group_list() -> list[dict]:
+    groups = []
+    for bot in get_all_bots():
+        try:
+            bot_groups = await get_group_list(bot)
+            groups.extend(bot_groups)
+        except Exception as e:
+            utils_logger.warning(f'获取Bot {bot.self_id} 的群列表失败: {get_exc_desc(e)}')
+    # 去重
+    unique_groups = {}
+    for group in groups:
+        unique_groups[int(group['group_id'])] = group
+    return list(unique_groups.values())
+
 async def get_stranger_info(bot: Bot, user_id: int) -> dict:
     """
     获取陌生人信息
     """
-    return await bot.call_api('get_stranger_info', **{'user_id': int(user_id)})
+    global _stranger_name_cache
+    # 清空过期缓存
+    for key in list(_stranger_name_cache.keys()):
+        if _stranger_name_cache[key].expire_time <= datetime.now():
+            del _stranger_name_cache[key]
+    
+    user_id = int(user_id)
+    cache = _stranger_name_cache.get(user_id)
+    if cache and cache.expire_time > datetime.now():
+        return {'user_id': int, 'nickname': cache.name }
+    
+    info = await bot.call_api('get_stranger_info', **{'user_id': user_id})
+    name = info.get('nickname', str(user_id))
+    _stranger_name_cache[user_id] = StrangerNameCache(
+        name=name,
+        expire_time=datetime.now() + timedelta(seconds=GROUP_MEMBER_NAME_CACHE_EXPIRE_SECONDS_CFG.get())
+    )
+    return info
+
+async def get_friend_ids(bot: Bot) -> List[int]:
+    """
+    获取好友列表id
+    """
+    bot_id = int(bot.self_id)
+    if bot_id in _bot_friend_cache:
+        cache = _bot_friend_cache[bot_id]
+        if cache.expire_time > datetime.now():
+            return list(cache.friend_ids)
+    friend_list = await bot.call_api('get_friend_list')
+    cache = BotFriendsCache(
+        friend_ids=set(int(friend['user_id']) for friend in friend_list),
+        expire_time=datetime.now() + timedelta(seconds=BOT_GROUP_IDS_CACHE_EXPIRE_SECONDS_CFG.get()),
+    )
+    _bot_friend_cache[bot_id] = cache
+    return list(cache.friend_ids)
 
 async def get_group_users(bot: Bot, group_id: int) -> List[dict]:
     """
@@ -219,25 +360,28 @@ async def get_group(bot: Bot, group_id: int) -> dict:
     """
     return await bot.call_api('get_group_info', **{'group_id': int(group_id)})
 
-def get_avatar_url(user_id: int) -> str:
+async def get_avatar_url(bot: Bot | None, user_id: int) -> str:
     """
     获取QQ头像的url
     """
+    if bot and user_id >= 10 ** 10:
+        return await bot.call_api('get_avatar_url', **{'user_id': int(user_id)})
     return f"http://q1.qlogo.cn/g?b=qq&nk={user_id}&s=100"
 
-def get_avatar_url_large(user_id: int) -> str:
+async def get_avatar_url_large(bot: Bot | None, user_id: int) -> str:
     """
     获取QQ头像的高清url
     """
+    if bot and user_id >= 10 ** 10:
+        return await bot.call_api('get_avatar_url', **{'user_id': int(user_id)})
     return f"http://q1.qlogo.cn/g?b=qq&nk={user_id}&s=640"
 
-def download_avatar(user_id: int, circle=False) -> Image.Image:
+async def download_avatar(bot: Bot, user_id: int, circle=False) -> Image.Image:
     """
     下载QQ头像并返回PIL Image对象
     """
-    url = get_avatar_url(user_id)
-    response = requests.get(url)
-    img = Image.open(io.BytesIO(response.content))
+    url = await get_avatar_url(bot, user_id)
+    img = await download_image(url)
     if circle:
         r = img.width // 2
         circle_img = Image.new('L', (img.width, img.height), 0)
@@ -306,14 +450,7 @@ async def download_napcat_file(ftype: str, file: str) -> str:
     """
     下载napcat文件，返回本地路径
     """
-    bot = get_bot()
-    if ftype == 'image':
-        ret = await bot.call_api('get_image', **{'file': file})
-    elif ftype == 'record':
-        ret = await bot.call_api('get_record', **{'file': file, 'out_format': 'wav'})
-    else:
-        ret = await bot.call_api('get_file', **{'file': file})
-    return ret['file']
+    raise NotImplementedError("该函数已被弃用")
 
 class TempBotOrInternetFilePath:
     """
@@ -507,16 +644,15 @@ async def extract_special_text(msg: list[dict], group_id=None) -> str:
     """
     从消息段提取带有特殊消息的文本
     """
-    bot = get_bot()
     text = ""
     for seg in msg:
         if seg['type'] == 'text':
             text += seg['data']['text']
         elif seg['type'] == 'at':
             if group_id:
-                name = await get_group_member_name(bot, group_id, seg['data']['qq'])
+                name = await get_group_member_name(group_id, seg['data']['qq'])
             else:
-                name = await get_stranger_info(bot, seg['data']['qq'])['nickname']
+                name = await get_stranger_info(seg['data']['qq'])['nickname']
             if text: text += " "
             text += f"@{name} "
         elif seg['type'] == 'image':
@@ -632,7 +768,13 @@ async def check_in_group(bot: Bot, group_id: int):
     """
     检查bot是否加入了某个群
     """
-    return int(group_id) in await get_group_id_list(bot)
+    return int(group_id) in await get_group_ids(bot)
+
+async def check_is_friend(bot: Bot, user_id: int):
+    """
+    检查bot是否与某个用户是好友关系
+    """
+    return int(user_id) in await get_friend_ids(bot)
 
 def check_in_blacklist(user_id: int):
     """
@@ -819,10 +961,15 @@ async def send_at_msg(handler, event: MessageEvent, message: str):
 # -------- event外发送 -------- #
 
 @send_msg_func
-async def send_group_msg_by_bot(bot, group_id: int, content: str):
+async def send_group_msg_by_bot(group_id: int, content: str, bot: Bot = None):
     """
     在event外发送群聊消息
     """
+    if bot is None:
+        bot = await aget_group_bot(group_id)
+        if bot is None:
+            utils_logger.warning(f'取消发送消息到群 {group_id}，没有可用的bot')
+            return
     if check_group_disabled(group_id):
         utils_logger.warning(f'取消发送消息到被全局禁用的群 {group_id}')
         return
@@ -832,10 +979,21 @@ async def send_group_msg_by_bot(bot, group_id: int, content: str):
     return await bot.send_group_msg(group_id=int(group_id), message=content)
 
 @send_msg_func
-async def send_private_msg_by_bot(bot, user_id: int, content: str):
+async def send_private_msg_by_bot(user_id: int, content: str, bot: Bot = None):
     """
     在event外发送私聊消息
     """
+    if bot is None:
+        bot = await aget_private_bot(user_id)
+        if bot is None:
+            utils_logger.warning(f'取消发送私聊消息给用户 {user_id}，没有可用的bot')
+            return
+    if check_in_blacklist(user_id):
+        utils_logger.warning(f'取消发送私聊消息给黑名单用户 {user_id}')
+        return
+    if not await check_is_friend(bot, user_id):
+        utils_logger.warning(f'取消发送私聊消息给非好友用户 {user_id}')
+        return
     return await bot.send_private_msg(user_id=int(user_id), message=content)
 
 # -------- 折叠消息处理 -------- #
@@ -983,12 +1141,12 @@ async def send_fold_msg(
         if group_id and check_group_disabled(group_id):
             utils_logger.warning(f'取消发送消息到被全局禁用的群 {group_id}')
             return
-        selfname = await get_group_member_name(bot, group_id, bot.self_id)
+        selfname = await get_group_member_name(group_id, bot.self_id)
         msg_list = []
         for i in range(len(contents)):
             if i == 0 and first_is_user:
                 uid = user_id
-                nickname = await get_group_member_name(bot, group_id, user_id)
+                nickname = await get_group_member_name(group_id, user_id)
             else:
                 uid = int(bot.self_id)
                 nickname = selfname
@@ -1025,8 +1183,8 @@ async def fold_msg_fallback(
         method = DEFAULT_FOLD_FALLBACK_METHOD_CFG.get()
     def send(msg: str):
         if user_id:
-            return send_private_msg_by_bot(bot, user_id, msg)
-        return send_group_msg_by_bot(bot, group_id, msg)
+            return send_private_msg_by_bot(user_id, msg)
+        return send_group_msg_by_bot(group_id, msg)
     utils_logger.warning(f'发送折叠消息失败，fallback为发送普通消息(method={method}): {get_exc_desc(e)}')
     if method == 'seperate':
         contents[0] = "（发送折叠消息失败）\n" + contents[0]
@@ -1085,10 +1243,10 @@ async def send_fold_msg_adaptive(
         ret = None
         if group_id:
             for content in contents:
-                ret = await send_group_msg_by_bot(bot, group_id, f'{reply_cq}{content}')
+                ret = await send_group_msg_by_bot(group_id, f'{reply_cq}{content}')
         else:
             for content in contents:
-                ret = await send_private_msg_by_bot(bot, user_id, f'{reply_cq}{content}')
+                ret = await send_private_msg_by_bot(user_id, f'{reply_cq}{content}')
         return ret
     else:
         # 折叠消息
@@ -1192,9 +1350,9 @@ class ColdDown:
                         verbose_msg = f'冷却中, 剩余时间: {get_readable_timedelta(rest_time)}'
                         if hasattr(event, 'message_id'):
                             if hasattr(event, 'group_id'):
-                                await send_group_msg_by_bot(get_bot(), event.group_id, f'[CQ:reply,id={event.message_id}] {verbose_msg}')
+                                await send_group_msg_by_bot(event.group_id, f'[CQ:reply,id={event.message_id}] {verbose_msg}')
                             else:
-                                await send_private_msg_by_bot(get_bot(), event.user_id, f'[CQ:reply,id={event.message_id}] {verbose_msg}')
+                                await send_private_msg_by_bot(event.user_id, f'[CQ:reply,id={event.message_id}] {verbose_msg}')
                 except Exception as e:
                     self.logger.print_exc(f'{self.cold_down_name}检查: {key} CD中, 发送冷却中消息失败')
             return False
@@ -1273,9 +1431,9 @@ class RateLimit:
                 try:
                     if hasattr(event, 'message_id'):
                         if hasattr(event, 'group_id'):
-                            await send_group_msg_by_bot(get_bot(), event.group_id, f'[CQ:reply,id={event.message_id}] {reply_msg}')
+                            await send_group_msg_by_bot(event.group_id, f'[CQ:reply,id={event.message_id}] {reply_msg}')
                         else:
-                            await send_private_msg_by_bot(get_bot(), event.user_id, f'[CQ:reply,id={event.message_id}] {reply_msg}')
+                            await send_private_msg_by_bot(event.user_id, f'[CQ:reply,id={event.message_id}] {reply_msg}')
                 except Exception as e:
                     self.logger.print_exc(f'{self.rate_limit_name}检查: {key} 频率超限, 发送频率超限消息失败')
             ok = False
@@ -1849,6 +2007,7 @@ class CmdHandler:
     """
     命令处理器，封装了指令的注册和处理逻辑
     """
+    cmd_handlers: list["CmdHandler"] = []
     HELP_PART_IMG_CACHE_DIR = get_data_path("utils/help_part_img_cache/")
     help_docs: Dict[str, HelpDoc] = {}
 
@@ -1883,7 +2042,7 @@ class CmdHandler:
             else:
                 raise Exception(f'未知的指令类型 {type(cmd)}')
         self.commands = list(set(self.commands)) 
-        self.commands.sort()
+        self.commands.sort(key=lambda x: len(x), reverse=True)
             
         self.logger = logger
         self.error_reply = error_reply
@@ -1906,6 +2065,13 @@ class CmdHandler:
         if isinstance(help_trigger_condition, str):
             assert help_trigger_condition in ['contain', 'exact']
         self.help_trigger_condition = help_trigger_condition
+
+        self.priority = priority
+        self.only_to_me = only_to_me
+        self.handler_func = None
+
+        CmdHandler.cmd_handlers.append(self)
+        CmdHandler.cmd_handlers.sort(key=lambda x: x.priority, reverse=True)
         # utils_logger.info(f'注册指令 {commands[0]}')
 
     def check_group(self):
@@ -2142,7 +2308,8 @@ class CmdHandler:
                 finally:
                     for block_id in context.block_ids:
                         self.block_set.discard(block_id)
-                        
+
+            self.handler_func = func 
             return func
         return decorator
   
@@ -2220,7 +2387,7 @@ async def _(ctx: HandlerContext):
     enabled_msg = "【已启用的群聊】"
     disabled_msg = "【已禁用的群聊】"
     enabled_groups = utils_file_db.get("enabled_groups", [])
-    for group_id in await get_group_id_list(ctx.bot):
+    for group_id in await get_group_ids(ctx.bot):
         group_name = await get_group_name(ctx.bot, group_id)
         if group_id in enabled_groups:
             enabled_msg += f'\n{group_name} ({group_id})'
