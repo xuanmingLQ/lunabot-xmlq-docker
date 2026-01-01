@@ -54,15 +54,16 @@ def on_disconnect(session: RpcSession):
     if session.id in message_pool:
         del message_pool[session.id]
 
-start_rpc_service(
-    host=config.get('host'),
-    port=config.get('port'),
-    token=config.get('token'),
-    name=RPC_SERVICE,
-    logger=logger,
-    on_connect=on_connect,
-    on_disconnect=on_disconnect
-)
+if config.get("enable"):
+    start_rpc_service(
+        host=config.get('host'),
+        port=config.get('port'),
+        token=config.get('token'),
+        name=RPC_SERVICE,
+        logger=logger,
+        on_connect=on_connect,
+        on_disconnect=on_disconnect
+    )
         
 
 # echo测试
