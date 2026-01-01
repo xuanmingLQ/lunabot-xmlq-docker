@@ -95,8 +95,15 @@ func (*SuiteService) GetDataWithFilter(ctx context.Context, Req gameReq.User) (r
 	} else {
 		err = db.Where("user_id = ?", Req.UserId).
 			Select(selects).Scan(&result).Error
+		// 在这里，我们将data中指定key的值取出来并命名，将它Scan到map[string]interface{}中，
+		// 虽然这样查询出来的value是jsonb类型，但是gorm并不会处理这种数据，
+		// 会将它们转换成string放入interface{}中，对于空值，会变成nil
+		// 所以我们要处理一下，将它们转换成json.RawMessage，这样在json.Marshal时才能正确组装json字符串
 		for k, v := range result {
-			if val, ok := v.(string); ok {
+			switch val := v.(type) {
+			case string:
+				result[k] = json.RawMessage(val)
+			case []byte:
 				result[k] = json.RawMessage(val)
 			}
 		}
