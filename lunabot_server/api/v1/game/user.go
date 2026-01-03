@@ -151,8 +151,8 @@ func (*UserApi) GetSuiteUploadTime(c *gin.Context) {
 
 	response.OkWithData(
 		gin.H{
-			"本地数据":       gameRes.UploadTime{UploadTime: localUploadTime, Msg: localErr.Error()},
-			"Haruki 工具箱": gameRes.UploadTime{UploadTime: harukiUploadTime, Msg: harukiErr.Error()},
+			"本地数据":       gameRes.UploadTime{UploadTime: localUploadTime, Error: localErr},
+			"Haruki 工具箱": gameRes.UploadTime{UploadTime: harukiUploadTime, Error: harukiErr},
 		}, c)
 	// 如果haruki的数据较新，就去get一下
 	if harukiUploadTime != nil && !harukiUploadTime.IsZero() && (localUploadTime == nil || harukiUploadTime.After(*localUploadTime)) {
@@ -283,8 +283,8 @@ func (*UserApi) GetMysekaiUploadTime(c *gin.Context) {
 	}
 	response.OkWithData(
 		gin.H{
-			"本地数据":       gameRes.UploadTime{UploadTime: localUploadTime, Msg: localErr.Error()},
-			"Haruki 工具箱": gameRes.UploadTime{UploadTime: harukiUploadTime, Msg: harukiErr.Error()},
+			"本地数据":       gameRes.UploadTime{UploadTime: localUploadTime, Error: localErr},
+			"Haruki 工具箱": gameRes.UploadTime{UploadTime: harukiUploadTime, Error: harukiErr},
 		}, c)
 	// 如果haruki的数据较新，将它保存在本地
 	if harukiUploadTime != nil && !harukiUploadTime.IsZero() && (localUploadTime == nil || harukiUploadTime.After(*localUploadTime)) {

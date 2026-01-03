@@ -8,7 +8,7 @@ from src.llm import (
     get_model_preset,
 )
 from src.utils import *
-from src.llm.translator import Translator, TranslationResult
+# from src.llm.translator import Translator, TranslationResult
 from datetime import datetime, timedelta
 import openai
 import copy

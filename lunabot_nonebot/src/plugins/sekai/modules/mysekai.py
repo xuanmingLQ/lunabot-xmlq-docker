@@ -2126,7 +2126,7 @@ async def _(ctx: SekaiHandlerContext):
             upload_time_text = upload_time.strftime('%m-%d %H:%M:%S') + f"({get_readable_datetime(upload_time, show_original_time=False)})"
             msg += f"{upload_time_text}\n"
         else:
-            msg += f"[{source_name}]\n获取失败：{upload_time_msg["msg"]}\n"
+            msg += f"[{source_name}]\n获取失败：{upload_time_msg["error"]}\n"
     mode = get_user_data_mode(ctx, ctx.user_id)
     msg += f"---\n"
     msg += f"该指令查询Mysekai数据，查询Suite数据请使用\"/{ctx.region}抓包状态\"\n"
