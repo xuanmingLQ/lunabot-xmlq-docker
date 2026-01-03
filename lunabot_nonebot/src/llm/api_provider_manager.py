@@ -1,10 +1,10 @@
 from dataclasses import dataclass
-from ..llm.api_provider import *
-from ..llm.api_providers.aiyyds import AiyydsApiProvider
-from ..llm.api_providers.openrouter import OpenrouterApiProvider
-from ..llm.api_providers.siliconflow import SiliconflowApiProvider
-from ..llm.api_providers.google import GoogleApiProvider
-from ..llm.api_providers.new_api import NewApiApiProvider
+from .api_providers.api_provider import *
+from .api_providers.aiyyds import AiyydsApiProvider
+from .api_providers.openrouter import OpenrouterApiProvider
+from .api_providers.siliconflow import SiliconflowApiProvider
+from .api_providers.google import GoogleApiProvider
+from .api_providers.new_api import NewApiApiProvider
 from typing import Tuple
 
 

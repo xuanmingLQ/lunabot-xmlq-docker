@@ -1,5 +1,5 @@
 from src.utils import *
-from ...llm import translate_text, ChatSession, get_model_preset, ChatSessionResponse
+from src.llm import translate_text, ChatSession, get_model_preset, ChatSessionResponse
 from ..common import *
 from ..handler import *
 from ..asset import *

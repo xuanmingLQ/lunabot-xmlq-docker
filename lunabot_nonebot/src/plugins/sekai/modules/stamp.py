@@ -5,7 +5,7 @@ from ..asset import *
 from ..draw import *
 from .stamp_maker import make_stamp, STAMP_MAKER_BASE_DIR
 from ...imgtool import cutout_image, shrink_image
-from ...llm import ChatSession, ChatSessionResponse, get_model_preset
+from src.llm import ChatSession, ChatSessionResponse, get_model_preset
 
 GIF_STAMP_SCALE_CFG = config.item('stamp.gif_scale')
 STAMP_BASE_IMAGE_DIR = f"{STAMP_MAKER_BASE_DIR}/images"

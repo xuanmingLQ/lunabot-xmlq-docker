@@ -1,5 +1,5 @@
 from src.utils import *
-from ...llm import translate_text
+from src.llm import translate_text
 from ..common import *
 from ..handler import *
 from ..asset import *
@@ -2115,28 +2115,18 @@ async def _(ctx: SekaiHandlerContext):
     uid = get_player_bind_id(ctx)
     try:
         result = await get_mysekai_upload_time(ctx.region, uid)
-    except ApiError as e:
-        return await ctx.asend_reply_msg(f"获取 mysekai 数据上传时间失败 {e.msg}")
-    except HttpError as e:
-        return await ctx.asend_reply_msg(f"获取 mysekai 数据上传时间失败 {e.status_code} {e.message}")
     except Exception as e:
         return await ctx.asend_reply_msg(f"获取 mysekai 数据上传时间失败 {get_exc_desc(e)}")
     
     msg = f"{process_hide_uid(ctx, uid, keep=6)}({ctx.region.upper()}) Mysekai数据\n"
-    if result["localUploadTime"]:
-        msg += "[本地数据]\n"
-        upload_time = datetime.fromisoformat(result["localUploadTime"])
-        upload_time_text = upload_time.strftime('%m-%d %H:%M:%S') + f"({get_readable_datetime(upload_time, show_original_time=False)})"
-        msg += f"{upload_time_text}\n"
-    else:
-        msg += f"[本地数据]\n获取失败：{result["localError"]}\n"
-    if result["harukiUploadTime"]:
-        msg += "[Haruki工具箱]\n"
-        upload_time = datetime.fromisoformat(result["harukiUploadTime"])
-        upload_time_text = upload_time.strftime('%m-%d %H:%M:%S') + f"({get_readable_datetime(upload_time, show_original_time=False)})"
-        msg += f"{upload_time_text}\n"
-    else:
-        msg += f"[Haruki工具箱]\n获取失败: {result["harukiError"]}\n"
+    for source_name, upload_time_msg in result.items():
+        msg += f"[{source_name}]\n"
+        if upload_time_msg["upload_time"]:
+            upload_time = datetime.fromisoformat(upload_time_msg["upload_time"])
+            upload_time_text = upload_time.strftime('%m-%d %H:%M:%S') + f"({get_readable_datetime(upload_time, show_original_time=False)})"
+            msg += f"{upload_time_text}\n"
+        else:
+            msg += f"[{source_name}]\n获取失败：{upload_time_msg["msg"]}\n"
     mode = get_user_data_mode(ctx, ctx.user_id)
     msg += f"---\n"
     msg += f"该指令查询Mysekai数据，查询Suite数据请使用\"/{ctx.region}抓包状态\"\n"
@@ -2257,12 +2247,6 @@ async def msr_auto_push():
             # 两个值分别是userId和iso格式的datetime
             upload_times:dict[str, str] = await get_mysekai_upload_time_by_ids(region=region, user_ids=user_ids)
             # upload_times: list[int] = await get_mysekai_upload_time()
-        except ApiError as e:
-            logger.warning(f"获取{region_name}Mysekai上传时间失败: {e.msg}")
-            continue 
-        except HttpError as e:
-            logger.warning(f"获取{region_name}Mysekai上传时间失败: {e.status_code} {e.message}")
-            continue 
         except Exception as e:
             logger.warning(f"获取{region_name}Mysekai上传时间失败: {get_exc_desc(e)}")
             continue

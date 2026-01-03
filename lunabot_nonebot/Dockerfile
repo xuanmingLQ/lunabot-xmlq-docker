@@ -50,6 +50,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # 下载中文字体
     fontconfig \
     ttf-wqy-zenhei \
+    # pdf库
+    poppler-utils \
     && ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
     

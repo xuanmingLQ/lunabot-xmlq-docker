@@ -8,19 +8,15 @@ gbl = get_group_black_list(file_db, logger, "misc")
 cd = ColdDown(file_db, logger)
 
 
-yappi_started = False
-
 profiler = CmdHandler(['/profiling', '/性能分析'], logger)
 profiler.check_cdrate(cd).check_wblist(gbl).check_superuser()
 @profiler.handle()
 async def _(ctx: HandlerContext):
-    global yappi_started
-    if not yappi_started:
+    if not yappi.is_running():
         args = ctx.get_args().strip()
         assert_and_reply(args in ('cpu', 'wall', ''), "参数错误，仅支持 'cpu' 或 'wall' 作为参数")
         clock_type = args or 'wall'
         yappi.start()
-        yappi_started = True
         logger.info(f"性能分析已启动 (clock_type={clock_type})")
         await ctx.asend_reply_msg(f"性能分析已启动 (clock_type={clock_type})。再次使用此命令以完成分析")
     else:

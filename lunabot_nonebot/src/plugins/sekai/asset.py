@@ -206,6 +206,7 @@ class MasterDataManager:
             await asyncio.wait_for(_download(), timeout)
         except ApiError as e:
             logger.error(f"下载 MasterData [{region}.{self.name}] 失败：{e.msg}")
+            return
         except asyncio.TimeoutError:
             logger.warning(f"下载 MasterData [{region}.{self.name}] 超时")
             return

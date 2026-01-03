@@ -3,3 +3,4 @@ cmd
 log/
 notgit.*
 go.sum
+test/

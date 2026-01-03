@@ -11,6 +11,8 @@ class ApiError(Exception):
         self.msg = msg
         self.data = data
         super().__init__(msg, *args)
+    def __str__(self):
+        return self.msg
     pass
 # Api请求
 async def server(path:str, method:str, json:dict|None=None, query:dict|None=None)->any:

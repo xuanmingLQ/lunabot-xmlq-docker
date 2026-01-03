@@ -103,8 +103,8 @@ class ForecastData:
                 if data.final_score is not None:
                     old_history = []
                     if rank in old.rank_data and old.rank_data[rank].history_final_score is not None:
-                        old_history = old.rank_data[rank].history_final_score
-                    if old_history[-1].ts != self.forecast_ts:
+                        old_history = old.rank_data[rank].history_final_score or []
+                    if not old_history or old_history[-1].ts != self.forecast_ts:
                         old_history.append(ForecastRanking(
                             score=data.final_score,
                             ts=self.forecast_ts,
@@ -118,7 +118,7 @@ class ForecastData:
                     self.rank_data[rank].history_final_score = old.rank_data[rank].history_final_score
                     
         except Exception as e:
-            logger.warning(f"追加 {self.source} {self.region}_{self.event_id} 历史数据失败: {get_exc_desc(e)}")
+            logger.print_exc(f"追加 {self.source} {self.region}_{self.event_id} 历史数据失败: {get_exc_desc(e)}")
 
     def save_to_local(self):
         """

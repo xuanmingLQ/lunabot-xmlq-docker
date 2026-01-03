@@ -1,7 +1,7 @@
-from ...llm.api_provider import *
+from .api_provider import ApiProvider, logger
 from openai import AsyncOpenAI
 import os
-from src.utils import get_data_path
+from src.utils import *
 
 class AiyydsApiProvider(ApiProvider):
     def __init__(self):

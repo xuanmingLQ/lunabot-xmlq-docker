@@ -1510,28 +1510,18 @@ async def _(ctx: SekaiHandlerContext):
     uid = get_player_bind_id(ctx)
     try:
         result = await get_suite_upload_time(ctx.region, uid)
-    except ApiError as e:
-        return await ctx.asend_reply_msg(f"获取 suite 数据上传时间失败 {e.msg}")
-    except HttpError as e:
-        return await ctx.asend_reply_msg(f"获取 suite 数据上传时间失败 {e.status_code} {e.message}")
     except Exception as e:
         return await ctx.asend_reply_msg(f"获取 suite 数据上传时间失败 {get_exc_desc(e)}")
     
     msg = f"{process_hide_uid(ctx, uid, keep=6)}({ctx.region.upper()}) Suite数据\n"
-    if result["localUploadTime"]:
-        msg += "[本地数据]\n"
-        upload_time = datetime.fromisoformat(result["localUploadTime"])
-        upload_time_text = upload_time.strftime('%m-%d %H:%M:%S') + f"({get_readable_datetime(upload_time, show_original_time=False)})"
-        msg += f"{upload_time_text}\n"
-    else:
-        msg += f"[本地数据]\n获取失败：{result["localError"]}\n"
-    if result["harukiUploadTime"]:
-        msg += "[Haruki工具箱]\n"
-        upload_time = datetime.fromisoformat(result["harukiUploadTime"])
-        upload_time_text = upload_time.strftime('%m-%d %H:%M:%S') + f"({get_readable_datetime(upload_time, show_original_time=False)})"
-        msg += f"{upload_time_text}\n"
-    else:
-        msg += f"[Haruki工具箱]\n获取失败: {result["harukiError"]}\n"
+    for source_name, upload_time_msg in result.items():
+        msg += f"[{source_name}]\n"
+        if upload_time_msg["upload_time"]:
+            upload_time = datetime.fromisoformat(upload_time_msg["upload_time"])
+            upload_time_text = upload_time.strftime('%m-%d %H:%M:%S') + f"({get_readable_datetime(upload_time, show_original_time=False)})"
+            msg += f"{upload_time_text}\n"
+        else:
+            msg += f"[{source_name}]\n获取失败：{upload_time_msg["msg"]}\n"
     msg += f"---\n"
     msg += f"该指令查询Suite数据，查询Mysekai数据请使用\"/{ctx.region}msd\"\n"
     # msg += f"数据获取模式: {mode}，使用\"/{ctx.region}抓包模式\"来切换模式\n"

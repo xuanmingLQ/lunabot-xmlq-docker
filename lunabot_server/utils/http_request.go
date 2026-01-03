@@ -20,15 +20,22 @@ var (
 )
 
 type HttpError struct {
-	Status  int    `json:"status"`
-	Message string `json:"message"`
+	Status int    
+	Url    string 
+	Detail string 
 }
 
 func (he *HttpError) Error() string {
 	if he == nil {
 		return "未知错误"
 	}
-	return fmt.Sprintf("%d: %s", he.Status, he.Message)
+	return fmt.Sprintf("%d: %s", he.Status, he.Detail)
+}
+
+var HTTP_ERROR = &HttpError{}
+
+func (*HttpError) Is(err error) bool {
+	return err == HTTP_ERROR
 }
 
 // DataTypeNone 返回Response
@@ -64,11 +71,12 @@ func HttpRequest(
 		defer resp.Body.Close()
 	}
 	if resp.StatusCode != http.StatusOK {
-		var httpError HttpError
-		_ = json.NewDecoder(resp.Body).Decode(&httpError)
-		if httpError.Status == 0 {
-			httpError.Status = resp.StatusCode
+		httpError := HttpError{
+			Status: resp.StatusCode,
+			Url:    Req.URL.String(),
 		}
+		detail, _ := io.ReadAll(resp.Body)
+		httpError.Detail = string(detail)
 		return nil, &httpError
 	}
 	switch DataType {

@@ -107,7 +107,7 @@
 🛠️ `/profiling` `/性能分析`
 > 开启或关闭基于yappi的性能分析    
 参数指定 clock_type: `wall` 或 `cpu`，默认为 `cpu`    
-性能分析结果保存于 `data/misc/profiler/` 中，可用使用snakeviz查看    
+性能分析结果保存于 `{DATA_DIR}/misc/profiler/` 中，可用使用snakeviz查看    
 
 - `/性能分析` 开启/关闭性能分析
 - `/性能分析 wall` 开启基于 wall clock 的性能分析

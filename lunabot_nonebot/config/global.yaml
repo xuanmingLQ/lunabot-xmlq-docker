@@ -2,7 +2,11 @@ log_level: "INFO"
 superuser:
   - 12345678
 
-# 性能分析
+profile_at_starup:
+  enable: false
+  clock_type: "cpu"
+  seconds: 10
+
 timer:
   enable: false
   log_prefix:

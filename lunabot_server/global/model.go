@@ -29,7 +29,6 @@ func (j *JSON) Scan(value interface{}) error {
 	// 核心技巧：使用 UseNumber() 的 Decoder
 	d := json.NewDecoder(bytes.NewReader(bytesValue))
 	d.UseNumber()
-
 	return d.Decode(j)
 }
 

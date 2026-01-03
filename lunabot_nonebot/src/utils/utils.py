@@ -1,3 +1,18 @@
+from .config import *
+
+# ============================ 启动时性能分析 ============================ #
+
+if _profile_at_startup := global_config.get('profile_at_starup.enable'):
+    import yappi
+    _profile_at_startup_clock_type = global_config.get('profile_at_starup.clock_type')
+    _profile_at_startup_seconds = global_config.get('profile_at_starup.seconds')
+    yappi.set_clock_type(_profile_at_startup_clock_type)
+    yappi.start()
+    print(f"启动时性能分析已开启 (clocktype={_profile_at_startup_clock_type}, seconds={_profile_at_startup_seconds})", flush=True)
+
+
+# ============================ 模块导入 ============================ #
+
 from typing import Optional, List, Tuple, Dict, Union, Any, Set, Callable
 import os
 import os.path as osp
@@ -21,7 +36,6 @@ import math
 import io
 import time
 import zstandard
-from .config import *
 from .data import get_data_path
 
 # ============================ 基础 ============================ #
@@ -314,7 +328,6 @@ async def batch_gather(*futs_or_coros, batch_size=32) -> List[Any]:
     for i in range(0, len(futs_or_coros), batch_size):
         results.extend(await asyncio.gather(*futs_or_coros[i:i + batch_size]))
     return results
-
 
 
 # ============================ 字符串 ============================ #
@@ -787,20 +800,25 @@ class FileDB:
         self.path = path
         self.data = {}
         self.logger = logger
-        self.load()
+        self.loaded = False
 
-    def load(self):
+    def ensure_load(self):
+        if self.loaded:
+            return
         try:
             self.data = load_json(self.path)
             self.logger.debug(f'加载数据库 {self.path} 成功')
         except:
             self.logger.debug(f'加载数据库 {self.path} 失败 使用空数据')
             self.data = {}
+        self.loaded = True
 
     def keys(self) -> Set[str]:
+        self.ensure_load()
         return self.data.keys()
 
     def save(self):
+        self.ensure_load()
         dump_json(self.data, self.path)
         self.logger.debug(f'保存数据库 {self.path}')
 
@@ -809,20 +827,24 @@ class FileDB:
         - 获取某个key的值，找不到返回default
         - 直接返回缓存对象，若要进行修改又不影响DB内容则必须自行deepcopy
         """
+        self.ensure_load()
         assert isinstance(key, str), f'key必须是字符串，当前类型: {type(key)}'
         return self.data.get(key, default)
 
     def get_copy(self, key: str, default: Any=None) -> Any:
+        self.ensure_load()
         assert isinstance(key, str), f'key必须是字符串，当前类型: {type(key)}'
         return deepcopy(self.data.get(key, default))
 
     def set(self, key: str, value: Any):
+        self.ensure_load()
         assert isinstance(key, str), f'key必须是字符串，当前类型: {type(key)}'
         self.logger.debug(f'设置数据库 {self.path} {key}')
         self.data[key] = deepcopy(value)
         self.save()
 
     def delete(self, key: str):
+        self.ensure_load()
         assert isinstance(key, str), f'key必须是字符串，当前类型: {type(key)}'
         self.logger.debug(f'删除数据库 {self.path} {key}')
         if key in self.data:
@@ -1338,3 +1360,18 @@ async def _():
                     remove_folder(file)
         except:
             utils_logger.print_exc(f'删除临时文件 {file} 失败')
+
+
+if _profile_at_startup:
+    @async_task("结束启动时性能分析", utils_logger, start_offset=_profile_at_startup_seconds)
+    async def _stop_startup_profile():
+        if not yappi.is_running():
+            return
+        yappi.stop()
+        stats = yappi.get_func_stats()
+        clock_type = yappi.get_clock_type()
+        save_path = get_data_path(f"misc/profiler/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{clock_type}.prof")
+        create_parent_folder(save_path)
+        stats.save(save_path, type="pstat")
+        print(f"启动时性能分析已保存到 {save_path}")
+        yappi.clear_stats()

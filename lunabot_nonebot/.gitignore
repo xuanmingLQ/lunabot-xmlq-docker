@@ -297,3 +297,4 @@ notgit/
 notgit.*
 .git/
 uv.lock
+src/private/

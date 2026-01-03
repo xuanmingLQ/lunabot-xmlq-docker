@@ -1,5 +1,5 @@
 from src.utils import *
-from ..llm import ChatSession, get_model_preset, ChatSessionResponse
+from src.llm import ChatSession, get_model_preset, ChatSessionResponse
 
 
 config = Config('cron.cron')

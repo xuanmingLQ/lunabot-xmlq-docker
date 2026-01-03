@@ -1908,10 +1908,15 @@ async def compose_deck_recommend_image(
                     if last_args:
                         arg_unit, args = extract_unit(last_args)
                         arg_attr, args = extract_card_attr(last_args)
+                        arg_nickname, args = extract_nickname_from_args(last_args)
                         if arg_unit or arg_attr:
                             info_text += "检测到你的歌曲查询中包含团名或颜色，可能是参数格式不正确\n"
                             info_text += "如果你想指定仅包含某个团名或颜色的卡牌请用: 纯mmj 纯绿\n"
                             info_text += "如果你想组某个团名颜色加成的模拟活动请使用“/组卡”\n"
+                        if arg_nickname and not args.strip().isdigit():
+                            info_text += "检测到你的歌曲查询中包含角色昵称，可能是参数格式不正确\n"
+                            info_text += "如果你想指定固定角色请用: #角色1 角色2...\n"
+
                     if use_max_profile:
                         info_text += "\"顶配\"为该服截止当前的全卡满养成配置(并非基于你的卡组计算)\n"
                     if use_sub_max_profile:

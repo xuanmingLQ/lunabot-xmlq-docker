@@ -1,9 +1,6 @@
-import openai
 from src.utils import *
-import shutil
-import random
 import numpy as np
-from .api_provider import ApiProvider, LlmModel
+from .api_providers.api_provider import ApiProvider, LlmModel
 from .api_provider_manager import api_provider_mgr
 
 config = Config('llm.llm')

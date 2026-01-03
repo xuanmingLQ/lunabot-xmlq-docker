@@ -1,6 +1,8 @@
 package base
 
-import "lunabot/xmlq/server/global"
+import (
+	"lunabot/xmlq/server/global"
+)
 
 type Ranking struct {
 	global.MODEL

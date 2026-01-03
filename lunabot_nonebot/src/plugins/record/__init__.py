@@ -116,7 +116,7 @@ async def record_message(bot: Bot, event: GroupMessageEvent):
             asyncio.create_task(run_after_hook(hook, bot, event))
 
 # 插入数据库消息定时任务
-@repeat_with_interval(config.get('insert_msg_loop_interval_seconds'), '插入消息到数据库', logger)
+@repeat_with_interval(config.item('insert_msg_loop_interval_seconds'), '插入消息到数据库', logger)
 async def insert_msg_task():
     try:
         if msgs_to_insert:

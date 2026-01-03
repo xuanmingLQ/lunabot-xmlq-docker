@@ -359,7 +359,7 @@ async def record_new_message(bot: Bot, event: MessageEvent):
         logger.info(f'任务队列大小超过限制，丢弃最早的任务')
 
 # HASH记录任务任务处理
-@repeat_with_interval(config.get('insert_hashes_interval_seconds'), '插入Hash记录', logger)
+@repeat_with_interval(config.item('insert_hashes_interval_seconds'), '插入Hash记录', logger)
 async def handle_task():
     try:
         if msgs_to_insert:

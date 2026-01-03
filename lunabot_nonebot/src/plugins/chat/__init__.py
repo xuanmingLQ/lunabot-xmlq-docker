@@ -1,4 +1,4 @@
-from ..llm import (
+from src.llm import (
     ChatSession, 
     download_image_to_b64, 
     tts, 
@@ -8,7 +8,7 @@ from ..llm import (
     get_model_preset,
 )
 from src.utils import *
-# from ..llm.translator import Translator, TranslationResult # 也不用这个 TODO
+from src.llm.translator import Translator, TranslationResult
 from datetime import datetime, timedelta
 import openai
 import copy

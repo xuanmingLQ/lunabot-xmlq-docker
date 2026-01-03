@@ -17,6 +17,8 @@ HASH2_DIFFERENCE_THRESHOLD_CFG = config.item('hash2_difference_threshold')
 GALLERY_PICS_DIR = get_data_path('gallery/{name}/')
 PIC_EXTS = ['.jpg', '.jpeg', '.png', '.gif']
 ADD_LOG_FILE = get_data_path('gallery/add.log')
+THUMBNAIL_BG_COLOR = (230, 240, 255, 255)
+
 
 add_history_db = get_file_db(get_data_path('gallery/add_history.json'), logger)
 
@@ -87,9 +89,11 @@ class GalleryPic:
                 name = os.path.basename(self.path)
                 self.thumb_path = os.path.join(os.path.dirname(self.path), f"{name}_thumb.jpg")
             if not os.path.exists(self.thumb_path):
-                img = Image.open(self.path).convert('RGB')
-                img.thumbnail(THUMBNAIL_SIZE)
-                img.save(self.thumb_path, format='JPEG', optimize=True, quality=85)
+                img = Image.open(self.path).convert('RGBA')
+                img.thumbnail(THUMBNAIL_SIZE, Image.Resampling.LANCZOS)
+                thumb = Image.new('RGBA', img.size, THUMBNAIL_BG_COLOR)
+                thumb.alpha_composite(img)
+                thumb.convert('RGB').save(self.thumb_path, format='JPEG', optimize=True, quality=85)
         except Exception as e:
             logger.warning(f'生成画廊图片 {self.pid} 缩略图失败: {e}')
             self.thumb_path = None
@@ -289,7 +293,7 @@ class GalleryManager:
 
         pic.path = dst_path
         g.pics.append(pic)
-        pic.ensure_thumb()
+        await run_in_pool(pic.ensure_thumb)
         self._save()
         return self.pid_top
 
@@ -334,7 +338,7 @@ class GalleryManager:
         p.hash1 = new_pic.hash1
         p.hash2 = new_pic.hash2
         p.thumb_path = None
-        p.ensure_thumb()
+        await run_in_pool(p.ensure_thumb)
 
         self._save()
         return p.pid
@@ -776,7 +780,7 @@ async def _(ctx: HandlerContext):
 
     repeat_img = None
     if repeats:
-        with Canvas(bg=FillBg((230, 240, 255, 255))).set_padding(8) as canvas:
+        with Canvas(bg=FillBg(THUMBNAIL_BG_COLOR)).set_padding(8) as canvas:
             with VSplit().set_padding(0).set_sep(16).set_item_align('lt').set_content_align('lt'):
                 TextBox(f"查重错误可使用\"/上传 force\"强制上传图片", TextStyle(DEFAULT_FONT, 16, BLACK))
                 with Grid(row_count=int(math.sqrt(len(repeats) * 2)), hsep=8, vsep=8).set_item_align('t').set_content_align('t'):
@@ -823,7 +827,7 @@ async def _(ctx: HandlerContext):
         if not galls:
             return await ctx.asend_reply_msg('当前没有任何画廊')
         
-        with Canvas(bg=FillBg((230, 240, 255, 255))).set_padding(8) as canvas:
+        with Canvas(bg=FillBg(THUMBNAIL_BG_COLOR)).set_padding(8) as canvas:
             with Grid(row_count=int(math.sqrt(len(galls))), hsep=8, vsep=8).set_item_align('t').set_content_align('t'):
                 for name, g in galls.items():
                     cover: GalleryPic = GalleryManager.get().find_pic(g.cover_pid or 0)
@@ -846,7 +850,7 @@ async def _(ctx: HandlerContext):
 
                     with VSplit().set_padding(0).set_sep(4).set_content_align('c').set_item_align('c'):
                         if cover:
-                            cover.ensure_thumb()
+                            await run_in_pool(cover.ensure_thumb)
                             ImageBox(image=open_image(cover.thumb_path), 
                                      size=(THUMBNAIL_SIZE[0]*2, THUMBNAIL_SIZE[1]*2), image_size_mode='fit').set_content_align('c')
                         else:
@@ -879,7 +883,7 @@ async def _(ctx: HandlerContext):
     with Canvas(bg=FillBg((230, 240, 255, 255))).set_padding(8) as canvas:
         with Grid(row_count=int(math.sqrt(len(g.pics))), hsep=4, vsep=4):
             for pic in g.pics:
-                pic.ensure_thumb()
+                await run_in_pool(pic.ensure_thumb)
                 with VSplit().set_padding(0).set_sep(2).set_content_align('c').set_item_align('c'):
                     if pic.thumb_path and os.path.exists(pic.thumb_path):
                         ImageBox(pic.thumb_path, size=THUMBNAIL_SIZE, image_size_mode='fit').set_content_align('c')
@@ -994,7 +998,7 @@ async def _(ctx: HandlerContext):
             return await ctx.asend_reply_msg(f'画廊\"{name}\"重新计算hash完成，未发现重复图片')
 
         REPEAT_IMAGE_SHOW_SIZE = (128, 128)
-        with Canvas(bg=FillBg((230, 240, 255, 255))).set_padding(8) as canvas:
+        with Canvas(bg=FillBg(THUMBNAIL_BG_COLOR)).set_padding(8) as canvas:
             with VSplit().set_padding(16).set_sep(8).set_item_align('lt').set_content_align('lt'):
                 for first_pid, repeat_pids in res.items():
                     pids = [first_pid] + repeat_pids
@@ -1146,10 +1150,10 @@ async def _(ctx: HandlerContext):
     if no_found_pids:
         msg += f"未找到的图片id: {' '.join(str(pid) for pid in no_found_pids)}\n"
     if pics:
-        with Canvas(bg=FillBg((230, 240, 255, 255))).set_padding(8) as canvas:
+        with Canvas(bg=FillBg(THUMBNAIL_BG_COLOR)).set_padding(8) as canvas:
             with Grid(row_count=int(math.sqrt(len(pics))), hsep=4, vsep=4):
                 for pic in pics:
-                    pic.ensure_thumb()
+                    await run_in_pool(pic.ensure_thumb)
                     with VSplit().set_padding(0).set_sep(2).set_content_align('c').set_item_align('c'):
                         if pic.thumb_path and os.path.exists(pic.thumb_path):
                             ImageBox(pic.thumb_path, size=THUMBNAIL_SIZE, image_size_mode='fit').set_content_align('c')

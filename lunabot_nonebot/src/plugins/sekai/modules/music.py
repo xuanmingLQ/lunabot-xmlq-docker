@@ -1,5 +1,5 @@
 from src.utils import *
-from ...llm import get_text_retriever
+from src.llm import get_text_retriever
 from ..common import *
 from ..handler import *
 from ..asset import *
@@ -19,6 +19,8 @@ from .event import extract_ban_event
 from .resbox import get_res_icon
 import rapidfuzz
 from src.api.assets.music import get_music_alias
+import pandas as pd
+
 
 music_group_sub = SekaiGroupSubHelper("music", "新曲通知", ALL_SERVER_REGIONS)
 music_user_sub = SekaiUserSubHelper("music", "新曲@提醒", ALL_SERVER_REGIONS, related_group_sub=music_group_sub)
@@ -639,6 +641,52 @@ async def search_music(ctx: SekaiHandlerContext, query: str, options: MusicSearc
     )
 
 
+# ======================= 定数获取 ======================= #
+
+_music_constants: dict[tuple[int, str], float] = {}
+_music_constants_mtime: int = None
+
+# 获取定数表
+def get_music_constants() -> dict[tuple[int, str], float]:
+    """
+    获取定数表
+    """
+    global _music_constants, _music_constants_mtime
+    if not config.get('music.constant.enabled'):
+        raise ReplyException("定数相关功能暂不可用")
+    csv_path = config.get('music.constant.csv_path')
+    if not csv_path:
+        return {}
+    try:
+        mtime = os.path.getmtime(csv_path)
+        if _music_constants_mtime is None or _music_constants_mtime != mtime:
+            df = pd.read_csv(csv_path)
+            _music_constants = {}
+            for _, row in df.iterrows():
+                mid = int(row['id'])
+                diff = row['difficulty'].lower()
+                constant = float(row['constant'])
+                _music_constants[(mid, diff)] = constant
+            _music_constants_mtime = mtime
+            logger.info(f"成功加载歌曲定数数据，共 {len(_music_constants)} 条记录")
+    except Exception as e:
+        logger.print_exc(f"加载歌曲定数数据失败")
+    return _music_constants
+
+# 获取定数说明卡片
+def get_music_constants_info_widget(font_size: int = 20, padding: int = 16, additional_text = None) -> Widget | None:
+    info_text = config.get('music.constant.info_text', "")
+    if _music_constants_mtime is not None:
+        info_text = f"定数更新时间: {datetime.fromtimestamp(_music_constants_mtime).strftime('%Y-%m-%d %H:%M')}\n" + info_text
+    if additional_text:
+        info_text += "\n" + additional_text
+    if not info_text:
+        return None
+    w = TextBox(info_text, TextStyle(font=DEFAULT_FONT, size=font_size, color=BLACK), use_real_line_count=True)
+    w.set_padding(padding).set_bg(roundrect_bg())
+    return w
+
+
 # ======================= 处理逻辑 ======================= #
 
 # 获取歌曲限定时间
@@ -988,7 +1036,7 @@ async def compose_music_detail_image(ctx: SekaiHandlerContext, mid: int, title: 
 # 合成歌曲列表图片
 async def compose_music_list_image(
     ctx: SekaiHandlerContext, diff: str, lv_musics: List[Tuple[int, List[Dict]]], qid: int, 
-    show_id: bool, show_leak: bool, play_result_filter: List[str] = None,
+    show_id: bool, show_leak: bool, play_result_filter: List[str] = None, show_constant: bool = False,
 ) -> Image.Image:
     for i in range(len(lv_musics)):
         lv, musics = lv_musics[i]
@@ -1001,20 +1049,34 @@ async def compose_music_list_image(
         qid, 
         filter=get_detailed_profile_card_filter('userMusicResults'),
         raise_exc=play_result_filter is not None)
-    bg_unit = (await get_player_avatar_info_by_detailed_profile(ctx, profile)).unit if profile else None
 
     if play_result_filter is None:
         play_result_filter = ['clear', 'not_clear', 'fc', 'ap']
+
+    if profile:
+        music_results: dict[tuple[int, str], list] = {}
+        for result in profile.get('userMusicResults', []):
+            mid = result['musicId']
+            result_diff = result.get('musicDifficultyType') or result.get('musicDifficulty')
+            if result_diff != diff:
+                continue
+            music_results.setdefault((mid, result_diff), []).append(result)
 
     with Canvas(bg=SEKAI_BLUE_BG).set_padding(BG_PADDING) as canvas:
         with VSplit().set_content_align('lt').set_item_align('lt').set_sep(16) as vs:
             if profile:
                 await get_detailed_profile_card(ctx, profile, err_msg)
 
+            if show_constant:
+                constants = get_music_constants()
+                get_music_constants_info_widget()
+            else:
+                constants = {}
+
             with VSplit().set_bg(roundrect_bg()).set_padding(16).set_sep(16):
                 lv_musics.sort(key=lambda x: x[0], reverse=False)
                 for lv, musics in lv_musics:
-                    musics.sort(key=lambda x: x['publishedAt'], reverse=False)
+                    musics.sort(key=lambda x: (constants.get((x['id'], diff), lv + 1), x['publishedAt']), reverse=False)
 
                     # 获取游玩结果并过滤
                     filtered_musics = []
@@ -1027,10 +1089,7 @@ async def compose_music_list_image(
                         # 获取游玩结果
                         result_type = None
                         if profile:
-                            mid = music['id'] 
-                            results = find_by(profile['userMusicResults'], "musicId", mid, mode='all') 
-                            results = find_by(results, 'musicDifficultyType', diff, mode='all') + find_by(results, 'musicDifficulty', diff, mode='all')
-                            if results:
+                            if results := music_results.get((music['id'], diff), None):
                                 has_clear, full_combo, all_prefect = False, False, False
                                 for item in results:
                                     has_clear = has_clear or item["playResult"] != 'not_clear'
@@ -1062,6 +1121,11 @@ async def compose_music_list_image(
                                         if music['play_result']:
                                             result_img = ctx.static_imgs.get(f"icon_{music['play_result']}.png")
                                             ImageBox(result_img, size=(16, 16), image_size_mode='fill').set_offset((64 - 10, 64 - 10))
+                                    if show_constant:
+                                        constant = constants.get((music['id'], diff), None)
+                                        constant = str(constant) if constant is not None else f"{lv}.?"
+                                        TextBox(constant, TextStyle(font=DEFAULT_BOLD_FONT, size=18, color=BLACK, 
+                                                                    use_shadow=True, shadow_color=DIFF_COLORS[diff])).set_padding(4)
                                     if show_id:
                                         TextBox(f"{music['id']}", TextStyle(font=DEFAULT_FONT, size=16, color=BLACK)).set_w(64)
                                 
@@ -1075,21 +1139,26 @@ async def compose_play_progress_image(ctx: SekaiHandlerContext, diff: str, qid: 
         qid, 
         filter=get_detailed_profile_card_filter('userMusicResults'),
         raise_exc=True)
-    bg_unit = (await get_player_avatar_info_by_detailed_profile(ctx, profile)).unit
 
     count = { lv: PlayProgressCount() for lv in range(1, 40) }
 
+    music_results: dict[tuple[int, str], list] = {}
+    for result in profile.get('userMusicResults', []):
+        mid = result['musicId']
+        result_diff = result.get('musicDifficultyType') or result.get('musicDifficulty')
+        if result_diff != diff:
+            continue
+        music_results.setdefault((mid, result_diff), []).append(result)
+
     for music in await get_valid_musics(ctx, leak=False):
         mid = music['id']
-        level = (await get_music_diff_info(ctx, mid)).level.get(diff)
+        level = await get_music_diff_level(ctx, mid, diff)
         if not level: 
             continue
         count[level].total += 1
 
         result_type = 0
-        results = find_by(profile['userMusicResults'], "musicId", mid, mode='all') 
-        results = find_by(results, 'musicDifficultyType', diff, mode='all') + find_by(results, 'musicDifficulty', diff, mode='all')
-        if results:
+        if results := music_results.get((mid, diff), None):
             has_clear, full_combo, all_prefect = False, False, False
             for item in results:
                 has_clear = has_clear or item["playResult"] != 'not_clear'
@@ -1507,6 +1576,101 @@ async def get_chart_bpm(ctx: SekaiHandlerContext, mid: int, timeout: float=5.0):
         duration=duration,
     )
 
+# 合成best30图片
+async def compose_best30_image(ctx: SekaiHandlerContext, qid: int) -> Image.Image:
+    profile, err_msg = await get_detailed_profile(
+        ctx, qid, 
+        filter=get_detailed_profile_card_filter('userMusicResults'),
+        raise_exc=True,
+    )
+
+    # 数据获取
+    with ProfileTimer('b30.get_data'):
+        constants = get_music_constants()
+        constant_results: list[dict] = []
+
+        music_diff_infos: dict[int, MusicDiffInfo] = {}
+        music_results: dict[tuple[int, str], list] = {}
+        for result in profile.get('userMusicResults', []):
+            mid = result['musicId']
+            diff = result.get('musicDifficultyType') or result.get('musicDifficulty')
+            music_results.setdefault((mid, diff), []).append(result)
+            if mid not in music_diff_infos:
+                music_diff_infos[mid] = await get_music_diff_info(ctx, mid)
+
+        for (mid, diff), results in music_results.items():
+            if not await is_valid_music(ctx, mid, leak=False):
+                continue
+            music = await ctx.md.musics.find_by_id(mid)
+            level = music_diff_infos[mid].level.get(diff, None)
+            if not level or not music:
+                continue
+            result_type = None
+            if results:
+                has_clear, full_combo, all_prefect = False, False, False
+                for item in results:
+                    has_clear = has_clear or item["playResult"] != 'not_clear'
+                    full_combo = full_combo or item["fullComboFlg"]
+                    all_prefect = all_prefect or item["fullPerfectFlg"]
+                result_type = "clear" if has_clear else "not_clear"
+                if full_combo: result_type = "fc"
+                if all_prefect: result_type = "ap"
+            rating = None
+            if result_type == 'ap':
+                rating = constants.get((mid, diff), level)
+            elif result_type == 'fc':
+                rating = constants.get((mid, diff), level) - (1 if level >= 33 else 1.5)
+            constant_text = str((constants.get((mid, diff), f"{level}.?")))
+            if rating is not None:
+                constant_results.append({
+                    'mid': mid, 'diff': diff, 'level': level,
+                    'title': music['title'], 'rating': rating,
+                    'result_type': result_type, 'constant_text': constant_text,
+                })
+
+        constant_results.sort(key=lambda x: x['rating'], reverse=True)
+        constant_results = constant_results[:30]
+        user_rating = sum([cr['rating'] for cr in constant_results]) / 30
+
+    music_covers = await batch_gather(*[get_music_cover_thumb(ctx, cr['mid']) for cr in constant_results])
+    for cr, cover in zip(constant_results, music_covers):
+        cr['cover'] = cover
+    
+    # 绘图
+    with Canvas(bg=SEKAI_BLUE_BG).set_padding(BG_PADDING) as canvas:
+        with VSplit().set_content_align('c').set_item_align('c').set_sep(16):
+            with HSplit().set_content_align('l').set_item_align('l').set_sep(16).set_item_bg(roundrect_bg()):
+                (await get_detailed_profile_card(ctx, profile, err_msg)).set_bg(None)
+                with VSplit().set_content_align('l').set_item_align('l').set_sep(8).set_padding(16):
+                    shadow_color = LinearGradient(PLAY_RESULT_COLORS['ap'], PLAY_RESULT_COLORS['fc'], (0, 0), (1, 1))
+                    style = TextStyle(DEFAULT_BOLD_FONT, 24, BLACK, use_shadow=True, shadow_color=shadow_color, shadow_offset=3)
+                    TextBox(f"Rating", style)
+                    TextBox(f"{user_rating:.2f}", style.replace(size=48))
+                get_music_constants_info_widget(additional_text="计算方式: 33及以上FC-1，以下-1.5，AP±0").set_bg(None)
+
+            with Grid(col_count=3, hsep=16, vsep=16).set_item_bg(roundrect_bg()).set_content_align('lt').set_content_align('lt'):
+                for cr in constant_results:
+                    diff_color = DIFF_COLORS[cr['diff']]
+                    with HSplit().set_content_align('l').set_item_align('l').set_sep(16).set_padding((24, 20)):
+                        with Frame().set_content_align('lt'):
+                            ImageBox(cr['cover'], size=(80, 80), shadow=True)
+                            TextBox(str(cr['level']), TextStyle(DEFAULT_BOLD_FONT, 18, WHITE), overflow='clip') \
+                                .set_bg(roundrect_bg(fill=diff_color, radius=16)).set_offset((-16, -16)).set_content_align('c').set_size((32, 32))
+
+                        with VSplit().set_content_align('l').set_item_align('l').set_sep(8):
+                            TextBox(f"{cr['title']}", TextStyle(DEFAULT_BOLD_FONT, 24, BLACK)).set_w(230)
+                            with HSplit().set_content_align('l').set_item_align('l').set_sep(8):
+                                TextBox(cr['constant_text'], TextStyle(DEFAULT_BOLD_FONT, 24, WHITE)) \
+                                    .set_bg(roundrect_bg(fill=diff_color, radius=4)).set_padding(6)
+                                TextBox(f"→", TextStyle(DEFAULT_BOLD_FONT, 32, BLACK))
+                                TextBox(f"{cr['rating']:.1f}", TextStyle(DEFAULT_BOLD_FONT, 24, BLACK, 
+                                                                         use_shadow=True, shadow_color=PLAY_RESULT_COLORS[cr['result_type']], shadow_offset=2))
+                            play_result_img_path = "fc_text.png" if cr['result_type'] == 'fc' else "ap_text.png"
+                            ImageBox(ctx.static_imgs.get(play_result_img_path), size=(None, 20), use_alphablend=True, shadow=True).set_padding((0, 2))
+   
+    add_watermark(canvas)
+    return await canvas.get_img()
+
 
 # ======================= 指令处理 ======================= #
 
@@ -1697,10 +1861,9 @@ async def _(ctx: SekaiHandlerContext):
 
 
 # 歌曲列表
-pjsk_music_list = SekaiCmdHandler([
-    "/pjsk song list", "/pjsk music list",
-    "/歌曲列表", "/难度排行",
-])
+MUSIC_LIST_CMDS = ["/pjsk song list", "/pjsk music list", "/歌曲列表", "/歌曲一览",]
+MUSIC_CONSTANT_CMDS = ["/pjsk music constant", "/难度排行", "/定数表", '/歌曲定数',]
+pjsk_music_list = SekaiCmdHandler(MUSIC_LIST_CMDS)# + MUSIC_CONSTANT_CMDS)
 pjsk_music_list.check_cdrate(cd).check_wblist(gbl)
 @pjsk_music_list.handle()
 async def _(ctx: SekaiHandlerContext):
@@ -1710,43 +1873,54 @@ async def _(ctx: SekaiHandlerContext):
 某个等级歌曲: /歌曲列表 ma 32 
 某个范围歌曲: /歌曲列表 ma 24 32
 显示歌曲ID: /歌曲列表 ma 32 id
-过滤游玩结果: /歌曲列表 ma 32 fc                        
-""".strip()
+过滤游玩结果: /歌曲列表 ma 32 fc                   
+""".strip()     
+# 按定数表排行: /难度排行 ma 32
 
     args = ctx.get_args().strip()
     show_id = False
     show_leak = False
     play_result_filter=None
+    show_constant = False
+
     try:
         diff, args = extract_diff(args)
 
         if 'id' in args:
-            args = args.replace('id', '')
+            args = args.replace('id', '', 1)
             show_id = True
         if 'leak' in args:
-            args = args.replace('leak', '')
+            args = args.replace('leak', '', 1)
             show_leak = True
 
         if '未clear' in args:
-            args = args.replace('未clear', '')
+            args = args.replace('未clear', '', 1)
             play_result_filter = ['not_clear']
         elif '未fc' in args:
-            args = args.replace('未fc', '')
+            args = args.replace('未fc', '', 1)
             play_result_filter = ['not_clear', 'clear']
         elif '未ap' in args:
-            args = args.replace('未ap', '')
+            args = args.replace('未ap', '', 1)
             play_result_filter = ['not_clear', 'clear', 'fc']
         elif any(x in args for x in ['clear', 'fc', 'ap']):
             play_result_filter = []
             if 'clear' in args:
-                args = args.replace('clear', '')
+                args = args.replace('clear', '', 1)
                 play_result_filter.append('clear')
             if 'fc' in args:
-                args = args.replace('fc', '')
+                args = args.replace('fc', '', 1)
                 play_result_filter.append('fc')
             if 'ap' in args:
-                args = args.replace('ap', '')
+                args = args.replace('ap', '', 1)
                 play_result_filter.append('ap')
+
+        if ctx.trigger_cmd in MUSIC_CONSTANT_CMDS:
+            show_constant = True
+        else:
+            if '定数' in args:
+                args = args.replace('定数', '', 1)
+                show_constant = True
+
     except:
         return await ctx.asend_reply_msg(help_msg)
 
@@ -1792,6 +1966,7 @@ async def _(ctx: SekaiHandlerContext):
         await compose_music_list_image(
             ctx, diff, lv_musics, ctx.user_id, 
             show_id, show_leak, play_result_filter,
+            show_constant,
         ),
         low_quality=True,
     ))
@@ -1888,7 +2063,20 @@ async def _(ctx: SekaiHandlerContext):
     cover = await ctx.rip.img(f"music/jacket/{asset_name}_rip/{asset_name}.png")
     msg = await get_image_cq(cover) + (f"【{mid}】{title}\n" + ret.candidate_msg).strip()
     return await ctx.asend_reply_msg(msg)
-        
+
+
+# best30
+# pjsk_best30 = SekaiCmdHandler([
+#     "/pjsk b30", "/b30", "/pjsk rating",
+# ])
+# pjsk_best30.check_cdrate(cd).check_wblist(gbl)
+# @pjsk_best30.handle()
+async def _(ctx: SekaiHandlerContext):
+    return await ctx.asend_reply_msg(await get_image_cq(
+        await compose_best30_image(ctx, ctx.user_id),
+        low_quality=True,
+    ))
+
 
 # ======================= 定时任务 ======================= #
 

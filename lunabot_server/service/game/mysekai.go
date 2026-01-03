@@ -2,7 +2,6 @@ package game
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"lunabot/xmlq/server/global"
@@ -45,14 +44,6 @@ func (*MysekaiService) GetDataWithFilter(ctx context.Context, Req gameReq.User) 
 	if Req.UserId == "" {
 		return nil, errors.New("user id 不能为空")
 	}
-	var selects []string
-	// 多请求一个source
-	keys := append(Req.Filter, "source")
-	// 在suite.go中
-	selects, err = keys2selectClauses(keys)
-	if err != nil {
-		return
-	}
 	var db *gorm.DB
 	switch Req.Region {
 	case game.CN:
@@ -62,27 +53,28 @@ func (*MysekaiService) GetDataWithFilter(ctx context.Context, Req gameReq.User) 
 	default:
 		return nil, fmt.Errorf("未知的服务器： %s", Req.Region)
 	}
+	// 多请求一个source
+	keys := append(Req.Filter, "source")
+	//  keys2selectClauses在suite.go中
+	selects, err := keys2selectClauses("data", keys...)
+	if err != nil {
+		return
+	}
+	var mysekai base.Mysekai
 	if len(Req.Filter) == 0 {
 		// 没有指定filter时，获取所有数据
-		var mysekai base.Mysekai
 		err = db.Where("user_id = ?", Req.UserId).
 			Select("data").Scan(&mysekai).Error
-		if err != nil {
-			return
-		}
-		result = mysekai.Data
-		if result == nil {
-			err = errors.New("没有 mysekai 数据")
-		}
-		return
 	} else {
 		err = db.Where("user_id = ?", Req.UserId).
-			Select(selects).Scan(&result).Error
-		for k, v := range result {
-			if val, ok := v.(string); ok {
-				result[k] = json.RawMessage(val)
-			}
-		}
+			Select(selects).Scan(&mysekai).Error
+	}
+	if err != nil {
+		return
+	}
+	result = mysekai.Data
+	if result == nil {
+		err = errors.New("没有 mysekai 数据")
 	}
 	return
 }

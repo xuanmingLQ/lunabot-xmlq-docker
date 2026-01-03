@@ -1,5 +1,5 @@
 from src.utils import *
-from ...llm import translate_text
+from src.llm import translate_text
 from ..common import *
 from ..handler import *
 from ..asset import *
@@ -71,6 +71,8 @@ class PredictWinrate:
     recruiting: Dict[int, bool]
     predict_rates: Dict[int, float]
     predict_time: datetime
+
+SK_TEXT_QUERY_BG_COLOR = [255, 255, 255, 150]
 
 
 # ======================= 处理逻辑 ======================= #
@@ -615,6 +617,7 @@ async def compose_sk_image(ctx: SekaiHandlerContext, qtype: str, qval: Union[str
     style1 = TextStyle(font=DEFAULT_BOLD_FONT, size=24, color=BLACK)
     style2 = TextStyle(font=DEFAULT_FONT, size=24, color=BLACK)
     style3 = TextStyle(font=DEFAULT_BOLD_FONT, size=30, color=BLACK)
+    style4 = TextStyle(font=DEFAULT_FONT, size=18, color=(50, 50, 50))
     texts: List[str, TextStyle] = []
 
     latest_ranks = await get_latest_ranking(ctx, eid, ALL_RANKS)
@@ -641,7 +644,7 @@ async def compose_sk_image(ctx: SekaiHandlerContext, qtype: str, qval: Union[str
     if len(ret_ranks) == 1:
         rank = ret_ranks[0]
         texts.append((f"{truncate(rank.name, 40)}", style2))
-        texts.append((f"排名 {get_board_rank_str(rank.rank)} - 分数 {get_board_score_str(rank.score)}", style3))
+        texts.append((f"排名 {get_board_rank_str(rank.rank)}  -  {get_board_score_str(rank.score)}", style3))
         skl_ranks = [r for r in latest_ranks if r.rank in list(range(1, 10)) + SKL_QUERY_RANKS]
         if prev_rank := find_prev_ranking(skl_ranks, rank.rank):
             dlt_score = prev_rank.score - rank.score
@@ -649,16 +652,16 @@ async def compose_sk_image(ctx: SekaiHandlerContext, qtype: str, qval: Union[str
         if next_rank := find_next_ranking(skl_ranks, rank.rank):
             dlt_score = rank.score - next_rank.score
             texts.append((f"{next_rank.rank}名分数: {get_board_score_str(next_rank.score)}  ↓{get_board_score_str(dlt_score)}", style2))
-        texts.append((f"RT: {get_readable_datetime(rank.time, show_original_time=False)}", style2))
+        texts.append((f"RT: {get_readable_datetime(rank.time, show_original_time=False)}", style4))
     # 查询多个
     else:
         for rank in ret_ranks:
             texts.append((truncate(rank.name, 40), style1))
-            texts.append((f"排名 {get_board_rank_str(rank.rank)} - 分数 {get_board_score_str(rank.score)}", style2))
-            texts.append((f"RT: {get_readable_datetime(rank.time, show_original_time=False)}", style2))
+            texts.append((f"排名 {get_board_rank_str(rank.rank)}  -  {get_board_score_str(rank.score)}", style2))
+            texts.append((f"RT: {get_readable_datetime(rank.time, show_original_time=False)}", style4))
 
     with Canvas(bg=SEKAI_BLUE_BG).set_padding(BG_PADDING) as canvas:
-        with VSplit().set_content_align('lt').set_item_align('lt').set_sep(8).set_item_bg(roundrect_bg()):
+        with VSplit().set_content_align('lt').set_item_align('lt').set_sep(8).set_item_bg(roundrect_bg(fill=SK_TEXT_QUERY_BG_COLOR)):
             with HSplit().set_content_align('rt').set_item_align('rt').set_padding(8).set_sep(7):
                 with VSplit().set_content_align('lt').set_item_align('lt').set_sep(5):
                     TextBox(get_event_id_and_name_text(ctx.region, eid, truncate(title, 20)), TextStyle(font=DEFAULT_BOLD_FONT, size=18, color=BLACK))
@@ -692,6 +695,7 @@ async def compose_cf_image(ctx: SekaiHandlerContext, qtype: str, qval: Union[str
     style1 = TextStyle(font=DEFAULT_BOLD_FONT, size=24, color=BLACK)
     style2 = TextStyle(font=DEFAULT_FONT, size=24, color=BLACK)
     style3 = TextStyle(font=DEFAULT_FONT, size=20, color=BLACK)
+    style4 = TextStyle(font=DEFAULT_FONT, size=18, color=(50, 50, 50))
     texts: List[str, TextStyle] = []
 
     ranks, ranks_list = [], None
@@ -771,21 +775,20 @@ async def compose_cf_image(ctx: SekaiHandlerContext, qtype: str, qval: Union[str
         assert_and_reply(d['status'] != 'no_found', f"找不到{format_sk_query_params(qtype, qval)}的榜线数据")
         assert_and_reply(d['status'] != 'no_enough', f"{format_sk_query_params(qtype, qval)}的最近游玩次数少于1，无法查询")
         texts.append((f"{d['name']}", style1))
-        texts.append((f"当前排名 {get_board_rank_str(d['cur_rank'])} - 当前分数 {get_board_score_str(d['cur_score'])}", style2))
+        texts.append((f"排名 {get_board_rank_str(d['cur_rank'])}  -  {get_board_score_str(d['cur_score'])}", style2))
         if 'prev_rank' in d:
             texts.append((f"{d['prev_rank']}名分数: {get_board_score_str(d['prev_score'])}  ↑{get_board_score_str(d['prev_dlt'])}", style3))
         if 'next_rank' in d:
             texts.append((f"{d['next_rank']}名分数: {get_board_score_str(d['next_score'])}  ↓{get_board_score_str(d['next_dlt'])}", style3))
-        texts.append((f"近{d['avg_pt_n']}次平均Pt: {d['avg_pt']:.1f}", style2))
+        texts.append((f"近{d['avg_pt_n']}次平均Pt: {d['avg_pt']:.0f}", style2))
         texts.append((f"最近一次Pt: {d['last_pt']}", style2))
         texts.append((f"时速: {get_board_score_str(d['hour_speed'])}", style2))
         if 'last_20min_speed' in d:
             texts.append((f"20min×3时速: {get_board_score_str(d['last_20min_speed'])}", style2))
-        texts.append((f"本小时周回数: {len(d['pts'])}", style2))
+        texts.append((f"最近1小时Pt变化次数: {len(d['pts'])}", style2))
         if d['abnormal']:
-            texts.append((f"记录时间内有数据空缺，周回数仅供参考", style2))
-        texts.append((f"数据开始于: {get_readable_datetime(d['start_time'], show_original_time=False)}", style2))
-        texts.append((f"数据更新于: {get_readable_datetime(d['end_time'], show_original_time=False)}", style2))
+            texts.append((f"记录时间内有数据空缺，周回数仅供参考", style4))
+        texts.append((f"RT: {get_readable_datetime(d['start_time'], show_original_time=False)} ~ {get_readable_datetime(d['end_time'], show_original_time=False)}", style4))
     else:
         # 多个
         ds = [calc(ranks) for ranks in ranks_list]
@@ -797,15 +800,15 @@ async def compose_cf_image(ctx: SekaiHandlerContext, qtype: str, qval: Union[str
                 texts.append((f"{format_sk_query_params('rank', qval[i])}的最近游玩次数少于1，无法查询", style1))
                 continue
             texts.append((f"{d['name']}", style1))
-            texts.append((f"当前排名 {get_board_rank_str(d['cur_rank'])} - 当前分数 {get_board_score_str(d['cur_score'])}", style2))
-            texts.append((f"时速: {get_board_score_str(d['hour_speed'])} - 近{d['avg_pt_n']}次平均Pt: {d['avg_pt']:.1f}", style2))
-            texts.append((f"本小时周回数: {len(d['pts'])}", style2))
+            texts.append((f"排名 {get_board_rank_str(d['cur_rank'])}  -  {get_board_score_str(d['cur_score'])}", style2))
+            texts.append((f"时速: {get_board_score_str(d['hour_speed'])} 近{d['avg_pt_n']}次平均Pt: {d['avg_pt']:.0f}", style2))
+            texts.append((f"最近1小时Pt变化次数: {len(d['pts'])}", style2))
             if d['abnormal']:
-                texts.append((f"记录时间内有数据空缺，周回数仅供参考", style2))
-            texts.append((f"RT: {get_readable_datetime(d['start_time'], show_original_time=False)} ~ {get_readable_datetime(d['end_time'], show_original_time=False)}", style2))
+                texts.append((f"记录时间内有数据空缺，周回数仅供参考", style4))
+            texts.append((f"RT: {get_readable_datetime(d['start_time'], show_original_time=False)} ~ {get_readable_datetime(d['end_time'], show_original_time=False)}", style4))
 
     with Canvas(bg=SEKAI_BLUE_BG).set_padding(BG_PADDING) as canvas:
-        with VSplit().set_content_align('lt').set_item_align('lt').set_sep(8).set_item_bg(roundrect_bg()):
+        with VSplit().set_content_align('lt').set_item_align('lt').set_sep(8).set_item_bg(roundrect_bg(fill=SK_TEXT_QUERY_BG_COLOR)):
             with HSplit().set_content_align('rt').set_item_align('rt').set_padding(8).set_sep(7):
                 with VSplit().set_content_align('lt').set_item_align('lt').set_sep(5):
                     TextBox(get_event_id_and_name_text(ctx.region, eid, truncate(title, 20)), TextStyle(font=DEFAULT_BOLD_FONT, size=18, color=BLACK))
@@ -837,7 +840,7 @@ async def compose_csb_image(ctx: SekaiHandlerContext, qtype: str, qval: Union[st
     wl_cid = await get_wl_chapter_cid(ctx, eid)
 
     style1 = TextStyle(font=DEFAULT_BOLD_FONT, size=24, color=BLACK)
-    style2 = TextStyle(font=DEFAULT_FONT, size=24, color=BLACK)
+    style2 = TextStyle(font=DEFAULT_FONT, size=20, color=BLACK)
     style3 = TextStyle(font=DEFAULT_FONT, size=20, color=BLACK)
     texts: List[str, TextStyle] = []
 
@@ -862,6 +865,27 @@ async def compose_csb_image(ctx: SekaiHandlerContext, qtype: str, qval: Union[st
 
     if not ranks:
         raise ReplyException(f"找不到{format_sk_query_params(qtype, qval)}的榜线数据")
+
+    # ================== 各小时周回数据 ================== #
+
+    rankcounts: list[list[int]] = []
+    playcounts: list[list[int]] = []
+    start_date = ranks[0].time.date()
+    for i in range(len(ranks) - 1):
+        cur, nxt = ranks[i], ranks[i + 1]
+        day = (cur.time.date() - start_date).days
+        while len(rankcounts) <= day:
+            rankcounts.append([0 for _ in range(24)])
+            playcounts.append([0 for _ in range(24)])
+        hour = cur.time.hour
+        rankcounts[day][hour] += 1
+        if nxt.score > cur.score:
+            playcounts[day][hour] += 1
+
+    HEAT_COLOR_MIN = color_code_to_rgb('#B8D8FF')
+    HEAT_COLOR_MAX = color_code_to_rgb('#FFB5B5')
+
+    # ================== 停车区间 ================== #
 
     segs: list[tuple[Ranking, Ranking]] = []
     l, r = None, None
@@ -896,9 +920,13 @@ async def compose_csb_image(ctx: SekaiHandlerContext, qtype: str, qval: Union[st
         texts.append((f"{start} ~ {end}（{duration}）", style2))
     if len(texts) == 1:
         texts.append((f"未找到停车区间", style2))
+    row_num = len(texts) // 2 + 1
+    first_text = texts[0]
+    left_texts = texts[1:row_num]
+    right_texts = texts[row_num:]
 
     with Canvas(bg=SEKAI_BLUE_BG).set_padding(BG_PADDING) as canvas:
-        with VSplit().set_content_align('lt').set_item_align('lt').set_sep(8).set_item_bg(roundrect_bg()):
+        with VSplit().set_content_align('lt').set_item_align('lt').set_sep(8).set_item_bg(roundrect_bg(fill=SK_TEXT_QUERY_BG_COLOR)):
             with HSplit().set_content_align('rt').set_item_align('rt').set_padding(8).set_sep(7):
                 with VSplit().set_content_align('lt').set_item_align('lt').set_sep(5):
                     TextBox(get_event_id_and_name_text(ctx.region, eid, truncate(title, 20)), TextStyle(font=DEFAULT_BOLD_FONT, size=18, color=BLACK))
@@ -910,10 +938,32 @@ async def compose_csb_image(ctx: SekaiHandlerContext, qtype: str, qval: Union[st
                     TextBox(time_to_end, TextStyle(font=DEFAULT_BOLD_FONT, size=18, color=BLACK))
                 if wl_cid:
                     ImageBox(get_chara_icon_by_chara_id(wl_cid), size=(None, 50))
+
+            with VSplit().set_content_align('lt').set_item_align('lt').set_sep(6).set_padding(16):
+                TextBox(f"T{ranks[-1].rank} \"{ranks[-1].name}\" 各小时Pt变化次数", style1)
+                with Grid(col_count=24, hsep=1, vsep=1):
+                    for i in range(0, 24):
+                        TextBox(f"{i}", TextStyle(font=DEFAULT_FONT, size=12, color=BLACK)) \
+                            .set_content_align('c').set_size((30, 30))
+                    for day in range(len(rankcounts)):
+                        for hour in range(0, 24):
+                            playcount, rankcount = playcounts[day][hour], rankcounts[day][hour]
+                            if rankcount < 10:
+                                Spacer(w=24, h=24)
+                            else:
+                                color = lerp_color(HEAT_COLOR_MIN, HEAT_COLOR_MAX, max(min((playcount - 15) / 15, 1.0), 0.0))
+                                TextBox(str(playcount), TextStyle(font=DEFAULT_FONT, size=16, color=BLACK)) \
+                                    .set_bg(RoundRectBg(color, radius=4)).set_content_align('c').set_size((30, 30)).set_offset((0, -2))
         
             with VSplit().set_content_align('lt').set_item_align('lt').set_sep(6).set_padding(16):
-                for text, style in texts:
-                    TextBox(text, style)
+                TextBox(*first_text)
+                with HSplit().set_content_align('lt').set_item_align('lt').set_sep(4):
+                    with VSplit().set_content_align('lt').set_item_align('lt').set_sep(4):
+                        for text in left_texts:
+                            TextBox(*text)
+                    with VSplit().set_content_align('lt').set_item_align('lt').set_sep(4):
+                        for text in right_texts:
+                            TextBox(*text)
     
     add_watermark(canvas)
     return await canvas.get_img(1.5 if len(texts) < 10 else 1.0)

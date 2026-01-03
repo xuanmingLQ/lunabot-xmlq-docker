@@ -303,9 +303,11 @@ async def _(ctx: SekaiHandlerContext):
 heyiwei = SekaiCmdHandler([
     "/pjskb30", "/pjskdetail", "/b30", "/b39", "/pjskb39", "/pjsk b30", "/pjsk b39", "/pjsk detail"
 ])
+# heyiwei = SekaiCmdHandler(["/pjsk detail", ])
 heyiwei.check_cdrate(cd).check_wblist(gbl)
 @heyiwei.handle()
 async def _(ctx: SekaiHandlerContext):
+    # return await ctx.asend_reply_msg('使用"/挑战信息"和"/加成信息"查询相关内容')
     return await ctx.asend_reply_msg("何意味")
 
 

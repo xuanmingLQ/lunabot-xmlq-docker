@@ -299,7 +299,16 @@ func (*GameApiService) request(ctx context.Context, Method string, Url string, D
 	}
 	req.Header.Set("X-Haruki-Sekai-Token", global.CONFIG.HarukiApi.Token)
 	req.Header.Set("Connection", "keep-alive")
-	return utils.HttpRequest(req,
+	v, err = utils.HttpRequest(req,
 		DataType,
 	)
+
+	if err != nil && errors.Is(err, utils.HTTP_ERROR) {
+		httpError := err.(*utils.HttpError)
+		var harukiError HarukiApiError
+		_ = json.Unmarshal([]byte(httpError.Detail), &harukiError)
+		httpError.Url = Url
+		err = &harukiError
+	}
+	return
 }

@@ -2,7 +2,7 @@ from ..record.sql import query_recent_msg
 from ..record import before_record_hook
 from src.utils import *
 from src.utils.rpc import *
-from ..llm import ChatSession, ChatSessionResponse, get_text_embedding, download_image_to_b64
+from src.llm import ChatSession, ChatSessionResponse, get_text_embedding, download_image_to_b64
 
 config = Config('chat.autochat')
 logger = get_logger("Chat")
