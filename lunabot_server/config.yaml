@@ -64,7 +64,7 @@ zap:
     retention-day: -1
 
 pgsql:
-    path: "pgsql"
+    path: "127.0.0.1"
     port: "5432"
     config: "sslmode=disable TimeZone=Asia/Shanghai"
     db-name: ""

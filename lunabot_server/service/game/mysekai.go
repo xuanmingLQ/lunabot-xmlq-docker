@@ -10,14 +10,13 @@ import (
 	"lunabot/xmlq/server/model/game/cn"
 	"lunabot/xmlq/server/model/game/jp"
 	gameReq "lunabot/xmlq/server/model/game/request"
-	"time"
 
 	"gorm.io/gorm"
 )
 
 type MysekaiService struct{}
 
-func (*MysekaiService) GetUploadTime(ctx context.Context, Region string, UserIds ...string) (result map[string]*time.Time, err error) {
+func (*MysekaiService) GetUploadTime(ctx context.Context, Region string, UserIds ...string) (result map[string]*int64, err error) {
 	if len(UserIds) == 0 {
 		return nil, errors.New("user id 不能为空")
 	}
@@ -32,8 +31,10 @@ func (*MysekaiService) GetUploadTime(ctx context.Context, Region string, UserIds
 	}
 	var idTimes []base.Mysekai
 	err = db.Where("user_id in (?)", UserIds).
+		Where("upload_time IS NOT NULL").
+		Where("upload_time <> 0").
 		Select("user_id", "upload_time").Scan(&idTimes).Error
-	result = make(map[string]*time.Time, len(idTimes))
+	result = make(map[string]*int64, len(idTimes))
 	for _, idTime := range idTimes {
 		result[idTime.UserId.String()] = &idTime.UploadTime
 	}

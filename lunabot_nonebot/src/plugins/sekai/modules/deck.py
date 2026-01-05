@@ -666,7 +666,11 @@ async def extract_music_and_diff(
     if args:
         search_options.diff = options.music_diff
         music = (await search_music(ctx, args, search_options)).music
-        assert_and_reply(music, f"找不到歌曲\"{args}\"\n发送\"{ctx.trigger_cmd}help\"查看帮助")
+        err_msg = f"找不到歌曲\"{args}\""
+        if len(args.split()) > 1:
+            err_msg += "，如果你要对多首歌曲进行比较，请加上\"歌曲比较\""
+        err_msg += f"，发送\"{ctx.trigger_cmd}help\"查看帮助"
+        assert_and_reply(music, err_msg)
         options.music_id = music['id']
 
     # 已指定歌曲和难度
@@ -1117,18 +1121,17 @@ async def do_deck_recommend_batch(
 
     # 通用请求函数
     async def req(payload: bytes, url: str) -> dict:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
-            async with session.post(url, data=payload) as resp:
-                if resp.status != 200:
-                    msg = f"{resp.status}: "
-                    try:
-                        err_data = await resp.json()
-                        msg += err_data.get('detail', '')
-                    except:
-                        try: msg += await resp.text()
-                        except: pass
-                    raise ReplyException(msg)
-                return await resp.json()
+        async with get_client_session().post(url, data=payload) as resp:
+            if resp.status != 200:
+                msg = f"{resp.status}: "
+                try:
+                    err_data = await resp.json()
+                    msg += err_data.get('detail', '')
+                except:
+                    try: msg += await resp.text()
+                    except: pass
+                raise ReplyException(msg)
+            return await resp.json()
 
     # 用户数据负载
     userdata_payload = []
@@ -2295,33 +2298,32 @@ async def deckrec_update_data():
                 return build_multiparts_payload(payloads)
 
             async def req(url :str, with_masterdata: bool, with_musicmetas: bool):
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(url + "/update_data", data=await construct_payload(with_masterdata, with_musicmetas)) as resp:
-                        if not (with_masterdata or with_musicmetas) and resp.status == 426:
-                            data = await resp.json()
-                            missing_data = data.get('detail', {}).get('missing_data', [])
-                            if not missing_data:
-                                logger.warning(f"{region} 组卡数据需要更新但未指明具体内容")
-                                return
-                            logger.info(f"{region} 组卡数据需要更新: {missing_data}")
-                            await req(
-                                url,
-                                with_masterdata = 'masterdata' in missing_data,
-                                with_musicmetas = 'musicmetas' in missing_data,
-                            )
-                            logger.info(f"{region} 组卡数据更新完成")
+                async with get_client_session().post(url + "/update_data", data=await construct_payload(with_masterdata, with_musicmetas)) as resp:
+                    if not (with_masterdata or with_musicmetas) and resp.status == 426:
+                        data = await resp.json()
+                        missing_data = data.get('detail', {}).get('missing_data', [])
+                        if not missing_data:
+                            logger.warning(f"{region} 组卡数据需要更新但未指明具体内容")
                             return
-                        elif resp.status != 200:
-                            msg = f"更新 {url} 组卡数据失败 ({resp.status}): "
+                        logger.info(f"{region} 组卡数据需要更新: {missing_data}")
+                        await req(
+                            url,
+                            with_masterdata = 'masterdata' in missing_data,
+                            with_musicmetas = 'musicmetas' in missing_data,
+                        )
+                        logger.info(f"{region} 组卡数据更新完成")
+                        return
+                    elif resp.status != 200:
+                        msg = f"更新 {url} 组卡数据失败 ({resp.status}): "
+                        try:
+                            err_data = await resp.json()
+                            msg += err_data.get('detail', '')
+                        except:
                             try:
-                                err_data = await resp.json()
-                                msg += err_data.get('detail', '')
+                                msg += await resp.text()
                             except:
-                                try:
-                                    msg += await resp.text()
-                                except:
-                                    pass
-                            raise Exception(msg)
+                                pass
+                        raise Exception(msg)
 
             for server in RECOMMEND_SERVERS_CFG.get():
                 await req(server['url'], False, False)

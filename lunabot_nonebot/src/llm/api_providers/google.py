@@ -125,23 +125,22 @@ class GenaiCompletions:
         proxy = self.http_options.get('proxy')
         timeout = aiohttp.ClientTimeout(total=self.http_options.get('timeout', 300))
 
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.post(
-                    url, 
-                    json=payload, 
-                    proxy=proxy, 
-                    timeout=timeout
-                ) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        # 抛出包含 URL 的异常以便调试
-                        raise Exception(f"Google API Error {response.status} at {url}: {error_text}")
-                    
-                    resp_json = await response.json()
-            except Exception as e:
-                # 捕获网络层面的错误
-                raise Exception(f"请求 Google API 失败: {str(e)}")
+        try:
+            async with get_client_session().post(
+                url, 
+                json=payload, 
+                proxy=proxy, 
+                timeout=timeout
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    # 抛出包含 URL 的异常以便调试
+                    raise Exception(f"Google API Error {response.status} at {url}: {error_text}")
+                
+                resp_json = await response.json()
+        except Exception as e:
+            # 捕获网络层面的错误
+            raise Exception(f"请求 Google API 失败: {str(e)}")
 
         # --- 3. 解析响应 ---
         if "candidates" not in resp_json or not resp_json["candidates"]:
@@ -238,12 +237,11 @@ class GenaiEmbeddings:
         proxy = self.http_options.get('proxy')
         timeout = aiohttp.ClientTimeout(total=self.http_options.get('timeout', 60))
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, proxy=proxy, timeout=timeout) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    raise Exception(f"Google Embeddings API Error {response.status} at {url}: {error_text}")
-                data = await response.json()
+        async with get_client_session().post(url, json=payload, proxy=proxy, timeout=timeout) as response:
+            if response.status != 200:
+                error_text = await response.text()
+                raise Exception(f"Google Embeddings API Error {response.status} at {url}: {error_text}")
+            data = await response.json()
 
         embeddings = []
         if "embeddings" in data:

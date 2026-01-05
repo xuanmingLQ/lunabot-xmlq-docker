@@ -93,21 +93,6 @@ services:
     volumes:
       - ./data/sekai/deckrec:/app/deck_recommender/data/sekai/deckrec # 必须和nonebot挂载到同一位置
   
-  # autochat服务，这一项是可选的，如果你不需要autochat服务可以将这一项注释掉
-  
-  autochat:
-    build:
-      context: ./autochat
-      dockerfile: ./Dockerfile
-    container_name: lunabot-autochat
-    restart: always
-    # ports: # 这个服务没有开放端口
-    networks:
-      network:
-        ipv4_address: 172.8.0.16
-    volumes:
-      - ./lunabot_autochat/config:/app/lunabot_autochat/config
-      - ./data:/app/lunabot_autochat/data # 总之是同一个data
     # pgsql数据库
   pgsql:
     image: postgres:18-alpine
@@ -134,4 +119,33 @@ services:
     networks:
       network:
         ipv4_address: 172.8.0.21
-  # redis:
+
+  # autochat服务，这一项是可选的，如果你不需要autochat服务可以将这一项注释掉
+  autochat:
+    build:
+      context: ./autochat
+      dockerfile: ./Dockerfile
+    container_name: lunabot-autochat
+    restart: always
+    # ports: # 这个服务没有开放端口
+    networks:
+      network:
+        ipv4_address: 172.8.0.16
+    volumes:
+      - ./lunabot_autochat/config:/app/lunabot_autochat/config
+      - ./data:/app/lunabot_autochat/data # 总之是同一个data
+  # event-tracker服务，也是可选的
+  event-tracker:
+    build:
+      context: ./event_tracker
+      dockerfile: ./Dockerfile
+    container_name: lunabot-event-tracker
+    restart: always
+    # ports: # 这个服务没有开放端口
+    networks:
+      network:
+        ipv4_address: 172.8.0.17
+    volumes:
+      - ./event_tracker/config:/app/lunabot_event_tracker/config
+      - ./data:/app/lunabot_event_tracker/data # 总之是同一个data
+

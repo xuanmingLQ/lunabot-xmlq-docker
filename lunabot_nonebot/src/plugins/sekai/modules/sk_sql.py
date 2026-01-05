@@ -19,10 +19,15 @@ async def get_conn(region, event_id, create) -> Optional[aiosqlite.Connection]:
     global _conns
     if _conns.get(path) is None:
         _conns[path] = await aiosqlite.connect(path)
+        await _conns[path].execute("PRAGMA journal_mode=WAL;") 
         logger.info(f"连接sqlite数据库 {path} 成功")
 
     conn = _conns[path]
-    if not _created_table_keys.get(f"{region}_{event_id}"):
+    
+    cache_key = f"{region}_{event_id}"
+    
+    if not _created_table_keys.get(cache_key):
+        # 建表
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS ranking (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -32,11 +37,54 @@ async def get_conn(region, event_id, create) -> Optional[aiosqlite.Connection]:
                 rank INTEGER,
                 ts INTEGER
             )
-        """)    
+        """)
+        # 创建索引
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_ranking_rank_ts 
+            ON ranking (rank, ts)
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_ranking_uid 
+            ON ranking (uid)
+        """)
         await conn.commit()
-        _created_table_keys[f"{region}_{event_id}"] = True
+        _created_table_keys[cache_key] = True
 
     return conn
+
+
+async def archive_database(region: str, event_id: int):
+    """
+    归档数据库：合并WAL数据，删除临时文件，并优化文件大小。
+    """
+    path = DB_PATH.format(region=region, event_id=event_id)
+    if not os.path.exists(path):
+        return
+    
+    global _conns, _created_table_keys
+    if path in _conns:
+        await _conns[path].close()
+        del _conns[path]
+        cache_key = f"{region}_{event_id}"
+        if cache_key in _created_table_keys:
+            del _created_table_keys[cache_key]
+
+    async with aiosqlite.connect(path) as conn:
+        logger.info(f"尝试归档数据库 {path} ...")
+        await conn.execute("VACUUM;")
+        cursor = await conn.execute("PRAGMA journal_mode = DELETE;")
+        mode = await cursor.fetchone()
+        await cursor.close()
+        if mode[0] != 'delete':
+            logger.warning(f"切换模式失败，当前模式: {mode[0]}。可能是仍有其他程序连接着数据库。")
+        await conn.commit()
+
+    wal_path = path + "-wal"
+    shm_path = path + "-shm"
+    if os.path.exists(wal_path) or os.path.exists(shm_path):
+        logger.warning("警告：WAL文件仍然存在，可能有其他进程（如读取端）占用了数据库！")
+    else:
+        logger.info(f"数据库 {path} 归档完成。")
 
 
 @dataclass
@@ -68,18 +116,20 @@ class Ranking:
             rank=data["rank"],
             time=time or datetime.now(),
         )
+    
 
-
-async def insert_rankings(region: str, event_id: int, rankings: List[Ranking]):
-    conn = await get_conn(region, event_id, create=True)
-
-    for ranking in rankings:
-        ranking.name = ranking.name[:RANKING_NAME_LEN_LIMIT]
-        await conn.execute("""
-            INSERT INTO ranking (uid, name, score, rank, ts) VALUES (?, ?, ?, ?, ?)
-        """, (ranking.uid, ranking.name, ranking.score, ranking.rank, ranking.time.timestamp()))
-
-    await conn.commit()
+def query_update_time(
+    region: str, 
+    event_id: int,
+) -> Optional[datetime]:
+    """检查表更新时间"""
+    path = DB_PATH.format(region=region, event_id=event_id)
+    if not os.path.exists(path):
+        return None
+    ret = datetime.fromtimestamp(os.path.getmtime(path))
+    if os.path.exists(path + "-wal"):
+        ret = max(ret, datetime.fromtimestamp(os.path.getmtime(path + "-wal")))
+    return ret
 
 
 async def query_ranking(

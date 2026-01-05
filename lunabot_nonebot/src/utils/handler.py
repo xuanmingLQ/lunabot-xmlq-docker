@@ -7,6 +7,7 @@ from nonebot.message import handle_event
 from nonebot.compat import model_dump, type_validate_python
 from nonebot.adapters.onebot.v11 import (
     Bot, 
+    Event,
     MessageEvent, 
     GroupMessageEvent, 
     PrivateMessageEvent, 
@@ -199,6 +200,25 @@ def _mp_check_at_me(bot: "Bot", event: MessageEvent) -> None:
 
 bot_module._check_at_me = _mp_check_at_me
 bot_module._check_reply = _mp_check_reply
+
+# 修改adapters.onebot.v11.bot的Bot类的方法handle_event，将message_sent转为普通message事件
+
+async def _mp_handle_event(self, event: Event) -> None:
+    """处理收到的事件。"""
+    if event.post_type == "message_sent":
+        data = event.model_dump()
+        data['post_type'] = 'message'
+        event = GroupMessageEvent(**data) if hasattr(event, 'group_id') else PrivateMessageEvent(**data)
+
+    if isinstance(event, MessageEvent):
+        event.message.reduce()
+        await bot_module._check_reply(self, event)
+        bot_module._check_at_me(self, event)
+        bot_module._check_nickname(self, event)
+
+    await handle_event(self, event)
+
+bot_module.Bot.handle_event = _mp_handle_event
 
 
 # ============================ API调用 ============================ #

@@ -14,12 +14,11 @@ class SiliconflowApiProvider(ApiProvider):
         )
         
     async def sync_quota(self):
-        async with aiohttp.ClientSession() as session:
-            url = self.config.get("user_info_url")
-            headers = {"Authorization": f"Bearer {self.get_api_key()}"}
-            async with session.get(url, headers=headers) as resp:
-                if resp.status != 200:
-                    raise Exception(f"获取SiliconFlow剩余额度失败: {resp.status} {resp.reason}")
-                data = await resp.json()
-                return float(data['data']['totalBalance'])
+        url = self.config.get("user_info_url")
+        headers = {"Authorization": f"Bearer {self.get_api_key()}"}
+        async with get_client_session().get(url, headers=headers) as resp:
+            if resp.status != 200:
+                raise Exception(f"获取SiliconFlow剩余额度失败: {resp.status} {resp.reason}")
+            data = await resp.json()
+            return float(data['data']['totalBalance'])
 

@@ -52,18 +52,16 @@ class AiyydsApiProvider(ApiProvider):
                 cookies = await self._update_sync_quota_web_cookies()
 
             # 查询额度
-            import aiohttp
-            async with aiohttp.ClientSession(cookies=cookies) as session:
-                async with session.get(api_url) as response:
-                    if response.status == 401:
-                        logger.info("AI-YYDS登录失效, 删除并重新获取cookies")
-                        os.remove(self.cookies_save_path)
-                        continue
-                    if response.status != 200:
-                        raise Exception(f"请求失败: {response.status}")
-                    res = await response.json()
-                    quota = res['data']['quota'] / 500000
-                    return quota
+            async with get_client_session().get(api_url) as response:
+                if response.status == 401:
+                    logger.info("AI-YYDS登录失效, 删除并重新获取cookies")
+                    os.remove(self.cookies_save_path)
+                    continue
+                if response.status != 200:
+                    raise Exception(f"请求失败: {response.status}")
+                res = await response.json()
+                quota = res['data']['quota'] / 500000
+                return quota
 
 
 

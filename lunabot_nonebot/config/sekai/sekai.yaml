@@ -168,6 +168,16 @@ mysekai:
 
 sk:
   record_interval_seconds: 60
+  high_res_record:  # 高精度榜线记录
+    interval_seconds: 10
+    ranks:  # 应用高精度的排名档位范围
+      jp: [[1, 10]]
+    uids:   # 应用高精度的uid列表
+      jp: ["12344532534324132"]
+  record_interval_tolerance: 70  # 超过该容差认为有记录丢失
+
+  plot_point_num_limit: 5000
+
   record_time_after_event_end_minutes: 0
   update_ranking_log_interval: 30
   csb_judge_stop_threshold_minutes: 5
@@ -237,3 +247,6 @@ music:
     csv_path: ""  # 歌曲定数csv路径，需包含 id,difficulty,constant 三列
     info_text: |
       该bot的定数表未配置
+
+rpc:
+  default_timeout: 5

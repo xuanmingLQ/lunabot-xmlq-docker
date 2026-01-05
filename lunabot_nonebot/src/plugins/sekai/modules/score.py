@@ -12,6 +12,7 @@ from .music import (
     DIFF_COLORS,
     get_music_diff_level,
     is_valid_music,
+    get_music_diff_info,
 )
 from decimal import Decimal, ROUND_DOWN
 import pandas as pd
@@ -341,7 +342,6 @@ async def compose_custom_room_score_control_image(ctx: SekaiHandlerContext, targ
     add_watermark(canvas)
     return await canvas.get_img()
     
-
 
 # 合成歌曲meta图片
 async def compose_music_meta_image(ctx: SekaiHandlerContext, mids: list[int]) -> Image.Image:
@@ -849,10 +849,15 @@ async def _(ctx: SekaiHandlerContext):
     spec_mid_diffs = []
     for seg in args.split():
         if not seg: continue
-        diff, seg = extract_diff(seg, 'master')
+        if '*' in seg:
+            diff = None
+            seg = seg.replace('*', '', 1)
+        else:
+            diff, seg = extract_diff(seg, 'master')
         res = await search_music(ctx, seg, options=MusicSearchOptions(diff=diff, use_emb=False))
         assert_and_reply(res.music, f"找不到歌曲或参数错误:\"{seg}\"\n发送\"{ctx.trigger_cmd}help\"获取帮助")
-        spec_mid_diffs.append((res.music['id'], diff))
+        diffs = [diff] if diff else list((await get_music_diff_info(ctx, res.music['id'])).level.keys())
+        spec_mid_diffs.extend([(res.music['id'], diff) for diff in diffs])
         assert_and_reply(len(spec_mid_diffs) <= SHOW_NUM, f"最多只能关注{SHOW_NUM}首歌曲")
 
     return await ctx.asend_reply_msg(

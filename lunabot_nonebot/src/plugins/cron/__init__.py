@@ -187,7 +187,7 @@ def del_cron_task_from_file_db(group_id, task_id):
             return
 
 # 定期检查过期任务
-@repeat_with_interval(60, "定期检查过期任务", logger, start_offset=20)
+@repeat_with_interval(60, "定期检查过期任务", logger, delay=20)
 async def check_expired_tasks():
     for key in file_db.keys():
         if key.startswith("tasks_"):

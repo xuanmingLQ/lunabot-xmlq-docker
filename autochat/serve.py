@@ -1,6 +1,6 @@
 from utils import *
 from memory import *
-import re
+import re, random
 
 
 def debug_mode() -> bool:

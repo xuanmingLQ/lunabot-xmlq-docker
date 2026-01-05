@@ -83,29 +83,28 @@ async def search_googlelens(
         img_url = quote(img_url, safe='')
         serp_url = f'https://serpapi.com/search.json?engine=google_lens&url={img_url}&api_key={serp_apikey}'
         
-        async with aiohttp.ClientSession() as session:
-            async with session.get(serp_url) as response:
-                if response.status != 200:
-                    raise Exception(f"HTTP {response.status} {response.reason}: {await response.text()}")
-                
-                results = (await response.json())['visual_matches']
-                results = [item for item in results if item.get('title') and item.get('link')][:limit]
+        async with get_client_session().get(serp_url) as response:
+            if response.status != 200:
+                raise Exception(f"HTTP {response.status} {response.reason}: {await response.text()}")
+            
+            results = (await response.json())['visual_matches']
+            results = [item for item in results if item.get('title') and item.get('link')][:limit]
 
-                source_icon_urls = [item.get('source_icon') for item in results]
-                source_icons = await download_batch_thumbnails(source_icon_urls)
+            source_icon_urls = [item.get('source_icon') for item in results]
+            source_icons = await download_batch_thumbnails(source_icon_urls)
 
-                thumbnail_urls = [item.get('thumbnail') for item in results]
-                thumbnails = await download_batch_thumbnails(thumbnail_urls)
+            thumbnail_urls = [item.get('thumbnail') for item in results]
+            thumbnails = await download_batch_thumbnails(thumbnail_urls)
 
-                results = [ImageSearchResultItem(
-                    title=item['title'],
-                    url=item['link'],
-                    source=item.get('source'),
-                    source_icon=source_icon,
-                    thumbnail=thumbnail,
-                ) for item, source_icon, thumbnail in zip(results, source_icons, thumbnails)]
+            results = [ImageSearchResultItem(
+                title=item['title'],
+                url=item['link'],
+                source=item.get('source'),
+                source_icon=source_icon,
+                thumbnail=thumbnail,
+            ) for item, source_icon, thumbnail in zip(results, source_icons, thumbnails)]
 
-                return ImageSearchResult(source='GoogleLens', results=results)
+            return ImageSearchResult(source='GoogleLens', results=results)
     
     except Exception as e:
         logger.print_exc(f'从GoogleLens搜索图片 {img_url} 失败')

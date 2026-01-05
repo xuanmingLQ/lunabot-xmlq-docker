@@ -1,0 +1,14 @@
+- id: "cn"
+  name: "国服"
+  utf_offset: 8
+  translated: true
+  compact_data: true
+  mysekai: true
+  bd_mysekai: true
+
+- id: "jp"
+  name: "日服"
+  utc_offset: 9
+  need_translate: true
+  fifth_anniversary: true
+  mysekai: true

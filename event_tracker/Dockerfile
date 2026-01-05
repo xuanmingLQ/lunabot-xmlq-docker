@@ -4,7 +4,7 @@ FROM python:3.13-slim-bookworm
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # 设置工作目录
-WORKDIR /app/lunabot_autochat
+WORKDIR /app/lunabot_event_tracker
 
 # 2. 设置 uv 缓存目录以加速构建
 ENV UV_CACHE_DIR=/root/.cache/uv
@@ -28,7 +28,7 @@ RUN --mount=type=cache,target=$UV_CACHE_DIR \
 
 # 配置环境变量
 # 确保虚拟环境中的 python 路径在最前面
-ENV PATH="/app/lunabot_autochat/.venv/bin:$PATH" \
+ENV PATH="/app/lunabot_event_tracker/.venv/bin:$PATH" \
     TZ=Asia/Shanghai
 # 设置时区
 RUN echo "deb https://mirrors.aliyun.com/debian/ bookworm main" > /etc/apt/sources.list \
@@ -40,7 +40,9 @@ RUN echo "deb https://mirrors.aliyun.com/debian/ bookworm main" > /etc/apt/sourc
     tzdata openntpd \
     && ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-VOLUME ["/app/lunabot_autochat/config", "/app/lunabot_autochat/data"]
+
+# 挂载卷 docker run -d -v /home/xmlq/codes/pycodes/nonebot/lunabot-sekai/data:/app/lunabot_event_tracker/data --name lunabot_event_tracker lunabot_event_tracker:latest
+VOLUME ["/app/lunabot_event_tracker/config", "/app/lunabot_event_tracker/data"]
 
 # 启动服务
-CMD ["python", "serve.py"]
+CMD ["python", "main.py"]

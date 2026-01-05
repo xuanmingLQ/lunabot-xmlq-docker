@@ -8,23 +8,33 @@ import (
 )
 
 type User struct {
-	Region    string `json:"region" form:"region"  binding:"required"`
-	UserId    string `json:"userId" form:"userId"  binding:"required"`
-	FilterRaw string `json:"filter" form:"filter"`
-	Filter    []string
+	Region string   `json:"region" form:"region"  binding:"required"`
+	UserId string   `json:"userId" form:"userId"  binding:"required"`
+	Filter []string `json:"filter" form:"filter"`
 }
 
 type Users struct {
-	Region  string        `json:"region" form:"region"  binding:"required"`
-	UserIds []json.Number `json:"userIds" form:"userIds"  binding:"required"`
+	Region  string        `json:"region" binding:"required"`
+	UserIds []json.Number `json:"userIds" binding:"required"`
 }
 
 func (u *User) BindQuery(c *gin.Context) error {
 	if err := c.ShouldBindQuery(u); err != nil {
 		return err
 	}
-	if u.FilterRaw != "" {
-		u.Filter = strings.Split(u.FilterRaw, ",")
+	var filters []string
+	for _, f := range u.Filter {
+		if f == "" {
+			continue
+		}
+		for filter := range strings.SplitSeq(f, ",") {
+			filter = strings.TrimSpace(filter)
+			if filter == "" {
+				continue
+			}
+			filters = append(filters, filter)
+		}
 	}
+	u.Filter = filters
 	return nil
 }

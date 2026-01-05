@@ -27,9 +27,33 @@ def shrink_image(image: Image.Image | List[Image.Image], alpha_threshold: int, e
     将图片边缘的透明部分裁剪掉，
     - alpha_threshold: alpha通道阈值，
     - edge: 裁剪后保留的边缘宽度
-    - extra_ret: 返回 { 'bbox': (x, y, w, h) }
+    - extra_ret: 返回扣完图的部分在原图中的bbox { 'bbox': (x, y, w, h) }
     """
-    return execute_imgtool_py(image, "shrink", alpha_threshold, edge)
+    try:
+        return execute_imgtool_py(image, "shrink", alpha_threshold, edge)
+    except Exception as e:
+        # 备用实现
+        logger.warning(f"imgtool-cpp程序shrink命令执行失败，使用备用实现: {get_exc_desc(e)}")
+        image_array = np.array(image)
+        alpha = image_array[:, :, 3]
+        non_blank_rows = np.where(np.any(alpha >= alpha_threshold, axis=1))[0]
+        non_blank_columns = np.where(np.any(alpha >= alpha_threshold, axis=0))[0]
+        if non_blank_rows.size > 0 and non_blank_columns.size > 0:
+            left = non_blank_columns[0]
+            right = non_blank_columns[-1]
+            top = non_blank_rows[0]
+            bottom = non_blank_rows[-1]
+            image = Image.fromarray(image_array[top : bottom + 1, left : right + 1])
+        else:
+            image = Image.fromarray(image_array)
+        w, h = image.size
+        new_w = w + 2 * edge
+        new_h = h + 2 * edge
+        new_image = Image.new('RGBA', (new_w, new_h), (0, 0, 0, 0))
+        new_image.paste(image, (edge, edge))
+        image = new_image
+        extra_ret = { 'bbox': (left, top, w, h) }
+        return ImageToolResult(image=image, extra_info=extra_ret)
 
 
 # ============================= 基础设施 ============================= # 

@@ -29,6 +29,11 @@ class ProcessPool:
 
     def submit(self, fn, *args, **kwargs):
         return asyncio.get_event_loop().run_in_executor(self.executor, init_nb_and_do_func, fn, *args, **kwargs)
+    
+    @staticmethod
+    def shutdown_all():
+        for pool in ProcessPool._process_pools:
+            pool.executor.shutdown(wait=False, cancel_futures=True)
 
 def is_main_process():
     return mp.current_process().name == 'MainProcess'

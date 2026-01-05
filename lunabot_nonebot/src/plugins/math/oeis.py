@@ -1,4 +1,4 @@
-import aiohttp
+from src.utils import get_client_session
 from typing import List
 
 class IntegerSequence(object):
@@ -38,11 +38,10 @@ async def raw_query(sequence, n=1):
     payload['q'] = sequence
     payload['n'] = str(n)
     payload['fmt'] = 'text'
-    async with aiohttp.ClientSession() as session:
-        async with session.get('http://oeis.org/search', params=payload) as response:
-            if response.status != 200:
-                raise OEISError('Invalid HTTP response from the OEIS')
-            return await response.text()
+    async with get_client_session().get('http://oeis.org/search', params=payload) as response:
+        if response.status != 200:
+            raise OEISError('Invalid HTTP response from the OEIS')
+        return await response.text()
 
 
 def split_blocks(content):

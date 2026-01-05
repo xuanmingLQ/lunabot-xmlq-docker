@@ -1,11 +1,9 @@
 # https://github.com/yunkuangao/koishi-plugin-pjsk-stickers-maker
 
 from ..common import *
-import os
 import math
 from PIL import Image, ImageDraw, ImageFont
 from fontTools.ttLib import TTFont
-from pilmoji import Pilmoji
 
 STAMP_MAKER_BASE_DIR = f"{SEKAI_ASSET_DIR}/stamp_maker"
 
@@ -355,6 +353,7 @@ def make_stamp(
     """
 
     sticker = Image.open(base_image_path).convert("RGBA")
+    sticker = _remove_blank(sticker)
     if text == "":
         return sticker
 

@@ -2,6 +2,10 @@ log_level: "INFO"
 superuser:
   - 12345678
 
+startup_task_delay_seconds:
+  min: 0
+  max: 3
+
 profile_at_starup:
   enable: false
   clock_type: "cpu"

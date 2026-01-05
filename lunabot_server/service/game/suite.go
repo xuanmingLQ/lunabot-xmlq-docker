@@ -11,7 +11,6 @@ import (
 	"lunabot/xmlq/server/model/game/jp"
 	"regexp"
 	"strings"
-	"time"
 
 	gameReq "lunabot/xmlq/server/model/game/request"
 
@@ -20,7 +19,7 @@ import (
 
 type SuiteService struct{}
 
-func (*SuiteService) GetUploadTime(ctx context.Context, Region string, UserIds ...string) (result map[string]*time.Time, err error) {
+func (*SuiteService) GetUploadTime(ctx context.Context, Region string, UserIds ...string) (result map[string]*int64, err error) {
 	if len(UserIds) == 0 {
 		return nil, errors.New("user id 不能为空")
 	}
@@ -35,10 +34,15 @@ func (*SuiteService) GetUploadTime(ctx context.Context, Region string, UserIds .
 	}
 	var idTimes []base.Suite
 	err = db.Where("user_id in (?)", UserIds).
-		Select("user_id", "upload_time").Scan(&idTimes).Error
-	result = make(map[string]*time.Time, len(idTimes))
+		Where("upload_time IS NOT NULL").
+		Where("upload_time <> 0").
+		Select("user_id", "upload_time").
+		Scan(&idTimes).Error
+	result = make(map[string]*int64, len(idTimes))
 	for _, idTime := range idTimes {
-		result[idTime.UserId.String()] = &idTime.UploadTime
+		if idTime.UploadTime != 0 {
+			result[idTime.UserId.String()] = &idTime.UploadTime
+		}
 	}
 	return
 }

@@ -32,7 +32,7 @@ MYSEKAI_REGIONS = ['jp',  'cn']
 BD_MYSEKAI_REGIONS = ['cn',]
 
 bd_msr_sub = SekaiGroupSubHelper("msr", "msr指令权限", BD_MYSEKAI_REGIONS)
-msr_sub = SekaiUserSubHelper("msr", "烤森资源查询自动推送", MYSEKAI_REGIONS, only_one_group=True)
+msr_sub = SekaiUserSubHelper("msr", "烤森资源查询自动推送", MYSEKAI_REGIONS, only_one_group=True, hide=True)
 
 class MsrIdNotMatchException(ReplyException):
     pass
@@ -520,7 +520,11 @@ async def compose_mysekai_harvest_map_image(ctx: SekaiHandlerContext, harvest_ma
                 image = await ctx.rip.img(
                     f'mysekai/birthday/{chara_eng_name}_2025/icon_refresh.png',
                     use_img_cache=True,
+                    default=None
                 )
+                if image is None:
+                    # 使用全透明图暂时替代
+                    image = Image.new('RGBA', (32, 32), (0, 0, 0, 0))
                 point_img_size = 50 * scale
                 xoffset = point_img_size * 0.15
                 zoffset = 0
@@ -2122,11 +2126,11 @@ async def _(ctx: SekaiHandlerContext):
     for source_name, upload_time_msg in result.items():
         msg += f"[{source_name}]\n"
         if upload_time_msg["upload_time"]:
-            upload_time = datetime.fromisoformat(upload_time_msg["upload_time"])
+            upload_time = datetime.fromtimestamp(upload_time_msg["upload_time"])
             upload_time_text = upload_time.strftime('%m-%d %H:%M:%S') + f"({get_readable_datetime(upload_time, show_original_time=False)})"
             msg += f"{upload_time_text}\n"
         else:
-            msg += f"[{source_name}]\n获取失败：{upload_time_msg["error"]}\n"
+            msg += f"获取失败：{upload_time_msg["error"]}\n"
     mode = get_user_data_mode(ctx, ctx.user_id)
     msg += f"---\n"
     msg += f"该指令查询Mysekai数据，查询Suite数据请使用\"/{ctx.region}抓包状态\"\n"
@@ -2254,8 +2258,8 @@ async def msr_auto_push():
         logger.info(upload_times)
         need_push_uids = [] # 需要推送的uid_mode（有及时更新数据并且没有距离太久的）
         last_refresh_time = get_mysekai_last_refresh_time_and_reason(ctx)[0]
-        for uid, isodate in upload_times.items():
-            update_time = datetime.fromisoformat(isodate)
+        for uid, ts in upload_times.items():
+            update_time = datetime.fromtimestamp(ts)
             if update_time.timestamp() > last_refresh_time.timestamp() and datetime.now(update_time.tzinfo) - update_time < timedelta(minutes=10):
                 need_push_uids.append(uid)
         logger.info(need_push_uids)

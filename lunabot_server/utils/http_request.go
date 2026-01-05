@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -20,22 +21,23 @@ var (
 )
 
 type HttpError struct {
-	Status int    
-	Url    string 
-	Detail string 
+	Status int
+	Url    string
+	Detail string
 }
 
 func (he *HttpError) Error() string {
 	if he == nil {
 		return "未知错误"
 	}
-	return fmt.Sprintf("%d: %s", he.Status, he.Detail)
+	return fmt.Sprintf("访问 %s 异常：%d %s", he.Url, he.Status, he.Detail[:100])
 }
 
 var HTTP_ERROR = &HttpError{}
 
-func (*HttpError) Is(err error) bool {
-	return err == HTTP_ERROR
+func (*HttpError) Is(target error) bool {
+	_, ok := target.(*HttpError)
+	return ok
 }
 
 // DataTypeNone 返回Response
@@ -75,8 +77,20 @@ func HttpRequest(
 			Status: resp.StatusCode,
 			Url:    Req.URL.String(),
 		}
-		detail, _ := io.ReadAll(resp.Body)
-		httpError.Detail = string(detail)
+		body, _ := io.ReadAll(resp.Body)
+		// json格式，全部保存
+		if body[0] == '{' {
+			httpError.Detail = string(body)
+		} else {
+			// 其它类型，保存前100字符
+			detail := string(body)
+			start := strings.Index(detail, "<body>")
+			end := strings.Index(detail, "</body>")
+			if -1 < start && start < end {
+				detail = detail[start+6 : end]
+			}
+			httpError.Detail = detail[:100]
+		}
 		return nil, &httpError
 	}
 	switch DataType {

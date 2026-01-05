@@ -1,6 +1,9 @@
 log_level: INFO
+service_name: "lunabot-autochat"
+data_dir: "/app/lunabot_autochat/data/"
 
 rpc:
+  enable: true
   host: "127.0.0.1"
   port: 12345
   token: xxxxx

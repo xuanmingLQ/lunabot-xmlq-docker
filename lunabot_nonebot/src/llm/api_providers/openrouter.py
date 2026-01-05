@@ -14,15 +14,14 @@ class OpenrouterApiProvider(ApiProvider):
         )
         
     async def sync_quota(self):
-        async with aiohttp.ClientSession() as session:
-            url = self.config.get('auth_key_url')
-            headers = {"Authorization": f"Bearer {self.get_api_key()}"}
-            async with session.get(url, headers=headers) as resp:
-                if resp.status != 200:
-                    raise Exception(f"获取OpenRouter剩余额度失败: {resp.status} {resp.reason}")
-                data = await resp.json()
-                usage, limit = data['data']["total_usage"], data['data']["total_credits"]
-                if limit is None:
-                    raise Exception("OpenRouter API key 无限额")
-                return limit - usage
+        url = self.config.get('auth_key_url')
+        headers = {"Authorization": f"Bearer {self.get_api_key()}"}
+        async with get_client_session().get(url, headers=headers) as resp:
+            if resp.status != 200:
+                raise Exception(f"获取OpenRouter剩余额度失败: {resp.status} {resp.reason}")
+            data = await resp.json()
+            usage, limit = data['data']["usage"], data['data']["limit"]
+            if limit is None:
+                raise Exception("OpenRouter API key 无限额")
+            return limit - usage
 

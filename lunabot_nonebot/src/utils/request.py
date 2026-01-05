@@ -19,7 +19,7 @@ async def server(path:str, method:str, json:dict|None=None, query:dict|None=None
     url = f"{SEKAI_API_BASE_PATH}{path}"
     if query:
         url = f"{url}?{parse_query(query)}"
-    logger.info(url)
+    logger.debug(url)
     #headers
     try:
         async with aiohttp.ClientSession() as session:
@@ -45,7 +45,7 @@ async def download_data(path:str, params:list|None=None, query:dict|None=None):
     if params: url = "/".join([url]+params)
     if query:
         url=f"{url}?{parse_query(query)}"
-    logger.info(url)
+    logger.debug(url)
     try:
         async with aiohttp.ClientSession() as session:
             async with session.request("get",url) as resp:

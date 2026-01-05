@@ -11,7 +11,6 @@ import (
 	gameRes "lunabot/xmlq/server/model/game/response"
 	"lunabot/xmlq/server/third_service/harukiapi"
 	"maps"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -55,6 +54,8 @@ func (*UserApi) GetSuite(c *gin.Context) {
 		response.FailWithMessage(fmt.Sprintf("参数校验失败 %s", err.Error()), c)
 		return
 	}
+	filters := c.QueryArray("filters")
+	filters = append(filters, "")
 	// 首先检查本地的suite和haruki的suite上传时间GetSuite
 	idTime, localErr := suiteService.GetUploadTime(c, userInfo.Region, userInfo.UserId)
 	localUploadTime := idTime[userInfo.UserId]
@@ -66,13 +67,13 @@ func (*UserApi) GetSuite(c *gin.Context) {
 		global.LOG.Error(fmt.Sprintf("从 Haruki 工具箱获取 %s 的 suite 上传时间失败", userInfo.UserId), zap.Error(harukiErr))
 		// 如果本地和Haruki都失败
 		if localErr != nil {
-			response.FailWithMessage("获取 Suite 数据失败："+harukiErr.Error(), c)
+			response.FailWithMessage("获取 Suite 数据失败："+resultError(harukiErr), c)
 			return
 		}
 	}
 
 	// 如果本地的上传时间较新，或者haruki没有拿到上传时间
-	if localUploadTime != nil && !localUploadTime.IsZero() && (harukiUploadTime == nil || localUploadTime.After(*harukiUploadTime)) {
+	if localUploadTime != nil && *localUploadTime != 0 && (harukiUploadTime == nil || *localUploadTime > *harukiUploadTime) {
 		suite, err := suiteService.GetDataWithFilter(c, userInfo)
 		if err != nil {
 			// 本地获取失败可以再尝试从haruki获取一次，因为可能本地数据有问题
@@ -140,7 +141,10 @@ func (*UserApi) GetSuiteUploadTime(c *gin.Context) {
 		return
 	}
 	idTime, localErr := suiteService.GetUploadTime(c, userInfo.Region, userInfo.UserId)
-	localUploadTime := idTime[userInfo.UserId]
+	localUploadTime, ok := idTime[userInfo.UserId]
+	if !ok {
+		localErr = fmt.Errorf("本地没有 %s 的 suite 数据", userInfo.UserId)
+	}
 	if localErr != nil {
 		global.LOG.Error("获取本地的 suite 上传时间失败", zap.Error(localErr))
 	}
@@ -155,7 +159,7 @@ func (*UserApi) GetSuiteUploadTime(c *gin.Context) {
 			"Haruki 工具箱": gameRes.UploadTime{UploadTime: harukiUploadTime, Error: harukiErr},
 		}, c)
 	// 如果haruki的数据较新，就去get一下
-	if harukiUploadTime != nil && !harukiUploadTime.IsZero() && (localUploadTime == nil || harukiUploadTime.After(*localUploadTime)) {
+	if harukiUploadTime != nil && *harukiUploadTime != 0 && (localUploadTime == nil || *harukiUploadTime > *localUploadTime) {
 
 		suite, err := harukiApiService.GetSuite(c, userInfo.Region, userInfo.UserId)
 		if err != nil {
@@ -236,12 +240,12 @@ func (*UserApi) GetMysekai(c *gin.Context) {
 		global.LOG.Error(fmt.Sprintf("从 Haruki 工具箱获取 %s 的 mysekai 上传时间失败", userInfo.UserId), zap.Error(harukiErr))
 		// 如果本地和Haruki都失败
 		if localErr != nil {
-			response.FailWithMessage("获取 Mysekai 数据失败："+harukiErr.Error(), c)
+			response.FailWithMessage("获取 Suite 数据失败："+resultError(harukiErr), c)
 			return
 		}
 	}
 	// 本地上传时间较新
-	if localUploadTime != nil && !localUploadTime.IsZero() && (harukiUploadTime == nil || localUploadTime.After(*harukiUploadTime)) {
+	if localUploadTime != nil && *localUploadTime != 0 && (harukiUploadTime == nil || *localUploadTime > *harukiUploadTime) {
 		mysekai, err := mysekaiService.GetDataWithFilter(c, userInfo)
 		if err != nil {
 			global.LOG.Error(fmt.Sprintf("获取 %s 本地的 mysekai 数据失败", userInfo.UserId), zap.Error(err))
@@ -273,7 +277,10 @@ func (*UserApi) GetMysekaiUploadTime(c *gin.Context) {
 		return
 	}
 	idTime, localErr := mysekaiService.GetUploadTime(c, userInfo.Region, userInfo.UserId)
-	localUploadTime := idTime[userInfo.UserId]
+	localUploadTime, ok := idTime[userInfo.UserId]
+	if !ok {
+		localErr = fmt.Errorf("本地没有 %s 的 suite 数据", userInfo.UserId)
+	}
 	if localErr != nil {
 		global.LOG.Error(fmt.Sprintf("获取 %s 本地的 mysekai 上传时间失败", userInfo.UserId), zap.Error(localErr))
 	}
@@ -287,7 +294,7 @@ func (*UserApi) GetMysekaiUploadTime(c *gin.Context) {
 			"Haruki 工具箱": gameRes.UploadTime{UploadTime: harukiUploadTime, Error: harukiErr},
 		}, c)
 	// 如果haruki的数据较新，将它保存在本地
-	if harukiUploadTime != nil && !harukiUploadTime.IsZero() && (localUploadTime == nil || harukiUploadTime.After(*localUploadTime)) {
+	if harukiUploadTime != nil && *harukiUploadTime != 0 && (localUploadTime == nil || *harukiUploadTime > *localUploadTime) {
 		_, err := getAndSaveMysekai(c, userInfo)
 		if err != nil {
 			global.LOG.Error(fmt.Sprintf("从 Haruki 工具箱获取 %s 的 mysekai 数据失败", userInfo.UserId), zap.Error(err))
@@ -328,13 +335,13 @@ func (*UserApi) MysekaiUploadTime(c *gin.Context) {
 	if localErr != nil {
 		global.LOG.Error("获取本地的 mysekai 上传时间失败", zap.Error(localErr))
 	}
-	result := make(map[json.Number]*time.Time, len(userIds))
+	result := make(map[json.Number]*int64, len(userIds))
 	for _, userId := range userIds {
 		userIdNumber := json.Number(userId)
 		harukiUploadTime := harukiUploadTimes[userId]
 		localUploadTime := localUploadTimes[userId]
 		// 保存其中较新的时间，同时如果haruki的时间较新，获取并保存到数据库
-		if harukiUploadTime != nil && !harukiUploadTime.IsZero() && (localUploadTime == nil || harukiUploadTime.After(*localUploadTime)) {
+		if harukiUploadTime != nil && *harukiUploadTime != 0 && (localUploadTime == nil || *harukiUploadTime > *localUploadTime) {
 			result[userIdNumber] = harukiUploadTime
 			// 开启一个goroutine去保存数据
 			go getAndSaveMysekai(c, request.User{

@@ -6,6 +6,7 @@ import (
 	"lunabot/xmlq/server/global"
 	"lunabot/xmlq/server/model/assets/request"
 	"lunabot/xmlq/server/model/common/response"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -23,15 +24,27 @@ type MasterdataApi struct{}
 func (*MasterdataApi) GetVersion(c *gin.Context) {
 	region, _ := c.GetQueryArray("region")
 	var Regions []string
-	if len(region) == 0 || (len(region) == 1 && region[0] == "all") {
+	for _, r := range region {
+		if r == "" {
+			continue
+		}
+		for Region := range strings.SplitSeq(r, ",") {
+			Region = strings.TrimSpace(Region)
+			if Region == "" {
+				continue
+			}
+			Regions = append(Regions, Region)
+		}
+	}
+	// 重新保存展开后的region参数
+	region = Regions
+	if len(Regions) == 0 || (len(Regions) == 1 && Regions[0] == "all") {
 		// 更新所有服务器的版本
+		Regions = make([]string, 0, len(global.CONFIG.Masterdata.Sources))
 		for Region := range global.CONFIG.Masterdata.Sources {
 			Regions = append(Regions, Region)
 		}
-	} else {
-		Regions = region
 	}
-
 	// 用context控制超时
 	ctx, cacel := context.WithTimeout(c, time.Duration(global.CONFIG.Masterdata.Timeout)*time.Second)
 	result, err := githubMasterdataService.GetVersions(ctx, Regions)

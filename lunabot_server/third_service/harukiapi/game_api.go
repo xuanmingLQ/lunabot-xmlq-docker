@@ -26,7 +26,7 @@ func (hrk *GameApiService) GetProfile(ctx context.Context, Region string, UserId
 		return nil, errors.New("没有配置haruki-sekai-api Profile")
 	}
 	if !slices.Contains(global.CONFIG.HarukiApi.PublicApi.AllowRegions, Region) {
-		return nil, fmt.Errorf("区域 %s 不在 Haruki Public Api 允许的区域中", Region)
+		return nil, fmt.Errorf("%s 不在 Haruki Public Api 允许的服务器中", Region)
 	}
 	Url := global.CONFIG.HarukiApi.PublicApi.Endpoint + strings.Replace(strings.Replace(global.CONFIG.HarukiApi.PublicApi.Profile, "{region}", Region, 1), "{user_id}", UserId, 1)
 	_, err = url.Parse(Url)
@@ -55,7 +55,7 @@ func (hrk *GameApiService) GetRanking(ctx context.Context, Region, EventId strin
 		return nil, errors.New("没有配置haruki-sekai-api Ranking")
 	}
 	if !slices.Contains(global.CONFIG.HarukiApi.PublicApi.AllowRegions, Region) {
-		return nil, fmt.Errorf("区域 %s 不在 Haruki Public Api 允许的区域中", Region)
+		return nil, fmt.Errorf("%s 不在 Haruki Public Api 允许的服务器中", Region)
 	}
 	rankingCache, ok := rankingCaches[Region]
 	now := time.Now()
@@ -98,7 +98,7 @@ func (hrk *GameApiService) GetRanking(ctx context.Context, Region, EventId strin
 }
 
 // 用于获取上传时间的工具函数
-func getUploadTimeInMap(data map[string]interface{}) (uploadTime *time.Time, err error) {
+func getUploadTimeInMap(data map[string]interface{}) (uploadTime *int64, err error) {
 	var resultUploadTime int64
 	upload_time := data["upload_time"]
 	if upload_time == nil {
@@ -117,11 +117,10 @@ func getUploadTimeInMap(data map[string]interface{}) (uploadTime *time.Time, err
 		err = fmt.Errorf("未知的数据类型: %v", uploadTimeType)
 		return
 	}
-	uploadTime = new(time.Time)
-	*uploadTime = time.Unix(resultUploadTime, 0)
+	uploadTime = &resultUploadTime
 	return
 }
-func (hrk *GameApiService) GetSuiteUploadTime(ctx context.Context, Region, UserId string) (uploadTime *time.Time, err error) {
+func (hrk *GameApiService) GetSuiteUploadTime(ctx context.Context, Region, UserId string) (uploadTime *int64, err error) {
 	if UserId == "" {
 		err = errors.New("user id 不可为空")
 		return
@@ -139,7 +138,7 @@ func (hrk *GameApiService) GetSuite(ctx context.Context, Region, UserId string, 
 		return nil, errors.New("没有配置haruki-sekai-api Suite")
 	}
 	if !slices.Contains(global.CONFIG.HarukiApi.SuiteApi.AllowRegions, Region) {
-		return nil, fmt.Errorf("区域 %s 不在 Haruki Suite Api 允许的区域中", Region)
+		return nil, fmt.Errorf("%s 不在 Haruki Suite Api 允许的服务器中", Region)
 	}
 	//使用默认的key
 	if len(filter) == 0 {
@@ -174,7 +173,7 @@ func (hrk *GameApiService) GetSuite(ctx context.Context, Region, UserId string, 
 }
 
 // 获取单个用户的上传时间
-func (hrk *GameApiService) GetMysekaiUploadTime(ctx context.Context, Region, UserId string) (uploadTime *time.Time, err error) {
+func (hrk *GameApiService) GetMysekaiUploadTime(ctx context.Context, Region, UserId string) (uploadTime *int64, err error) {
 	if UserId == "" {
 		err = errors.New("user id 不可为空")
 		return
@@ -187,12 +186,12 @@ func (hrk *GameApiService) GetMysekaiUploadTime(ctx context.Context, Region, Use
 }
 
 // 获取多个用户的上传时间
-func (hrk *GameApiService) GetMysekaiUploadTimeByIds(ctx context.Context, Region string, UserIds ...string) (result map[string]*time.Time, err error) {
+func (hrk *GameApiService) GetMysekaiUploadTimeByIds(ctx context.Context, Region string, UserIds ...string) (result map[string]*int64, err error) {
 	if len(UserIds) == 0 {
 		err = errors.New("user ids 不可为空")
 		return
 	}
-	result = make(map[string]*time.Time, len(UserIds))
+	result = make(map[string]*int64, len(UserIds))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	batchSize := make(chan struct{}, global.CONFIG.HarukiApi.BatchSize)
@@ -234,7 +233,7 @@ func (hrk *GameApiService) GetMysekai(ctx context.Context, Region, UserId string
 		return nil, errors.New("没有配置haruki-sekai-api Mysekai")
 	}
 	if !slices.Contains(global.CONFIG.HarukiApi.SuiteApi.AllowRegions, Region) {
-		return nil, fmt.Errorf("服务器 %s 不在 Haruki Suite Api 允许的区服中", Region)
+		return nil, fmt.Errorf("%s 不在 Haruki Suite Api 允许的服务器中", Region)
 	}
 	Url := global.CONFIG.HarukiApi.SuiteApi.Endpoint + strings.Replace(strings.Replace(global.CONFIG.HarukiApi.SuiteApi.Mysekai, "{region}", Region, 1), "{user_id}", UserId, 1)
 	URL, err := url.Parse(Url)
@@ -265,7 +264,7 @@ func (hrk *GameApiService) GetMysekai(ctx context.Context, Region, UserId string
 }
 func (hrk *GameApiService) GetMysekaiPhoto(ctx context.Context, Region, Param1, Param2 string) (v interface{}, err error) {
 	if !slices.Contains(global.CONFIG.HarukiApi.PublicApi.AllowRegions, Region) {
-		return nil, fmt.Errorf("区域 %s 不在 Haruki Public Api 允许的区域中", Region)
+		return nil, fmt.Errorf("%s 不在 Haruki Public Api 允许的服务器中", Region)
 	}
 	return nil, errors.New("暂不支持烤森图片")
 }

@@ -45,7 +45,7 @@ async def send_noti(state):
 
 
 # 存活检测
-@repeat_with_interval(CHECK_INTERVAL_CFG.get(), "存活检测", logger, start_offset=5, error_limit=999999)
+@repeat_with_interval(CHECK_INTERVAL_CFG.get(), "存活检测", logger, delay=5, error_limit=999999)
 async def alive_check():
     for self_id in config.get('bot_ids'):
         if int(self_id) not in bot_states:

@@ -21,10 +21,8 @@ from pathlib import Path
 from copy import deepcopy
 import traceback
 import orjson
-import yaml
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone
-from dataclasses import dataclass, field, asdict
 from tenacity import retry, stop_after_attempt, wait_fixed
 import asyncio
 import base64
@@ -34,9 +32,32 @@ import shutil
 import re
 import math
 import io
-import time
 import zstandard
 from .data import get_data_path
+from nonebot import get_driver
+
+
+# ============================ 启动/停止hook ============================ #
+
+_nonebot_driver = get_driver()
+
+def on_startup():
+    """
+    注册启动时执行的函数装饰器
+    """
+    def wrapper(func: Callable):
+        _nonebot_driver.on_startup(func)
+        return func
+    return wrapper
+
+def on_shutdown():
+    """
+    注册停止时执行的函数装饰器
+    """
+    def wrapper(func: Callable):
+        _nonebot_driver.on_shutdown(func)
+        return func
+    return wrapper
 
 # ============================ 基础 ============================ #
 
@@ -207,6 +228,21 @@ def remove_by_predicate(lst: List[Any], predicate: Callable):
     return [item for item in lst if not predicate(item)]
 
 
+# ============================ http session ============================ #
+
+_global_client_session: Optional[aiohttp.ClientSession] = None
+
+def get_client_session() -> aiohttp.ClientSession:
+    global _global_client_session
+    if _global_client_session is None or _global_client_session.closed:
+        _global_client_session = aiohttp.ClientSession()
+    return _global_client_session
+
+@on_shutdown()
+async def _close_session():
+    if _global_client_session is not None and not _global_client_session.closed:
+        await _global_client_session.close()
+
 
 # ============================ 异步和任务 ============================ #
 
@@ -220,6 +256,11 @@ from nonebot_plugin_apscheduler import scheduler
 
 from concurrent.futures import ThreadPoolExecutor
 _default_pool_executor = ThreadPoolExecutor(max_workers=global_config.get('default_thread_pool_size'))
+
+_pending_startup_tasks: List[Any] = []
+
+STARTUP_TASK_MIN_DELAY = global_config.get('startup_task_delay_seconds.min')
+STARTUP_TASK_MAX_DELAY = global_config.get('startup_task_delay_seconds.max')
 
 async def run_in_pool(func, *args, pool=None):
     if pool is None:
@@ -238,13 +279,15 @@ def start_repeat_with_interval(
     every_output=False, 
     error_output=True, 
     error_limit=5, 
-    start_offset=10
+    delay=None
 ):
     """
     开始重复执行某个异步任务
     """
-    @scheduler.scheduled_job("date", run_date=datetime.now() + timedelta(seconds=start_offset), misfire_grace_time=60)
-    async def _():
+    if delay is None:
+        delay = random.uniform(STARTUP_TASK_MIN_DELAY, STARTUP_TASK_MAX_DELAY)
+    async def task():
+        await asyncio.sleep(delay)
         try:
             error_count = 0
             logger.info(f'开始循环执行 {name} 任务', flush=True)
@@ -277,6 +320,7 @@ def start_repeat_with_interval(
 
         except Exception as e:
             logger.print_exc(f'循环执行 {name} 任务失败')
+    _pending_startup_tasks.append(task)
 
 def repeat_with_interval(
     interval_secs: int | ConfigItem, 
@@ -285,38 +329,37 @@ def repeat_with_interval(
     every_output=False, 
     error_output=True, 
     error_limit=5, 
-    start_offset=None
+    delay=None
 ):
     """
     重复执行某个任务的装饰器
     """
-    if start_offset is None:
-        start_offset = 5 + random.randint(0, 10)
     def wrapper(func):
-        start_repeat_with_interval(interval_secs, func, logger, name, every_output, error_output, error_limit, start_offset)
+        start_repeat_with_interval(interval_secs, func, logger, name, every_output, error_output, error_limit, delay)
         return func
     return wrapper
 
-def start_async_task(func: Callable, logger: 'Logger', name: str, start_offset=5):   
+def start_async_task(func: Callable, logger: 'Logger', name: str, delay=None):   
     """
     开始异步执行某个任务
     """
-    @scheduler.scheduled_job("date", run_date=datetime.now() + timedelta(seconds=start_offset), misfire_grace_time=60)
-    async def _():
+    if delay is None:
+        delay = random.uniform(STARTUP_TASK_MIN_DELAY, STARTUP_TASK_MAX_DELAY)
+    async def task():
+        await asyncio.sleep(delay)
         try:
             logger.info(f'开始异步执行 {name} 任务', flush=True)
             await func()
         except Exception as e:
             logger.print_exc(f'异步执行 {name} 任务失败')
+    _pending_startup_tasks.append(task)
 
-def async_task(name: str, logger: 'Logger', start_offset=None):
+def async_task(name: str, logger: 'Logger', delay=None):
     """
     异步执行某个任务的装饰器
     """
-    if start_offset is None:
-        start_offset = 5 + random.randint(0, 10)
     def wrapper(func):
-        start_async_task(func, logger, name, start_offset)
+        start_async_task(func, logger, name, delay)
         return func
     return wrapper  
 
@@ -328,6 +371,13 @@ async def batch_gather(*futs_or_coros, batch_size=32) -> List[Any]:
     for i in range(0, len(futs_or_coros), batch_size):
         results.extend(await asyncio.gather(*futs_or_coros[i:i + batch_size]))
     return results
+
+# 启动时_pending_start_tasks
+@scheduler.scheduled_job('date', run_date=datetime.now(), misfire_grace_time=60)
+async def _create_pending_startup_tasks():
+    for task in _pending_startup_tasks:
+        asyncio.create_task(task())
+    _pending_startup_tasks.clear()
 
 
 # ============================ 字符串 ============================ #
@@ -490,13 +540,14 @@ def get_float_str(value: float, precision: int = 2, remove_zero: bool = True) ->
 def get_date_str() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
+_global_zstd_cctx = zstandard.ZstdCompressor()
+_global_zstd_dctx = zstandard.ZstdDecompressor()
+
 def compress_zstd(b: bytes):
-    cctx = zstandard.ZstdCompressor()
-    return cctx.compress(b)
+    return _global_zstd_cctx.compress(b)
 
 def decompress_zstd(b: bytes):
-    dctx = zstandard.ZstdDecompressor()
-    return dctx.decompress(b, max_output_size=100*1024*1024)
+    return _global_zstd_dctx.decompress(b, max_output_size=100*1024*1024)
 
 
 # ============================ 文件 ============================ #
@@ -584,12 +635,11 @@ async def download_file(url, file_path):
     """
     下载文件到指定路径
     """
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, verify_ssl=False) as resp:
-            if resp.status != 200:
-                raise Exception(f"下载文件 {truncate(url, 32)} 失败: {resp.status} {resp.reason}")
-            with open(file_path, 'wb') as f:
-                f.write(await resp.read())
+    async with get_client_session().get(url, verify_ssl=False) as resp:
+        if resp.status != 200:
+            raise Exception(f"下载文件 {truncate(url, 32)} 失败: {resp.status} {resp.reason}")
+        with open(file_path, 'wb') as f:
+            f.write(await resp.read())
 
 class TempDownloadFilePath(TempFilePath):
     def __init__(self, url, ext: str = None, remove_after: timedelta = None):
@@ -628,30 +678,28 @@ async def download_json(url: str) -> dict:
     """
     异步下载json文件
     """
-    async with aiohttp.ClientSession() as session:
-        headers = {
-            'Accept-Language': 'en',
-        }
-        async with session.get(url, headers=headers, verify_ssl=False) as resp:
-            if resp.status != 200:
-                try:
-                    detail = await resp.text()
-                    detail = loads_json(detail)['detail']
-                except:
-                    pass
-                utils_logger.error(f"下载 {url} 失败: {resp.status} {detail}")
-                raise HttpError(resp.status, detail)
-            if "text/plain" in resp.content_type:
-                return loads_json(await resp.text())
-            if "application/octet-stream" in resp.content_type:
-                import io
-                return loads_json(io.BytesIO(await resp.read()).read())
-            return await resp.json()
+    headers = {
+        'Accept-Language': 'en',
+    }
+    async with get_client_session().get(url, headers=headers, verify_ssl=False) as resp:
+        if resp.status != 200:
+            try:
+                detail = await resp.text()
+                detail = loads_json(detail)['detail']
+            except:
+                pass
+            utils_logger.error(f"下载 {url} 失败: {resp.status} {detail}")
+            raise HttpError(resp.status, detail)
+        if "text/plain" in resp.content_type:
+            return loads_json(await resp.text())
+        if "application/octet-stream" in resp.content_type:
+            import io
+            return loads_json(io.BytesIO(await resp.read()).read())
+        return await resp.json()
 
 def load_json_zstd(file_path: str) -> dict:
     with open(file_path, 'rb') as file:
-        dctx = zstandard.ZstdDecompressor()
-        data = dctx.decompress(file.read())
+        data = _global_zstd_dctx.decompress(file.read())
         return orjson.loads(data)
 
 def dump_json_zstd(data: dict, file_path: str) -> None:
@@ -659,8 +707,7 @@ def dump_json_zstd(data: dict, file_path: str) -> None:
     tmp_path = file_path + ".tmp"
     with open(tmp_path, 'wb') as file:
         buffer = orjson.dumps(data)
-        cctx = zstandard.ZstdCompressor()
-        compressed = cctx.compress(buffer)
+        compressed = _global_zstd_cctx.compress(buffer)
         file.write(compressed)
     os.replace(tmp_path, file_path)
     try: os.remove(tmp_path)
@@ -1003,13 +1050,12 @@ async def download_image(image_url, force_http=True) -> Image.Image:
     """
     if force_http and image_url.startswith("https"):
         image_url = image_url.replace("https", "http")
-    async with aiohttp.ClientSession() as session:
-        async with session.get(image_url, verify_ssl=False) as resp:
-            if resp.status != 200:
-                utils_logger.error(f"下载图片 {image_url} 失败: {resp.status} {resp.reason}")
-                raise HttpError(resp.status, f"下载图片 {image_url} 失败")
-            image = await resp.read()
-            return Image.open(io.BytesIO(image))
+    async with get_client_session().get(image_url, verify_ssl=False) as resp:
+        if resp.status != 200:
+            utils_logger.error(f"下载图片 {image_url} 失败: {resp.status} {resp.reason}")
+            raise HttpError(resp.status, f"下载图片 {image_url} 失败")
+        image = await resp.read()
+        return Image.open(io.BytesIO(image))
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(1), reraise=True)
 async def download_and_convert_svg(svg_url: str) -> Image.Image:
@@ -1223,7 +1269,15 @@ def limit_image_by_pixels(image: Image.Image | list[Image.Image], max_pixels: in
 
 
 # ============================= 其他 ============================ #
-    
+
+start_async_task(Config.start_config_watcher, utils_logger, '配置文件修改监听')
+
+@on_shutdown()
+def _shutdown_process_pools():
+    from .process_pool import ProcessPool
+    ProcessPool.shutdown_all()
+
+
 class SubHelper:
     def __init__(self, name: str, db: FileDB, logger: Logger, key_fn=None, val_fn=None):
         self.name = name
@@ -1263,7 +1317,6 @@ class SubHelper:
     def clear(self):
         self.db.delete(self.key)
         self.logger.log(f'{self.name}清空订阅')
-
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(1), reraise=True)
 async def asend_mail(
@@ -1363,7 +1416,7 @@ async def _():
 
 
 if _profile_at_startup:
-    @async_task("结束启动时性能分析", utils_logger, start_offset=_profile_at_startup_seconds)
+    @async_task("结束启动时性能分析", utils_logger, delay=_profile_at_startup_seconds)
     async def _stop_startup_profile():
         if not yappi.is_running():
             return

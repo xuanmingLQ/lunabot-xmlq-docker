@@ -1,3 +1,4 @@
+# 用于Lunabot附属服务的通用Utils
 import os
 import os.path as osp
 from os.path import join as pjoin
@@ -9,14 +10,16 @@ from copy import deepcopy
 import asyncio
 import traceback
 import orjson
+
 try:
     import uvloop
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 except ImportError:
     pass
 
-CONFIG_DIR = "/app/lunabot_autochat/config/"
-CONFIG_NAME = "autochat"
+CONFIG_DIR = "/app/lunabot_event_tracker/config"
+CONFIG_NAME = "event_tracker"
+
 
 # ========================== Utils ========================== #
 
@@ -435,11 +438,18 @@ if CONFIG_NAME:
 
 # ========================== Log ========================== #
 
+_log_level = config.get("log_level")
 LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
 
+def set_log_level(level: str):
+    global _log_level
+    if level not in LOG_LEVELS:
+        raise ValueError(f'日志等级必须是 {LOG_LEVELS} 之一，当前: {level}')
+    _log_level = level
+
 def log(level: str, *args, **kwargs):
-    log_level = config.get('log_level').upper()
-    if LOG_LEVELS.index(log_level) > LOG_LEVELS.index(level):
+    global _log_level
+    if LOG_LEVELS.index(_log_level) > LOG_LEVELS.index(level):
         return
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     print(f'[{timestamp}][{level}]', *args, **kwargs, flush=True)
@@ -514,92 +524,15 @@ def get_file_db(path: str) -> FileDB:
         _file_dbs[path] = FileDB(path)
     return _file_dbs[path]
 
+# ========================== Service Name ========================== #
 
-# ========================== Rpc ========================== #
-
-NEED_RPC = config.get("rpc.enable")
-
-if NEED_RPC:
-    import websockets
-    import aiorpcx
-
-    class RpcNotConnectedError(Exception):
-        pass
-
-    class RpcSession:
-        def __init__(
-            self, 
-            host: str | ConfigItem, 
-            port: int | ConfigItem, 
-            token: str | ConfigItem,
-            reconnect_interval: int | ConfigItem,
-        ):
-            self.host = host
-            self.port = port
-            self.token = token
-            self.reconnect_interval = reconnect_interval
-            self.session = None
-            self.ws_client = None
-        
-        def is_connected(self):
-            return self.session is not None
-
-        async def connect(self):
-            host = get_cfg_or_value(self.host)
-            port = get_cfg_or_value(self.port)
-            ws = aiorpcx.connect_ws(f'ws://{host}:{port}')
-            self.session: aiorpcx.RPCSession = await ws.__aenter__()
-            self.session.sent_request_timeout = 10000
-            self.ws_client = ws
-            info(f"成功连接到RPC服务器 {host}:{port}")
-        
-        async def close(self):
-            if self.session:
-                await self.ws_client.__aexit__(None, None, None)
-                self.session = None
-                self.ws_client = None
-                info("RPC连接已关闭")
-        
-        async def call(
-            self, 
-            method: str, 
-            *args,
-            timeout: int = config.get('rpc.default_timeout'),
-        ):
-            if not self.is_connected():
-                raise RpcNotConnectedError()
-            args_with_token = [get_cfg_or_value(self.token)] + list(args)
-            try:
-                debug(f"发送RPC请求: {method} {args}")
-                return await asyncio.wait_for(self.session.send_request(method, args_with_token), get_cfg_or_value(timeout))
-            except websockets.exceptions.ConnectionClosed as e:
-                debug(f"RPC连接已关闭: {method} {args} -> {get_exc_desc(e)}")
-                self.session = None
-                raise Exception("RPC连接已关闭")
-            except aiorpcx.RPCError as e:
-                debug(f"RPC请求错误: {method} {args} -> {get_exc_desc(e)}")
-                raise e
-
-        async def run(self, reconnect: bool):
-            while True:
-                reconn_interval = get_cfg_or_value(self.reconnect_interval)
-                try:
-                    if not self.is_connected():
-                        await self.connect()
-                        if not reconnect:
-                            break
-                except Exception as e:
-                    warning(f"连接RPC服务器失败: {get_exc_desc(e)}，{reconn_interval}秒后重试")
-                finally:
-                    await asyncio.sleep(reconn_interval)
-
-# ========================== Proctitle ========================== #
 SERVICE_NAME = config.get("service_name")
 if SERVICE_NAME:
     import setproctitle
     setproctitle.setproctitle(SERVICE_NAME)
 
 # ========================== Data Path ========================== #
+
 DATA_DIR = config.get("data_dir")
 def get_data_path(path:str)->str:
     return pjoin(DATA_DIR, path)
