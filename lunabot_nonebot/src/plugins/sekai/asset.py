@@ -548,7 +548,7 @@ MasterDataManager.set_index_keys("levels", ['id', 'levelType'])
 
 # ================================ MasterData自定义下载 ================================ #
 
-COMPACT_DATA_REGIONS = [ 'cn']
+COMPACT_DATA_REGIONS = [ region.id for region in REGIONS if region.compact_data ]
 
 def convert_compact_data(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     enums = data.get('__ENUM__', {})

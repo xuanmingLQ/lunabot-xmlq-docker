@@ -11,7 +11,7 @@ from .sk_sql import (
     query_ranks_with_interval,
 )
 import pandas as pd
-import sys
+import sys, time
 
 from .snowy import get_sekairanking_latest_event_id, get_sekairanking_predictions, get_sekairanking_history
 

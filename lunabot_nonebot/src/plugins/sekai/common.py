@@ -1,5 +1,6 @@
 from src.utils import *
 from os.path import join as pjoin
+from .regions import REGIONS
 
 # ======================= 基础路径 ======================= #
 
@@ -28,18 +29,14 @@ class CharacterNicknameData:
 
 _character_nickname_data = CharacterNicknameData()
 
-ALL_SERVER_REGIONS = ['jp',  'cn']
-ALL_SERVER_REGION_NAMES = ['日服', '国服']
-NEED_TRANSLATE_REGIONS = ['jp']
-TRANSLATED_REGIONS = ['cn']
+LOCAL_UTC_OFFSET_CFG = config.item("local_utc_offset")
 
-REGION_UTC_OFFSET = {
-    'jp': 9,
-    'en': -7,
-    'cn': 8,
-    'tw': 8,
-    'kr': 9,
-}
+ALL_SERVER_REGIONS = [region.id for region in REGIONS]
+ALL_SERVER_REGION_NAMES = {region.id: region.name for region in REGIONS}
+NEED_TRANSLATE_REGIONS = [region.id for region in REGIONS if region.need_translate]
+TRANSLATED_REGIONS = [region.id for region in REGIONS if region.translated]
+
+REGION_UTC_OFFSET = { region.id: region.utc_offset for region in REGIONS }
 
 UNITS = [
     "light_sound",
@@ -212,9 +209,9 @@ def get_character_nickname_data() -> CharacterNicknameData:
 def get_character_first_nickname(cid: int) -> Optional[str]:
     return get_character_nickname_data().first_nicknames.get(cid, None)
 
-# 通过区服名获取区服ID
+# 通过区服ID获取区服名称
 def get_region_name(region: str):
-    return ALL_SERVER_REGION_NAMES[ALL_SERVER_REGIONS.index(region)]
+    return ALL_SERVER_REGION_NAMES[region]
 
 # 通过角色ID获取角色昵称，不存在则返回空列表
 def get_nicknames_by_chara_id(cid: int) -> List[str]:

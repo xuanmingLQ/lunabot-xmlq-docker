@@ -28,8 +28,8 @@ from src.api.game.user import get_mysekai,get_mysekai_photo,get_mysekai_upload_t
 from src.api.subscribe.pjsk import set_msr_sub
 from ...imgtool import shrink_image
 
-MYSEKAI_REGIONS = ['jp',  'cn']
-BD_MYSEKAI_REGIONS = ['cn',]
+MYSEKAI_REGIONS = [region.id for region in REGIONS if region.mysekai]
+BD_MYSEKAI_REGIONS = [region.id for region in REGIONS if region.bd_mysekai]
 
 bd_msr_sub = SekaiGroupSubHelper("msr", "msr指令权限", BD_MYSEKAI_REGIONS)
 msr_sub = SekaiUserSubHelper("msr", "烤森资源查询自动推送", MYSEKAI_REGIONS, only_one_group=True, hide=True)
