@@ -1504,7 +1504,7 @@ class GroupWhiteList:
             db.set(self.white_list_name, white_list)
             if self.on_func is not None: 
                 await self.on_func(ctx.group_id)
-            return await ctx.asend_reply_msg(f'{group_desc}的{name}已开启')
+            return await ctx.asend_reply_msg(f'成功开启{group_desc}的{name}')
         
         # 关闭命令
         switch_off = CmdHandler([f'/{name} off'], utils_logger, help_command='/{服务名} off')
@@ -1519,7 +1519,7 @@ class GroupWhiteList:
             db.set(self.white_list_name, white_list)
             if self.off_func is not None:  
                 await self.off_func(ctx.group_id)
-            return await ctx.asend_reply_msg(f'{group_desc}的{name}已关闭')
+            return await ctx.asend_reply_msg(f'成功关闭{group_desc}的{name}')
             
         # 查询命令
         switch_query = CmdHandler([f'/{name} status'], utils_logger, help_command='/{服务名} status')
@@ -1624,7 +1624,7 @@ class GroupBlackList:
             group_id, group_desc = await get_group_id_desc(ctx)
             black_list = db.get(self.black_list_name, [])
             if group_id in black_list:
-                return await ctx.asend_reply_msg(f'{group_desc}的{name}已经是关闭状态')
+                return await ctx.asend_reply_msg(f'成功关闭{group_desc}的{name}')
             black_list.append(group_id)
             db.set(self.black_list_name, black_list)
             if self.off_func is not None: 
@@ -1639,7 +1639,7 @@ class GroupBlackList:
             group_id, group_desc = await get_group_id_desc(ctx)
             black_list = db.get(self.black_list_name, [])
             if group_id not in black_list:
-                return await ctx.asend_reply_msg(f'{group_desc}的{name}已经是开启状态')
+                return await ctx.asend_reply_msg(f'成功开启{group_desc}的{name}')
             black_list.remove(group_id)
             db.set(self.black_list_name, black_list)
             if self.on_func is not None: 

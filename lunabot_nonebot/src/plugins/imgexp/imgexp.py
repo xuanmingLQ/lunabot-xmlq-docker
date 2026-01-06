@@ -26,7 +26,7 @@ async def download_batch_thumbnails(urls: list[str]) -> list[Image.Image]:
     async def download_nothrow(url):
         if not url: return None
         try:
-            return await download_image(url, force_http=False)
+            return await download_image(url)
         except Exception as e:
             logger.warning(f'下载缩略图 {url} 失败: {e}')
             return None
@@ -87,7 +87,7 @@ async def search_googlelens(
             if response.status != 200:
                 raise Exception(f"HTTP {response.status} {response.reason}: {await response.text()}")
             
-            results = (await response.json())['visual_matches']
+            results = (await response.json()).get('visual_matches', [])
             results = [item for item in results if item.get('title') and item.get('link')][:limit]
 
             source_icon_urls = [item.get('source_icon') for item in results]
@@ -113,7 +113,12 @@ async def search_googlelens(
 
 async def search_image(
     img_url: str,
+    img_size: int,
 ) -> Tuple[Image.Image, List[ImageSearchResult]]:
+    SIZE_LIMIT_MB = 15
+    if img_size > SIZE_LIMIT_MB * 1024 * 1024:
+        raise ReplyException(f"图片大小超过{SIZE_LIMIT_MB}MB，请先缩小后再进行搜索")
+
     saucenao_result = await search_saucenao(img_url)
     if saucenao_result.results and saucenao_result.results[0].similarity >= 90:
         logger.info(f"从SauceNAO搜索到高相似度图片，跳过GoogleLens搜索")

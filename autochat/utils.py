@@ -55,24 +55,43 @@ class Counter:
     def keys(self):
         return self.count.keys()
 
-def find_by(lst: list[dict[str, Any]], key: str, value: Any, mode="first", convert_to_str=True):
+def find_by(lst: list[dict[str, Any]], key: str, value: Any, mode="first", use_str_compare=False):
     """
     用某个key查找某个dict列表中的元素 mode=first/last/all
     查找单个时找不到返回None, 查找多个时找不到返回空列表
     """
-    if mode not in ["first", "last", "all"]:
-        raise Exception("find_by mode must be first/last/all")
-    if convert_to_str:
-        ret = [item for item in lst if key in item and str(item[key]) == str(value)]
-    else:
-        ret = [item for item in lst if key in item and item[key] == value]
-    if not ret: 
-        return None if mode != "all" else []
+    # 检查是否出现类型不匹配
+    if lst and key in lst[0]:
+        if type(lst[0][key]) != type(value):
+            warning(f"find_by 发现类型不匹配:\n{traceback.format_stack()}")
+
     if mode == "first":
-        return ret[0]
-    if mode == "last":
-        return ret[-1]
-    return ret
+        for item in lst:
+            if key in item:
+                if use_str_compare:
+                    if str(item[key]) == str(value):
+                        return item
+                else:
+                    if item[key] == value:
+                        return item
+        return None
+    elif mode == "last":
+        for item in reversed(lst):
+            if key in item:
+                if use_str_compare:
+                    if str(item[key]) == str(value):
+                        return item
+                else:
+                    if item[key] == value:
+                        return item
+        return None
+    elif mode == "all":
+        if use_str_compare:
+            return [item for item in lst if key in item and str(item[key]) == str(value)]
+        else:
+            return [item for item in lst if key in item and item[key] == value]
+    else:
+        raise Exception("find_by mode must be first/last/all")
 
 def unique_by(lst: list[dict[str, Any]], key: str):
     """

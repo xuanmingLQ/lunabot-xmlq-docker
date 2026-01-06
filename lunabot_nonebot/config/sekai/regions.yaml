@@ -1,6 +1,7 @@
 - id: "cn"
   name: "国服"
-  utf_offset: 8
+  utc_offset: 8
+  enable: true
   translated: true
   compact_data: true
   mysekai: true
@@ -9,6 +10,7 @@
 - id: "jp"
   name: "日服"
   utc_offset: 9
+  enable: true
   need_translate: true
   fifth_anniversary: true
   mysekai: true

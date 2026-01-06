@@ -4,9 +4,8 @@ from os.path import join as pjoin
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Union, Callable, List
 import yaml
-from .env import CONFIG_DIR
-import inspect
-from watchfiles import awatch
+from .env import CONFIG_DIR, CONFIG_UPDATE_CHECK_INTERVAL
+import inspect, time
 
 
 @dataclass
@@ -39,6 +38,7 @@ class _GlobalConfigState:
                 with open(path, 'r', encoding='utf-8') as f:
                     data = yaml.safe_load(f) or {}
                 cls._cache[name] = ConfigData(mtime=mtime, path=path, data=data)
+                cls.trigger_callbacks(name)
                 return True
         except Exception as e:
             print(f"读取配置文件 {path} 失败: {e}")
@@ -46,21 +46,20 @@ class _GlobalConfigState:
 
     @classmethod
     def register_callback(cls, name: str, func: Callable):
+        if inspect.iscoroutinefunction(func):
+            raise RuntimeError("不支持注册异步回调函数")
         if name not in cls._callbacks:
             cls._callbacks[name] = []
         cls._callbacks[name].append(func)
 
     @classmethod
     async def trigger_callbacks(cls, name: str):
-        """触发回调，支持同步和异步函数"""
+        """触发回调，支持同步函数"""
         if name in cls._callbacks:
             current_data = cls.get_data(name)
             for func in cls._callbacks[name]:
                 try:
-                    if inspect.iscoroutinefunction(func):
-                        await func(current_data)
-                    else:
-                        func(current_data)
+                    func(current_data)
                 except Exception as e:
                     print(f"执行配置 {name} 的更新回调 {func.__name__} 失败: {e}")
 
@@ -85,19 +84,29 @@ class Config:
         """
         self.name = name
         self.path = pjoin(CONFIG_DIR, name.replace('.', '/') + '.yaml')
+        self._last_check_time = 0.0
+        self._check_interval = CONFIG_UPDATE_CHECK_INTERVAL
         if self.name not in _GlobalConfigState._cache:
             _GlobalConfigState.update_cache(self.name, self.path, force_load=True)
+
+    def _ensure_updated(self):
+        current_time = time.time()
+        if current_time - self._last_check_time > self._check_interval:
+            self._last_check_time = current_time
+            _GlobalConfigState.update_cache(self.name, self.path)
 
     def get_all(self) -> dict:
         """
         获取配置项的所有数据
         """
+        self._ensure_updated()
         return _GlobalConfigState.get_data(self.name)
 
     def get(self, key: str, default=None, raise_exc: Optional[bool]=None) -> Any:
         """
         获取配置项的值
         """
+        self._ensure_updated()
         if raise_exc is None:
             raise_exc = default is None
         
@@ -118,40 +127,11 @@ class Config:
         return ret
     
     def mtime(self) -> int:
+        self._ensure_updated()
         return _GlobalConfigState._cache.get(self.name, ConfigData()).mtime
     
     def item(self, key: str) -> ConfigItem:
         return ConfigItem(self, key)
-
-    def on_update(self, func: Callable):
-        """
-        装饰器：当该配置文件更新时触发
-        回调函数接收一个参数：新的配置字典 data
-        """
-        _GlobalConfigState.register_callback(self.name, func)
-        return func
-    
-    @staticmethod
-    async def start_config_watcher():
-        """
-        后台任务：监听配置文件变化并自动更新内存缓存
-        """
-        if not os.path.exists(CONFIG_DIR):
-            os.makedirs(CONFIG_DIR, exist_ok=True)
-        async for changes in awatch(CONFIG_DIR):
-            updated_configs = set()
-            for change_type, path in changes:
-                if not (path.endswith('.yaml') or path.endswith('.yml')):
-                    continue
-                try:
-                    rel_path = os.path.relpath(path, start=CONFIG_DIR)
-                    name = os.path.splitext(rel_path)[0].replace(os.sep, '.')
-                    if _GlobalConfigState.update_cache(name, path):
-                        updated_configs.add(name)
-                except Exception as e:
-                    print(f"处理配置文件变化 {path} 失败: {e}")
-            for name in updated_configs:
-                await _GlobalConfigState.trigger_callbacks(name)
     
 
 def get_cfg_or_value(obj: Union[ConfigItem, Any], default=None, raise_exc: Optional[bool]=None) -> Any:

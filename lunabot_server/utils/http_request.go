@@ -78,8 +78,10 @@ func HttpRequest(
 			Url:    Req.URL.String(),
 		}
 		body, _ := io.ReadAll(resp.Body)
-		// json格式，全部保存
-		if body[0] == '{' {
+		if len(body) == 0 {
+			return nil, &httpError
+		} else if body[0] == '{' {
+			// json格式，全部保存
 			httpError.Detail = string(body)
 		} else {
 			// 其它类型，保存前100字符

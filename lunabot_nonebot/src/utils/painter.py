@@ -21,6 +21,7 @@ import pickle
 import glob
 import io
 import colour
+import struct
 
 from .config import *
 from .img_utils import adjust_image_alpha_inplace
@@ -39,114 +40,214 @@ def get_memo_usage():
         return mem_info.rss / (1024 * 1024)  # 返回单位为MB
     return 0
 
-def deterministic_hash(obj: Any) -> str:
+def deterministic_hash(obj: Any, raise_error: bool = False) -> str:
     """
-    计算复杂对象的确定性哈希值
+    计算复杂对象的确定性哈希值。
+    
+    Args:
+        obj: 待哈希的对象
+        raise_error: 遇到无法处理的类型时是否抛出异常。如果为 False，则哈希其类型名称。
     """
-    ret = hashlib.md5()
-    def update(s: Union[str, bytes]):
-        if isinstance(s, str):
-            s = s.encode('utf-8')
-        ret.update(s)
+    hasher = hashlib.md5()
+    # 用于检测循环引用：id(obj) -> recursion_depth
+    seen = set()
+    
+    # 预编译 struct 格式，提高性能
+    # 对应: bool(?), float(d), int-length(Q), array-shape(Q)
+    STRUCT_BOOL = struct.Struct('?') 
+    STRUCT_FLOAT = struct.Struct('>d') # Big-endian float
+    STRUCT_Q = struct.Struct('>Q')     # Big-endian unsigned long long (8 bytes)
 
-    def _serialize(obj: Any): 
-        # 基本类型
-        if obj is None:
-            update(b"None")
-        elif isinstance(obj, bool):
-            update(str(obj))
-        elif isinstance(obj, int):
-            update(str(obj))
-        elif isinstance(obj, float):
-            update(str(obj))
-        elif isinstance(obj, str):
-            update(str(obj))
-        elif isinstance(obj, bytes):
-            update(obj)
-        
-        # 容器类型
-        elif isinstance(obj, (list, tuple)):
-            for item in obj:
-                _serialize(item)
-        
-        elif isinstance(obj, dict):
-            # 字典按键排序确保一致性
-            for key, value in sorted(obj.items()):
-                _serialize(key)
-                _serialize(value)
-        
-        elif isinstance(obj, set):
-            # 集合元素排序确保一致性
-            for item in sorted(obj):
-                _serialize(item)
-        
-        elif isinstance(obj, frozenset):
-            for item in sorted(obj):
-                _serialize(item)
-        
-        # PIL Image
-        elif isinstance(obj, Image.Image):
-            _serialize_pil_image(obj)
-        
-        # NumPy数组
-        elif hasattr(obj, '__array__') and hasattr(obj, 'dtype'):
-            _serialize_numpy_array(obj)
-        
-        # Dataclass
-        elif is_dataclass(obj) and not isinstance(obj, type):
-            _serialize_dataclass(obj)
-        
-        # 有__dict__属性的自定义对象
-        elif hasattr(obj, '__dict__'):
-            class_name = f"{obj.__class__.__module__}.{obj.__class__.__name__}"
-            dict_data = {k: v for k, v in obj.__dict__.items() if not k.startswith('_')}
-            update(f"object:{class_name}:")
-            _serialize(dict_data)
-        
-        # 其他可迭代对象
-        elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes)):
-            update(f"iterable:{type(obj).__name__}:")
-            for item in obj:
-                _serialize(item)
+    def _update_bytes(b: bytes):
+        hasher.update(b)
 
-        else:
-            # 其他类型的对象
-            try:
-                class_name = f"{obj.__class__.__module__}.{obj.__class__.__name__}"
-                update(f"{class_name}:")
-                attrs = dir(obj)
-                for attr in attrs:
-                    if not attr.startswith('_'):
-                        value = getattr(obj, attr)
-                        _serialize(value)
-            except:
-                return f"fallback:{type(obj).__name__}:{id(obj)}"
-    
-    def _serialize_pil_image(img: Image.Image):
-        """序列化PIL Image"""
-        update(f"{img.size[0]}x{img.size[1]}:{img.mode}:")
-        update(img.tobytes())
-    
-    def _serialize_numpy_array(arr):
-        """序列化NumPy数组"""
-        arr_bytes = arr.tobytes()
-        arr_shape = arr.shape
-        arr_dtype = arr.dtype.str
-        update(f"{arr_shape}:{arr_dtype}:")
-        update(arr_bytes)
-    
-    def _serialize_dataclass(obj):
-        """序列化dataclass对象"""
-        class_name = f"{obj.__class__.__module__}.{obj.__class__.__name__}"
-        update(f"{class_name}:")
-        # 获取所有字段
-        for field in fields(obj):
-            field_value = getattr(obj, field.name)
-            update(f"{field.name}:")
-            _serialize(field_value)
-    
+    def _update_str(s: str):
+        b = s.encode('utf-8')
+        # 写入长度前缀，防止边界模糊： "a", "b" -> 1a1b; "ab" -> 2ab
+        _update_bytes(STRUCT_Q.pack(len(b)))
+        _update_bytes(b)
+
+    def _serialize(o: Any):
+        # 1. 处理循环引用
+        oid = id(o)
+        if oid in seen:
+            # 遇到循环引用，记录标记并返回
+            _update_bytes(b'<RECURSION>')
+            return
+        
+        # 只有容器和自定义对象才需要加入 seen，基本类型不需要（也不应该，因为 id 复用）
+        is_container = isinstance(o, (dict, list, tuple, set, frozenset)) or hasattr(o, '__dict__') or hasattr(o, '__slots__')
+        if is_container:
+            seen.add(oid)
+
+        try:
+            # 2. 类型分发
+            # 每个类型写入一个唯一的 Type Tag 前缀，防止类型混淆 (例如 "123" 和 123)
+            
+            if o is None:
+                _update_bytes(b'N') # Null
+
+            elif isinstance(o, bool):
+                _update_bytes(b'B') # Bool
+                _update_bytes(STRUCT_BOOL.pack(o))
+
+            elif isinstance(o, int):
+                _update_bytes(b'I')
+                try:
+                    # 尝试作为 8 字节长整型处理 (覆盖绝大多数业务场景)
+                    _update_bytes(STRUCT_Q.pack(o) if o >= 0 else struct.pack('>q', o))
+                except struct.error:
+                    # 只有超大整数才走慢速通道
+                    _update_bytes(hex(o).encode('ascii'))
+
+            elif isinstance(o, float):
+                _update_bytes(b'F') # Float
+                # 使用 struct 保证二进制一致性 (注意：NaN != NaN 需要特殊处理)
+                if np.isnan(o):
+                    _update_bytes(b'nan')
+                else:
+                    _update_bytes(STRUCT_FLOAT.pack(o))
+
+            elif isinstance(o, str):
+                _update_bytes(b'S') # String
+                _update_str(o)
+
+            elif isinstance(o, (bytes, bytearray)):
+                _update_bytes(b'Y') # Bytes
+                _update_bytes(STRUCT_Q.pack(len(o)))
+                _update_bytes(o)
+
+            elif isinstance(o, (list, tuple)):
+                _update_bytes(b'L' if isinstance(o, list) else b'T')
+                _update_bytes(STRUCT_Q.pack(len(o)))
+                for item in o:
+                    _serialize(item)
+
+            elif isinstance(o, dict):
+                _update_bytes(b'D')
+                _update_bytes(STRUCT_Q.pack(len(o)))
+                # 键排序：将键转为字符串或哈希值进行排序，确保确定性
+                # 这里为了稳健，先计算 Key 的临时哈希，按 Key 哈希排序
+                # 这样即使 Key 是对象也能处理
+                
+                # 提取 (key_hash, key, value)
+                kvs = []
+                for k, v in o.items():
+                    # 递归调用自身计算 key 的哈希可能会很慢，
+                    # 简单场景可以直接 sort keys，复杂场景建议如下：
+                    try:
+                        k_repr = k if isinstance(k, (str, int, float, bool)) else str(k)
+                        kvs.append((k_repr, k, v))
+                    except:
+                        # 极端情况 Key 无法转 str
+                        kvs.append((id(k), k, v))
+                
+                # 按中间表示排序
+                kvs.sort(key=lambda x: x[0])
+                
+                for _, k, v in kvs:
+                    _serialize(k)
+                    _serialize(v)
+
+            elif isinstance(o, (set, frozenset)):
+                _update_bytes(b'E') # Set
+                _update_bytes(STRUCT_Q.pack(len(o)))
+                # 集合是无序的，为了确定性，必须排序。
+                # 无法直接对对象排序，先将所有元素序列化为 bytes 列表
+                temp_hashes = []
+                for item in o:
+                    # 创建子 hasher 来获取每个元素的哈希
+                    sub_hasher = hashlib.md5()
+                    # 注意：这里需要传递 seen，防止集合内的循环引用
+                    # 但为了简单，这里假设集合元素相对独立，或者在下一层处理
+                    # 更好的方式是重构架构，这里简化处理：
+                    try:
+                        # 简单类型直接转 string 排序
+                        if isinstance(item, (int, str, float, bool)):
+                            temp_hashes.append((str(item).encode(), item))
+                        else:
+                            # 复杂类型，递归计算哈希值作为排序依据
+                            sub_ret = deterministic_hash(item) # 可能会有性能损耗
+                            temp_hashes.append((sub_ret.encode(), item))
+                    except Exception:
+                        pass # 忽略无法处理的项
+                
+                # 按 bytes 排序
+                temp_hashes.sort(key=lambda x: x[0])
+                for _, item in temp_hashes:
+                    _serialize(item)
+
+            elif isinstance(o, Image.Image):
+                _update_bytes(b'P') # PIL
+                # 包含尺寸、模式、数据
+                _update_str(f"{o.size}:{o.mode}")
+                # 使用 tobytes() 获取像素数据
+                _update_bytes(STRUCT_Q.pack(len(o.tobytes())))
+                _update_bytes(o.tobytes())
+
+            elif hasattr(o, '__array__') and hasattr(o, 'dtype'):
+                # Numpy Array
+                _update_bytes(b'A') 
+                # 必须包含 shape 和 dtype
+                _update_str(str(o.shape))
+                _update_str(str(o.dtype))
+                
+                # 如果数组太大，tobytes() 会很慢且耗内存。
+                # 对于超大数组，建议只哈希其视图或采样，这里坚持确定性全量哈希
+                # 使用 memoryview 避免复制
+                if o.flags['C_CONTIGUOUS']:
+                    _update_bytes(o.data)
+                else:
+                    _update_bytes(np.ascontiguousarray(o).data)
+
+            elif is_dataclass(o) and not isinstance(o, type):
+                _update_bytes(b'C') # Dataclass
+                _update_str(o.__class__.__name__)
+                for field in fields(o):
+                    _serialize(field.name)
+                    _serialize(getattr(o, field.name))
+
+            else:
+                # 通用对象处理
+                _update_bytes(b'O') # Object
+                _update_str(f"{o.__class__.__module__}.{o.__class__.__name__}")
+                
+                # 尝试获取状态
+                data_to_hash = []
+                
+                if hasattr(o, '__dict__'):
+                    data_to_hash += sorted([(k, v) for k, v in o.__dict__.items() if not k.startswith('_')])
+                
+                if hasattr(o, '__slots__'):
+                    for slot in o.__slots__:
+                        if not slot.startswith('_') and hasattr(o, slot):
+                            data_to_hash.append((slot, getattr(o, slot)))
+                
+                # 如果没有状态，可能是可迭代对象
+                if not data_to_hash and hasattr(o, '__iter__'):
+                     _update_bytes(b'ITER')
+                     for i in o:
+                         _serialize(i)
+                else:
+                    # 序列化属性
+                    # 排序属性名以保证顺序
+                    data_to_hash.sort(key=lambda x: x[0])
+                    for k, v in data_to_hash:
+                        _serialize(k)
+                        _serialize(v)
+                    
+                    if not data_to_hash:
+                        if raise_error:
+                            raise TypeError(f"Object of type {type(o)} is not hashable")
+                        else:
+                            _update_bytes(b'UNKNOWN')
+                            
+        finally:
+            if is_container:
+                seen.remove(oid)
+
     _serialize(obj)
-    return ret.hexdigest()
+    return hasher.hexdigest()
 
 
 # =========================== 基础定义 =========================== #

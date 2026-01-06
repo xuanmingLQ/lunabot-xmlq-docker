@@ -2,6 +2,8 @@ from src.utils import *
 from .imgexp import search_image
 import yt_dlp
 from tenacity import retry, wait_fixed, stop_after_attempt
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
 
 config = Config('imgexp')
 logger = get_logger('ImgExp')
@@ -10,22 +12,24 @@ cd = ColdDown(file_db, logger)
 gbl = get_group_black_list(file_db, logger, 'imgexp')
 
 
+# ==================== 图像反查 ==================== #
+
 search = CmdHandler(['/search', '/搜图'], logger)
 search.check_cdrate(cd).check_wblist(gbl)
 @search.handle()
 async def _(ctx: HandlerContext):
-    bot, event = ctx.bot, ctx.event
-    img_url = await ctx.aget_image_urls(return_first=True)
-    img, results = await search_image(img_url)
+    img_data = await ctx.aget_image_datas(return_first=True)
+    img, results = await search_image(img_data['url'], img_data.get('file_size', 0))
     msg = ""
     for result in results:
         if result.results:
             msg += f"来自 {result.source} 的结果:\n"
             for i, item in enumerate(result.results):
                 msg += f"#{i+1}\n{item.url}\n"
-
     return await ctx.asend_fold_msg([await get_image_cq(img), msg.strip()])
 
+
+# ==================== 视频下载 ==================== #
 
 async def aget_video_info(url):
     def get_video_info(url):
@@ -47,8 +51,6 @@ async def adownload_video(url, path, maxsize, lowq):
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([url])
     return await run_in_pool(download_video, url, path, maxsize)
-
-
 
 ytdlp = CmdHandler(['/yt-dlp', '/ytdlp', '/yt_dlp', '/video', '/xvideo'], logger)
 ytdlp.check_cdrate(cd).check_wblist(gbl, allow_private=True)
@@ -115,78 +117,147 @@ async def _(ctx: HandlerContext):
                 await ctx.asend_video(tmp_save_path)
 
 
+# ==================== 图片下载 ==================== #
 
-async def get_twitter_image_urls(url):
-    async with PlaywrightPage() as page: # 获取 Playwright Page
-        @retry(wait=wait_fixed(1), stop=stop_after_attempt(3), reraise=True)
-        async def get_image_urls(url): # 访问连接，读取内容，因为playwright是异步的所以用异步方法
-            await page.goto(url, wait_until='networkidle')
-            await asyncio.sleep(3) 
-            html_content = await page.content()
-            def _parse_and_extract_image_urls(html_content: str) -> list[str]: # 因为BeautifulSoup是同步的，将它放入线程池中运行
-                import bs4
-                soup = bs4.BeautifulSoup(html_content, features="lxml")
-                with open('sandbox/test.html', 'w') as f:
-                    f.write(soup.prettify())
-                images = soup.find_all('img')
-                images = [img['src'] for img in images if '/media/' in img['src']]
-                images = [image[:image.rfind('&')] + "&name=large" for image in images]
-                return images
-            return await run_in_pool(_parse_and_extract_image_urls, html_content)
-        return await get_image_urls(url)
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(2), reraise=True)
+async def get_x_content(url: str) -> tuple[str, list[str]]:
+    """从 X 帖子 URL 中提取文本内容和图片链接。"""
+    image_urls = []
 
-ximg = CmdHandler(['/ximg', '/x_img', '/twimg', '/tw_img'], logger)
+    async def block_agressive_resources(route):
+        """拦截图片以外的非必要资源"""
+        if route.request.resource_type in ["font", "stylesheet", "media", "websocket"]:
+            await route.abort()
+        elif "google-analytics" in route.request.url or "monitor" in route.request.url:
+            await route.abort()
+        else:
+            await route.continue_()
+    
+    async with PlaywrightPage() as page:
+        await page.route("**/*", block_agressive_resources)
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=15000)
+
+            # 等待推文核心内容出现
+            tweet_selector = 'article[data-testid="tweet"]'
+            try:
+                await page.wait_for_selector(tweet_selector, state="visible", timeout=10000)
+            except PlaywrightTimeoutError:
+                raise ReplyException(f"未能找到推文内容，可能是由登录墙、已被删除或网络超时引起，请稍后再试")
+
+            # 处理“敏感内容”或“显示更多”按钮
+            sensitive_overlay_selector = '[data-testid="tweet"] div[role="button"]:has-text("View"), [data-testid="tweet"] div[role="button"]:has-text("Show")'
+            if await page.locator(sensitive_overlay_selector).count() > 0:
+                try:
+                    # 点击所有覆盖层
+                    overlays = await page.locator(sensitive_overlay_selector).all()
+                    for overlay in overlays:
+                        if await overlay.is_visible():
+                            await overlay.click(force=True)
+                            await page.wait_for_timeout(500) # 给一点渲染时间
+                except Exception as e:
+                    raise ReplyException(f"尝试点击敏感内容遮罩时出错: {get_exc_desc(e)}")
+
+            # 提取图片
+            photo_selector = 'div[data-testid="tweetPhoto"] img'
+            try:
+                await page.wait_for_selector(photo_selector, state="attached", timeout=3000)
+            except PlaywrightTimeoutError:
+                pass
+
+            img_locators = await page.locator(photo_selector).all()
+            
+            for locator in img_locators:
+                src = await locator.get_attribute("src")
+                if src:
+                    # URL 清洗/优化
+                    clean_src = src
+                    if "pbs.twimg.com/media" in src:
+                        if "name=" in src:
+                            clean_src = re.sub(r'name=[a-z0-9]+', 'name=large', src)
+                        else:
+                            clean_src = src + "&name=large"
+                            
+                    if clean_src not in image_urls:
+                        image_urls.append(clean_src)
+
+            # 提取用户名
+            user_locator = page.locator(f'{tweet_selector} [data-testid="User-Name"]')
+            username_text = await user_locator.inner_text()
+            display_name = username_text.split('\n')[0] if username_text else "Unknown"
+
+            # 提取推文正文
+            text_locator = page.locator(f'{tweet_selector} [data-testid="tweetText"]')
+            content = ""
+            if await text_locator.count() > 0:
+                content = await text_locator.inner_text()
+
+            full_content = f"{display_name}: {content.strip()}"
+
+        except Exception as e:
+            # 保存调试用页面截图
+            screenshot_path = get_data_path(f"imgexp/debug/x_{int(time.time())}.png")
+            await page.screenshot(path=screenshot_path, full_page=True)
+            raise e
+
+    return full_content, image_urls
+
+
+ximg = CmdHandler(['/x img', '/tw img', '/推图'], logger)
 ximg.check_cdrate(cd).check_wblist(gbl, allow_private=True)
 @ximg.handle()
 async def _(ctx: HandlerContext):
-    raise ReplyException("由于反爬虫机制，该功能暂时不可用")
-
     parser = ctx.get_argparser()
     parser.add_argument('url', type=str)
     parser.add_argument('--vertical',   '-V', action='store_true')
     parser.add_argument('--horizontal', '-H', action='store_true')
     parser.add_argument('--grid',       '-G', action='store_true')
     parser.add_argument('--fold',       '-f', action='store_true')
+    parser.add_argument('--gif',        '-g', action='store_true')
     args = await parser.parse_args(error_reply=(
 """
 使用方式: /ximg <url> [-V] [-H] [-G] [-f]
--V: 垂直拼图 -H: 水平拼图 -G 网格拼图 -f 折叠回复
+-V: 垂直拼图 -H: 水平拼图 -G 网格拼图 
+-f 折叠回复 -g 转换为GIF
 不加参数默认各个图片分开发送
-示例: /ximg https://x.com/xxx/status/12345 -G                       
+示例: /ximg https://x.com/xxx/status/12345 -G               
 """
 .strip()))
     url = args.url
-    assert url, '请提供X文章网页链接'
+    assert url, '请提供X推文网页链接'
     assert [args.vertical, args.horizontal, args.grid].count(True) <= 1, '只能选择一种拼图模式'
     concat_mode = 'v' if args.vertical else 'h' if args.horizontal else 'g' if args.grid else None
 
     try:
         logger.info(f'获取X图片链接: {url}')
-        image_urls = await get_twitter_image_urls(url)
+        content, image_urls = await get_x_content(url)
         image_urls = image_urls[:16]
         logger.info(f'获取到图片链接: {image_urls}')
     except Exception as e:
-        raise Exception(f'获取图片链接失败: {e}')
+        logger.error(f'获取X图片链接失败: {get_exc_desc(e)}')
+        raise ReplyException(f'获取图片链接失败: {get_exc_desc(e)}')
     
     if not image_urls:
-        return await ctx.asend_reply_msg('没有找到图片！可能是输入网页链接不正确')
+        return await ctx.asend_reply_msg('在推文中没有找到图片，可能是输入网页链接不正确或其他原因')
     
     images = await asyncio.gather(*[download_image(u) for u in image_urls])
 
-    msg = ""
-    if concat_mode is None:
-        for i, image in enumerate(images):
-            msg += await get_image_cq(image)
-    else:
-        try:
-            concated_image = await run_in_pool(concat_images, images, concat_mode)
-        except Exception as e: 
-            raise Exception(f'拼图失败: {e}')
-        msg = await get_image_cq(concated_image)
+    if concat_mode:
+        concated_image = await run_in_pool(concat_images, images, concat_mode)
+        images = [concated_image]
+    
+    msg = url + "\n" + truncate(content, 64)
+    for img in images:
+        if args.gif:
+            with TempFilePath("gif", remove_after=timedelta(minutes=3)) as gif_path:
+                await run_in_pool(save_transparent_static_gif, img, gif_path)
+                msg += await get_image_cq(gif_path)
+        else:
+            msg += await get_image_cq(img)
 
     if args.fold:
         return await ctx.asend_fold_msg(msg)
     else:
-        return await ctx.asend_reply_msg(msg)
+        return await ctx.asend_msg(msg)
 
 

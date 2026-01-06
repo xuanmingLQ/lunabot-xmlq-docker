@@ -640,10 +640,11 @@ async def extract_music_and_diff(
     live_type: str, 
     additional_args: dict,
 ) -> str:
+    jp_ctx = SekaiHandlerContext.from_region('jp')
     search_options = MusicSearchOptions(
         use_emb=False,
-        use_id=False,
-        use_nidx=False,
+        use_id=True,
+        use_nidx=True,
         raise_when_err=False,
     )
 
@@ -655,8 +656,8 @@ async def extract_music_and_diff(
         for seg in segs:
             music_diff, seg = extract_diff(seg, default='master')
             search_options.diff = music_diff
-            music = (await search_music(ctx, seg, search_options)).music
-            assert_and_reply(music, f"找不到歌曲\"{seg}\"")
+            music = (await search_music(jp_ctx, seg, search_options)).music
+            assert_and_reply(music, f"在组卡支持的所有歌曲中找不到\"{seg}\"")
             additional_args['music_diffs_to_compare'].append((music['id'], music_diff, seg))
         return ""
 
@@ -665,8 +666,8 @@ async def extract_music_and_diff(
     args = args.strip()
     if args:
         search_options.diff = options.music_diff
-        music = (await search_music(ctx, args, search_options)).music
-        err_msg = f"找不到歌曲\"{args}\""
+        music = (await search_music(jp_ctx, args, search_options)).music
+        err_msg = f"在组卡支持的所有歌曲中找不到\"{args}\""
         if len(args.split()) > 1:
             err_msg += "，如果你要对多首歌曲进行比较，请加上\"歌曲比较\""
         err_msg += f"，发送\"{ctx.trigger_cmd}help\"查看帮助"
@@ -1673,16 +1674,18 @@ async def compose_deck_recommend_image(
 
     # ---------------------------- 绘图数据获取 ---------------------------- #
 
+    jp_ctx = SekaiHandlerContext.from_region('jp')
+
     if not music_compare:
         # 获取一般情况音乐标题和封面
         if options.music_id == OMAKASE_MUSIC_ID:
             music_title = "おまかせ（所有歌曲平均）"
             music_cover = ctx.static_imgs.get('omakase.png')
         else:
-            music = await ctx.md.musics.find_by_id(options.music_id)
+            music = await jp_ctx.md.musics.find_by_id(options.music_id)
             music_title = truncate(music['title'], 20)
             music_title += f" ({options.music_diff.upper()})"
-            music_cover = await get_music_cover_thumb(ctx, options.music_id)
+            music_cover = await get_music_cover_thumb(jp_ctx, options.music_id)
 
     # 获取活动banner和标题
     live_name = "协力"
@@ -1948,12 +1951,12 @@ async def compose_deck_recommend_image(
                                     TextBox("歌曲", th_style2).set_h(gh // 2).set_content_align('c')
                                     Spacer(h=6)
                                     for (mid, diff, marg), deck in zip(music_diffs_to_compare, result_decks):
-                                        music = await ctx.md.musics.find_by_id(mid)
+                                        music = await jp_ctx.md.musics.find_by_id(mid)
                                         music_title = music['title'] + f" ({diff.upper()})"
                                         with VSplit().set_content_align('c').set_item_align('c').set_sep(8).set_padding(0).set_h(gh):
                                             with Frame().set_content_align('c'):
                                                 Spacer(w=64, h=64).set_bg(FillBg(fill=DIFF_COLORS[diff])).set_offset((3, 3))
-                                                ImageBox(await get_music_cover_thumb(ctx, mid), size=(64, 64)).set_offset((-3, -3))
+                                                ImageBox(await get_music_cover_thumb(jp_ctx, mid), size=(64, 64)).set_offset((-3, -3))
                                             text = f"{mid}"
                                             if marg: text = f"{truncate(marg, 8)} → " + text
                                             TextBox(text, TextStyle(font=DEFAULT_FONT, size=15, color=(75, 75, 75)))

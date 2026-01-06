@@ -24,4 +24,4 @@ class SekaiRegion(BaseModel):
     # def __str__(self):
     #     return self.id
 
-REGIONS = [SekaiRegion(**region) for region in regions_config.get_all() if region['enable']]
+REGIONS = [SekaiRegion(**region) for region in regions_config.get_all() if region.get("enable", True)]
