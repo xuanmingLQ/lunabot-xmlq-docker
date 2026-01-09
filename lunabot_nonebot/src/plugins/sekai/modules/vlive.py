@@ -6,8 +6,8 @@ from ..draw import *
 from ..sub import SekaiUserSubHelper, SekaiGroupSubHelper
 from .resbox import get_res_box_info
 
-vlive_group_sub = SekaiGroupSubHelper("live", "虚拟Live通知", ALL_SERVER_REGIONS)
-vlive_user_sub = SekaiUserSubHelper("live", "虚拟Live@提醒", ALL_SERVER_REGIONS, related_group_sub=vlive_group_sub)
+vlive_group_sub = SekaiGroupSubHelper("live", "虚拟Live通知", get_regions(RegionAttributes.ENABLE))
+vlive_user_sub = SekaiUserSubHelper("live", "虚拟Live@提醒", get_regions(RegionAttributes.ENABLE), related_group_sub=vlive_group_sub)
 
 # ======================= 处理逻辑 ======================= #
 
@@ -147,9 +147,9 @@ async def vlive_notify():
     notified_vlives: Dict[str, Dict[str, List[int]]] = file_db.get(f"notified_vlives", {})
     updated = False
 
-    for region in ALL_SERVER_REGIONS: 
+    for region in get_regions(RegionAttributes.ENABLE): 
         ctx = SekaiHandlerContext.from_region(region)
-        region_name = get_region_name(region)
+        region_name = region.name
 
         # -------------------- 开始提醒 -------------------- #
         # 检查开始的提醒

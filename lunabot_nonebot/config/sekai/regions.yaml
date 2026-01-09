@@ -1,16 +1,47 @@
-- id: "cn"
-  name: "国服"
-  utc_offset: 8
-  enable: true
-  translated: true
-  compact_data: true
-  mysekai: true
-  bd_mysekai: true
+jp:
+  - "日服" # 中文名，必填，必须是字符串，必须放在第一位
+  - 9 # utc offset 必填，必须是整数，必须放在第二位
+  - enable # 即使不填，也默认是启用的
+  - need_translate # 需要翻译
+  - fifth_anniversary # 已过五周年
+  - mysekai # 允许烤森订阅
+  - ad_result # 允许广告奖励
+  - friend_code # 可以查询好友码
+  - masterdata # 获取masterdata
+  - asset # 获取asset
 
-- id: "jp"
-  name: "日服"
-  utc_offset: 9
-  enable: true
-  need_translate: true
-  fifth_anniversary: true
-  mysekai: true
+cn:
+  - "国服" # 中文名，必填
+  - 8 # utc offset 必填
+  - enable
+  - local # 这个字段，用于指示本地时区，其它服务器的时间会被换算到本地时间
+  - translated # 已翻译过
+  - compact_data # 朝夕光年服的特殊设置
+  - mysekai
+  - bd_mysekai # 朝夕光年服不允许烤森
+  - masterdata
+  - asset
+
+tw:
+  - "台服" # 中文名，必填
+  - 8 # utc offset 必填
+  - disable # 如果填了disable，就禁用这个服务器
+  - mysekai
+  - bd_mysekai
+  - compact_data
+
+kr:
+  - "韩服" # 中文名，必填
+  - 9 # utc offset 必填
+  - disable # 如果填了disable，就禁用这个服务器
+  - need_translate
+  - mysekai
+  - bd_mysekai
+  - compact_data
+
+en:
+  - "国际服" # 中文名，必填
+  - -9 # utc offset 必填
+  - disable # 如果填了disable，就禁用这个服务器
+  - need_translate
+  - mysekai

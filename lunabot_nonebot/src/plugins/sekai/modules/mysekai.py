@@ -28,11 +28,11 @@ from src.api.game.user import get_mysekai,get_mysekai_photo,get_mysekai_upload_t
 from src.api.subscribe.pjsk import set_msr_sub
 from ...imgtool import shrink_image
 
-MYSEKAI_REGIONS = [region.id for region in REGIONS if region.mysekai]
-BD_MYSEKAI_REGIONS = [region.id for region in REGIONS if region.bd_mysekai]
+MYSEKAI_REGIONS = get_regions(RegionAttributes.MYSEKAI)
+BD_MYSEKAI_REGIONS = get_regions(RegionAttributes.MYSEKAI, RegionAttributes.BD_MYSEKAI)
 
-bd_msr_sub = SekaiGroupSubHelper("msr", "msr指令权限", BD_MYSEKAI_REGIONS)
-msr_sub = SekaiUserSubHelper("msr", "烤森资源查询自动推送", MYSEKAI_REGIONS, only_one_group=True, hide=True)
+bd_msr_sub = SekaiGroupSubHelper("msr", "msr指令权限", get_regions(RegionAttributes.MYSEKAI, RegionAttributes.BD_MYSEKAI), hide=True)
+msr_sub = SekaiUserSubHelper("msr", "烤森资源查询自动推送", get_regions(RegionAttributes.MYSEKAI), only_one_group=True, hide=True)
 
 class MsrIdNotMatchException(ReplyException):
     pass
@@ -99,8 +99,8 @@ harvest_point_image_offsets_cache: dict[int, Tuple[Image.Image, tuple[int, int]]
 # 获取ms自然刷新小时
 def get_mysekai_refresh_hours(ctx: SekaiHandlerContext) -> Tuple[int, int]:
     return (
-        region_hour_to_local(ctx.region, 5),
-        region_hour_to_local(ctx.region, 17),
+        ctx.region.hour2local(5),
+        ctx.region.hour2local(17),
     )
 
 # 判断ms资源稀有等级（0, 1, 2)
@@ -143,7 +143,7 @@ async def get_mysekai_info(
         except HttpError as e:
             logger.info(f"获取 {qid} mysekai抓包数据失败: {get_exc_desc(e)}")
             if e.status_code == 404:
-                msg = f"获取你的{get_region_name(ctx.region)}Mysekai抓包数据失败，发送\"/抓包\"指令可获取帮助\n"
+                msg = f"获取你的{ctx.region.name}Mysekai抓包数据失败，发送\"/抓包\"指令可获取帮助\n"
                 # if local_err is not None: msg += f"[本地数据] {local_err}\n"
                 if  e.message is not None: msg += f"[Haruki工具箱] { e.message}\n"
                 raise ReplyException(msg.strip())
@@ -193,7 +193,7 @@ async def get_mysekai_info_card(ctx: SekaiHandlerContext, mysekai_info: dict, ba
                 with VSplit().set_content_align('c').set_item_align('l').set_sep(5):
                     game_data = basic_profile['user']
                     mysekai_game_data = mysekai_info['updatedResources']['userMysekaiGamedata']
-                    if ctx.region in BD_MYSEKAI_REGIONS:
+                    if ctx.region.bd_mysekai:
                         process_sensitive_cmd_source(mysekai_info)
                     source = mysekai_info.get('source', '?')
                     if local_source := mysekai_info.get('local_source'):
@@ -242,7 +242,7 @@ async def get_mysekai_and_detail_profile_card(ctx: SekaiHandlerContext, mysekai_
                     user_id = process_hide_uid(ctx, game_data['userId'], keep=6)
 
                     mysekai_game_data = mysekai_info['updatedResources']['userMysekaiGamedata']
-                    if ctx.region in BD_MYSEKAI_REGIONS:
+                    if ctx.region.bd_mysekai:
                         process_sensitive_cmd_source(mysekai_info)
                     ms_source = mysekai_info.get('source', '?')
                     if ms_local_source := mysekai_info.get('local_source'):
@@ -287,7 +287,7 @@ def get_mysekai_last_refresh_time_and_reason(ctx: SekaiHandlerContext, dt: datet
     else:
         last_refresh_time = now.replace(hour=h2, minute=0, second=0, microsecond=0)
     # 五周年后的生日掉落更新产生的刷新
-    if is_fifth_anniversary(ctx.region):
+    if ctx.region.fifth_anniversary:
         for cid in range(1, 27):
             dt = get_character_next_birthday_dt(ctx.region, cid, now - timedelta(days=1))
             start = dt - timedelta(days=3)
@@ -860,7 +860,7 @@ async def compose_mysekai_res_image(ctx: SekaiHandlerContext, qid: int, show_har
         bg = SEKAI_BLUE_BG
 
     def draw_watermark(size):
-        if ctx.region in BD_MYSEKAI_REGIONS:
+        if ctx.region.bd_mysekai:
             TextBox("禁止将该图片转发到其他群聊或社交平台", 
                     TextStyle(
                         font=DEFAULT_BOLD_FONT, size=size, color=(255, 255, 255, 150), 
@@ -948,7 +948,7 @@ async def compose_mysekai_res_image(ctx: SekaiHandlerContext, qid: int, show_har
                 ImageBox(img)
         draw_watermark(60)
     
-    if ctx.region not in BD_MYSEKAI_REGIONS:
+    if not ctx.region.bd_mysekai:
         add_watermark(canvas)
         add_watermark(canvas2, text=DEFAULT_WATERMARK_CFG.get() + ", map view from MiddleRed")
 
@@ -1213,7 +1213,7 @@ async def load_mysekairun_data(ctx: SekaiHandlerContext):
 
 # 获取mysekai家具好友码，返回（好友码，来源）
 async def get_mysekai_fixture_friend_codes(ctx: SekaiHandlerContext, fid: int) -> Tuple[List[str], str]:
-    if ctx.region not in ['jp']:
+    if not ctx.region.friend_code:
         return [], ""
 
     fixture = await ctx.md.mysekai_fixtures.find_by_id(fid)
@@ -1247,9 +1247,9 @@ async def get_mysekai_fixture_detail_image_card(ctx: SekaiHandlerContext, fid: i
     fname = fixture['name']
 
     translated_name = None
-    if ctx.region in NEED_TRANSLATE_REGIONS:
-        for r in TRANSLATED_REGIONS:
-            if r in MYSEKAI_REGIONS:
+    if ctx.region.need_translate:
+        for r in get_regions(RegionAttributes.translate):
+            if r.mysekai:
                 if f := await SekaiHandlerContext.from_region(r).md.mysekai_fixtures.find_by_id(fid):
                     translated_name = f['name']
                     break
@@ -1946,7 +1946,7 @@ async def compose_mysekai_talk_list_image(
 
 # 获取字节服msr限制uid，不限制则返回None
 def get_bd_msr_limit_uid(ctx: SekaiHandlerContext, qid: int) -> str | None:
-    if ctx.region not in BD_MYSEKAI_REGIONS or int(qid) in SUPERUSER_CFG.get():
+    if not ctx.region.bd_mysekai or int(qid) in SUPERUSER_CFG.get():
         return None
     qid = str(qid)
     msr_binds: dict[str, str] = bd_msr_bind_db.get(f"{ctx.region}_bind", {})
@@ -1956,7 +1956,7 @@ def get_bd_msr_limit_uid(ctx: SekaiHandlerContext, qid: int) -> str | None:
 
 # 切换字节服msr限制uid为当前绑定的ID，返回绑定的ID
 def update_bd_msr_limit_uid(ctx: SekaiHandlerContext, qid: int) -> str:
-    assert_and_reply(ctx.region in BD_MYSEKAI_REGIONS, "指令对此区服无效")
+    assert_and_reply(ctx.region.bd_mysekai, "指令对此区服无效")
     assert_and_reply(bd_msr_sub.is_subbed(ctx.region, ctx.group_id), "指令在此群无效")
     uid = get_player_bind_id(ctx)
     qid = str(qid)
@@ -1981,7 +1981,7 @@ pjsk_mysekai_res.check_cdrate(cd).check_wblist(gbl)
 async def _(ctx: SekaiHandlerContext):
     with ProfileTimer("msr.total"):
         if ctx.region in bd_msr_sub.regions and not bd_msr_sub.is_subbed(ctx.region, ctx.group_id): 
-            raise ReplyException(f"不支持{get_region_name(ctx.region)}的msr查询")
+            raise ReplyException(f"不支持{ctx.region.name}的msr查询")
         await ctx.block_region(key=f"{ctx.user_id}", timeout=0, err_msg="正在处理你的msr查询，请稍候")
         args = ctx.get_args().strip()
         show_harvested = 'all' in args
@@ -2000,7 +2000,7 @@ pjsk_mysekai_blueprint.check_cdrate(cd).check_wblist(gbl)
 @pjsk_mysekai_blueprint.handle()
 async def _(ctx: SekaiHandlerContext):
     if ctx.region in bd_msr_sub.regions and not bd_msr_sub.is_subbed(ctx.region, ctx.group_id): 
-        raise ReplyException(f"不支持{get_region_name(ctx.region)}的烤森查询")
+        raise ReplyException(f"不支持{ctx.region.name}的烤森查询")
     args = ctx.get_args().strip()
     show_id = False
     if 'id' in args:
@@ -2070,7 +2070,7 @@ async def _(ctx: SekaiHandlerContext):
         )
     else:
         if ctx.region in bd_msr_sub.regions and not bd_msr_sub.is_subbed(ctx.region, ctx.group_id): 
-            raise ReplyException(f"不支持{get_region_name(ctx.region)}的msr查询")
+            raise ReplyException(f"不支持{ctx.region.name}的msr查询")
         img = await compose_mysekai_talk_list_image(
             ctx, 
             qid=ctx.user_id, 
@@ -2092,7 +2092,7 @@ pjsk_mysekai_photo.check_cdrate(cd).check_wblist(gbl)
 @pjsk_mysekai_photo.handle()
 async def _(ctx: SekaiHandlerContext):
     if ctx.region in bd_msr_sub.regions and not bd_msr_sub.is_subbed(ctx.region, ctx.group_id): 
-        raise ReplyException(f"不支持{get_region_name(ctx.region)}的烤森查询")
+        raise ReplyException(f"不支持{ctx.region.name}的烤森查询")
     args = ctx.get_args().strip()
     try: seq = int(args)
     except: raise Exception("请输入正确的照片编号（从1或-1开始）")
@@ -2113,7 +2113,7 @@ pjsk_check_mysekai_data.check_cdrate(cd).check_wblist(gbl)
 @pjsk_check_mysekai_data.handle()
 async def _(ctx: SekaiHandlerContext):
     if ctx.region in bd_msr_sub.regions and not bd_msr_sub.is_subbed(ctx.region, ctx.group_id): 
-        raise ReplyException(f"不支持{get_region_name(ctx.region)}的烤森查询")
+        raise ReplyException(f"不支持{ctx.region.name}的烤森查询")
     cqs = extract_cq_code(ctx.get_msg())
     qid = int(cqs['at'][0]['qq']) if 'at' in cqs else ctx.user_id
     uid = get_player_bind_id(ctx)
@@ -2172,8 +2172,8 @@ pjsk_mysekai_musicrecord = SekaiCmdHandler([
 pjsk_mysekai_musicrecord.check_cdrate(cd).check_wblist(gbl)
 @pjsk_mysekai_musicrecord.handle()
 async def _(ctx: SekaiHandlerContext):
-    if ctx.region in bd_msr_sub.regions and not bd_msr_sub.is_subbed(ctx.region, ctx.group_id): 
-        raise ReplyException(f"不支持{get_region_name(ctx.region)}的msr查询")
+    if ctx.region.bd_mysekai and not bd_msr_sub.is_subbed(ctx.region, ctx.group_id): 
+        raise ReplyException(f"不支持{ctx.region.name}的msr查询")
     args = ctx.get_args().strip()
     show_id = False
     if 'id' in args:
@@ -2208,7 +2208,7 @@ async def _(ctx: SekaiHandlerContext):
     uid = update_bd_msr_limit_uid(ctx, ctx.user_id)
     next_times[qid] = int((datetime.now() + timedelta(days=7)).timestamp())
     bd_msr_bind_db.set(f"{ctx.region}_next_time", next_times)
-    await ctx.asend_reply_msg(f"已将你的{get_region_name(ctx.region)}MSR查询限制ID切换为当前绑定的ID: "
+    await ctx.asend_reply_msg(f"已将你的{ctx.region.name}MSR查询限制ID切换为当前绑定的ID: "
                               f"{process_hide_uid(ctx, uid, keep=6)}，一周内不可再次切换")
 
 
@@ -2217,8 +2217,8 @@ async def _(ctx: SekaiHandlerContext):
 # MSR自动推送 & MSR订阅更新 关了吧
 # @repeat_with_interval(config.get('mysekai.msr_push_interval_seconds'), 'MSR自动推送', logger)
 async def msr_auto_push():
-    for region in ALL_SERVER_REGIONS:
-        region_name = get_region_name(region)
+    for region in get_regions(RegionAttributes.MYSEKAI):
+        region_name = region.name
         ctx = SekaiHandlerContext.from_region(region)
         if region not in msr_sub.regions: continue
 

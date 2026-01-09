@@ -2,6 +2,7 @@ from src.utils import *
 from enum import Enum
 import zipfile
 import subprocess
+from dataclasses import asdict
 
 
 config = Config('gallery')

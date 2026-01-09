@@ -1,6 +1,6 @@
 from src.utils import *
 from os.path import join as pjoin
-from .regions import REGIONS
+from .regions import SekaiRegion, REGIONS, RegionAttributes, get_region_by_id, get_regions, get_regions_by_ids
 
 # ======================= 基础路径 ======================= #
 
@@ -29,14 +29,8 @@ class CharacterNicknameData:
 
 _character_nickname_data = CharacterNicknameData()
 
-LOCAL_UTC_OFFSET_CFG = config.item("local_utc_offset")
-
-ALL_SERVER_REGIONS = [region.id for region in REGIONS]
-ALL_SERVER_REGION_NAMES = {region.id: region.name for region in REGIONS}
-NEED_TRANSLATE_REGIONS = [region.id for region in REGIONS if region.need_translate]
-TRANSLATED_REGIONS = [region.id for region in REGIONS if region.translated]
-
-REGION_UTC_OFFSET = { region.id: region.utc_offset for region in REGIONS }
+# 因为这个ALL_SERVER_REGIONS引用太多，就先不删了
+ALL_SERVER_REGIONS = get_regions(RegionAttributes.ENABLE)
 
 UNITS = [
     "light_sound",
@@ -162,30 +156,18 @@ MUSIC_TAG_UNIT_MAP = {
 
 # ======================= 通用功能 ======================= #
 
-# 将指定区服上的小时转换为本地小时 （例如日服烤森刷新5点, 转换为本地则返回4点）
-def region_hour_to_local(region: str, hour: int) -> int:
-    return hour + REGION_UTC_OFFSET['cn'] - REGION_UTC_OFFSET[region]
-
-# 将指定区服上的时间转换为本地时间 （例如日服烤森刷新5点, 转换为本地则返回4点）
-def region_dt_to_local(region: str, dt: datetime) -> datetime:
-    return dt + timedelta(hours=REGION_UTC_OFFSET['cn']) - timedelta(hours=REGION_UTC_OFFSET[region])
-
-# 区服是否已经五周年更新
-def is_fifth_anniversary(region: str) -> bool:
-    return region in config.get('fifth_anniv_regions')
-
 # 获取角色生日
 def get_character_birthday(cid: int) -> Tuple[int, int]:
     return Config('sekai.character_birthday').get('birthdays')[cid]
 
 # 获取角色下次生日时间点
-def get_character_next_birthday_dt(region: str, cid: int, dt: datetime = None) -> datetime:
+def get_character_next_birthday_dt(region: SekaiRegion, cid: int, dt: datetime = None) -> datetime:
     dt = dt or datetime.now()
     m, d = get_character_birthday(cid)
     next_birthday = dt.replace(month=m, day=d, hour=0, minute=0, second=0, microsecond=0)
     if next_birthday < dt:
         next_birthday = next_birthday.replace(year=next_birthday.year + 1)
-    return region_dt_to_local(region, next_birthday)
+    return region.dt2local(next_birthday)
 
 # 获取角色昵称数据
 def get_character_nickname_data() -> CharacterNicknameData:
@@ -208,10 +190,6 @@ def get_character_nickname_data() -> CharacterNicknameData:
 # 获取角色首个昵称，如果不存在则返回None
 def get_character_first_nickname(cid: int) -> Optional[str]:
     return get_character_nickname_data().first_nicknames.get(cid, None)
-
-# 通过区服ID获取区服名称
-def get_region_name(region: str):
-    return ALL_SERVER_REGION_NAMES[region]
 
 # 通过角色ID获取角色昵称，不存在则返回空列表
 def get_nicknames_by_chara_id(cid: int) -> List[str]:

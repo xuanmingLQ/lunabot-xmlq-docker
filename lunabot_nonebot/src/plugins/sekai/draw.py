@@ -1,6 +1,6 @@
 from src.utils import *
 from .common import *
-from .handler import SekaiHandlerContext
+from .handler import DEFAULT_SK_CTX
 
 
 # 通过角色ID获取角色头像
@@ -16,7 +16,7 @@ def get_chara_icon_by_chara_id(cid: int, size: int = None, raise_exc=True, defau
     if unit is not None and unit != "piapro" and nickname == "miku":
         path += f"_{unit}"
     path += ".png"
-    img = SekaiHandlerContext.from_region('jp').static_imgs.get(path)
+    img = DEFAULT_SK_CTX.static_imgs.get(path)
     if size is not None:
         img = img.resize((size, size))
     return img
@@ -34,21 +34,21 @@ def get_chara_icon_by_nickname(nickname: str, size: int = None, raise_exc=True, 
 
 # 获取团logo
 def get_unit_logo(unit: str, size: int = None):
-    img = SekaiHandlerContext.from_region('jp').static_imgs.get(f"logo_{unit}.png")
+    img = DEFAULT_SK_CTX.static_imgs.get(f"logo_{unit}.png")
     if size is not None:
         img = img.resize((size, size))
     return img
 
 # 获取团图标
 def get_unit_icon(unit: str, size: int = None):
-    img = SekaiHandlerContext.from_region('jp').static_imgs.get(f"icon_{unit}.png")
+    img = DEFAULT_SK_CTX.static_imgs.get(f"icon_{unit}.png")
     if size is not None:
         img = img.resize((size, size))
     return img
 
 # 获取属性图标
 def get_attr_icon(attr: str, size: int = None):
-    img = SekaiHandlerContext.from_region('jp').static_imgs.get(f"card/attr_icon_{attr}.png")
+    img = DEFAULT_SK_CTX.static_imgs.get(f"card/attr_icon_{attr}.png")
     if size is not None:
         img = img.resize((size, size))
     return img
@@ -107,7 +107,7 @@ def random_unit_bg(unit: str = None):
     随机选择团队背景
     unit为None时随机选择一个通用背景
     """
-    ctx = SekaiHandlerContext.from_region('jp')
+    ctx = DEFAULT_SK_CTX
     if unit is None:
         bg_name = random.choice(COMMON_BG_NAMES)
         img = ctx.static_imgs.get(bg_name)

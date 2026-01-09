@@ -89,7 +89,7 @@ DETAIL_SKILL_KEYWORDS_IDS = [
 
 # 获取sd图
 async def get_character_sd_image(cuid: int) -> Image.Image:
-    return await SekaiHandlerContext.from_region('jp').rip.img(f"character/character_sd_l/chr_sp_{cuid}.png")
+    return await DEFAULT_SK_CTX.rip.img(f"character/character_sd_l/chr_sp_{cuid}.png")
 
 # 解析查单张卡的参数
 async def search_single_card(ctx: SekaiHandlerContext, args: str) -> dict:
@@ -763,8 +763,8 @@ async def compose_card_detail_image(ctx: SekaiHandlerContext, card_id: int):
     skill_type_icon = ctx.static_imgs.get(f"skill_{skill_info.type}.png")
     skill_detail = skill_info.detail
     skill_detail_cn: str = None
-    if ctx.region in NEED_TRANSLATE_REGIONS:
-        for r in TRANSLATED_REGIONS:
+    if ctx.region.need_translate:
+        for r in get_regions(RegionAttributes.TRANSLATED):
             try:
                 skill_info = await get_skill_info(SekaiHandlerContext.from_region(r), card['skillId'], card)
                 skill_detail_cn = skill_info.detail
@@ -779,8 +779,8 @@ async def compose_card_detail_image(ctx: SekaiHandlerContext, card_id: int):
         sp_skill_type_icon = ctx.static_imgs.get(f"skill_{sp_skill_info.type}.png")
         sp_skill_detail = sp_skill_info.detail
         sp_skill_detail_cn: str = None
-        if ctx.region in NEED_TRANSLATE_REGIONS:
-            if r in TRANSLATED_REGIONS:
+        if ctx.region.need_translate:
+            if r in get_regions(RegionAttributes.TRANSLATED):
                 try:
                     sp_skill_info = await get_skill_info(SekaiHandlerContext.from_region(r), card['specialTrainingSkillId'], card)
                     sp_skill_detail_cn = sp_skill_info.detail

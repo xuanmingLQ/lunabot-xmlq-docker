@@ -208,7 +208,7 @@ def get_player_bind_count(ctx: SekaiHandlerContext, qid: int) -> int:
 # 获取qq用户绑定的游戏id，如果qid=None则使用ctx.uid_arg获取用户id，index=None获取主绑定账号
 def get_player_bind_id(ctx: SekaiHandlerContext, qid: int = None, check_bind=True, index: int | None=None) -> str:
     is_super = check_superuser(ctx.event) if ctx.event else False
-    region_name = get_region_name(ctx.region)
+    region_name = ctx.region.name
 
     bind_list: Dict[str, str | list[str]] = profile_db.get("bind_list", {}).get(ctx.region, {})
     main_bind_list: Dict[str, str] = profile_db.get("main_bind_list", {}).get(ctx.region, {})
@@ -240,7 +240,7 @@ def get_player_bind_id(ctx: SekaiHandlerContext, qid: int = None, check_bind=Tru
                 raise ReplyException(f"指定的游戏ID {uid} 不是有效的{region_name}游戏ID")
 
     if check_bind and uid is None:
-        region = "" if ctx.region == "jp" else ctx.region
+        region = "" if ctx.region.local else ctx.region
         raise ReplyException(f"请使用\"/{region}绑定 你的游戏ID\"绑定账号")
     if not is_super:
         assert_and_reply(not check_uid_in_blacklist(uid), f"该游戏ID({uid})已被拉入黑名单")
@@ -261,7 +261,7 @@ def add_player_bind_id(ctx: SekaiHandlerContext, qid: str, uid: str, set_main: b
     all_main_bind_list: Dict[str, str] = profile_db.get("main_bind_list", {})
     qid = str(qid)
     region = ctx.region
-    region_name = get_region_name(region)
+    region_name = region.name
     additional_info = ""
 
     if region not in all_bind_list:
@@ -299,7 +299,7 @@ def remove_player_bind_id(ctx: SekaiHandlerContext, qid: str, index: int | None)
     all_main_bind_list: Dict[str, str] = profile_db.get("main_bind_list", {})
     qid = str(qid)
     region = ctx.region
-    region_name = get_region_name(region)
+    region_name = region.name
     ret_info = ""
 
     if region not in all_bind_list:
@@ -344,7 +344,7 @@ def set_player_main_bind_id(ctx: SekaiHandlerContext, qid: str, index: int) -> s
     all_main_bind_list: Dict[str, str] = profile_db.get("main_bind_list", {})
     qid = str(qid)
     region = ctx.region
-    region_name = get_region_name(region)
+    region_name = region.name
 
     if region not in all_bind_list:
         all_bind_list[region] = {}
@@ -367,7 +367,7 @@ def swap_player_bind_id(ctx: SekaiHandlerContext, qid: str, index1: int, index2:
     all_bind_list: Dict[str, str | list[str]] = profile_db.get("bind_list", {})
     qid = str(qid)
     region = ctx.region
-    region_name = get_region_name(region)
+    region_name = region.name
 
     if region not in all_bind_list:
         all_bind_list[region] = {}
@@ -393,7 +393,7 @@ def swap_player_bind_id(ctx: SekaiHandlerContext, qid: str, index1: int, index2:
 async def verify_user_game_account(ctx: SekaiHandlerContext, triggered_by_not_verified: bool = False):
     verified_uids = get_user_verified_uids(ctx)
     uid = get_player_bind_id(ctx)
-    assert_and_reply(uid not in verified_uids, f"你当前绑定的{get_region_name(ctx.region)}帐号已经验证过")
+    assert_and_reply(uid not in verified_uids, f"你当前绑定的{ctx.region.name}帐号已经验证过")
 
     def generate_verify_code() -> str:
         while True:
@@ -439,7 +439,7 @@ async def verify_user_game_account(ctx: SekaiHandlerContext, triggered_by_not_ve
         )
         _region_qid_verify_codes[ctx.region][qid] = info
         raise ReplyException(f"""
-{err_msg}请在你当前绑定的{get_region_name(ctx.region)}帐号的名片简介末尾输入验证码(不要去掉斜杠):
+{err_msg}请在你当前绑定的{ctx.region.name}帐号的名片简介末尾输入验证码(不要去掉斜杠):
 {info.verify_code}
 编辑后退出名片界面保存，然后在{get_readable_timedelta(VERIFY_CODE_EXPIRE_TIME)}内发送\"/{ctx.region}pjsk验证\"完成验证
 """.strip())
@@ -448,7 +448,7 @@ async def verify_user_game_account(ctx: SekaiHandlerContext, triggered_by_not_ve
     word: str = profile['userProfile'].get('word', '').strip()
 
     assert_and_reply(word.endswith(info.verify_code), f"""
-验证失败，从你绑定的{get_region_name(ctx.region)}帐号留言末尾没有获取到验证码\"{info.verify_code}\"，请重试（验证码未改变）
+验证失败，从你绑定的{ctx.region.name}帐号留言末尾没有获取到验证码\"{info.verify_code}\"，请重试（验证码未改变）
 """.strip())
 
     try:
@@ -500,7 +500,7 @@ async def get_basic_profile(ctx: SekaiHandlerContext, uid: int, use_cache=True, 
     try:
         profile = await get_profile(ctx.region, uid)
         if raise_when_no_found:
-            assert_and_reply(profile, f"找不到ID为 {uid} 的{get_region_name(ctx.region)}玩家")
+            assert_and_reply(profile, f"找不到ID为 {uid} 的{ctx.region.name}玩家")
         elif not profile:
             return {}
         dump_json(profile, cache_path)
@@ -599,7 +599,7 @@ async def get_detailed_profile(
         except HttpError as e:
             logger.info(f"获取 {qid} 抓包数据失败: {get_exc_desc(e)}")
             if e.status_code == 404:
-                msg = f"获取你的{get_region_name(ctx.region)}Suite抓包数据失败，发送\"/抓包\"指令可获取帮助\n"
+                msg = f"获取你的{ctx.region.name}Suite抓包数据失败，发送\"/抓包\"指令可获取帮助\n"
                 # if local_err is not None: msg += f"[本地数据] {local_err}\n"
                 if e.message is not None: msg += f"[Haruki工具箱] {e.message}\n"
                 raise ReplyException(msg.strip())
@@ -1119,7 +1119,7 @@ async def _(ctx: SekaiHandlerContext):
     if not args:
         has_any = False
         msg = ""
-        for region in ALL_SERVER_REGIONS:
+        for region in get_regions(RegionAttributes.ENABLE):
             region_ctx = SekaiHandlerContext.from_region(region)
             main_uid = get_player_bind_id(region_ctx, ctx.user_id, check_bind=False)
 
@@ -1135,7 +1135,7 @@ async def _(ctx: SekaiHandlerContext):
 
             if lines:
                 has_any = True
-                msg += f"【{get_region_name(region)}】\n" + '\n'.join(lines) + '\n'
+                msg += f"【{region.name}】\n" + '\n'.join(lines) + '\n'
 
         if not has_any:
             return await ctx.asend_reply_msg("你还没有绑定过游戏ID，请使用\"/绑定 游戏ID\"进行绑定")
@@ -1158,7 +1158,7 @@ async def _(ctx: SekaiHandlerContext):
             # 检查格式
             if not validate_uid(region_ctx, args):
                 return region, None, f"ID格式错误"
-            checked_regions.append(get_region_name(region))
+            checked_regions.append(region.name)
             profile = await get_basic_profile(region_ctx, args, use_cache=False, use_remote_cache=False, raise_when_no_found=False)
             if not profile:
                 return region, None, "找不到该ID的玩家"
@@ -1168,7 +1168,7 @@ async def _(ctx: SekaiHandlerContext):
             logger.warning(f"在 {region} 服务器尝试绑定失败: {get_exc_desc(e)}")
             return region, None, "内部错误，请稍后重试"
         
-    check_results = await asyncio.gather(*[check_bind(region) for region in ALL_SERVER_REGIONS])
+    check_results = await asyncio.gather(*[check_bind(region) for region in get_regions(RegionAttributes.ENABLE)])
     check_results = [res for res in check_results if res]
     ok_check_results = [res for res in check_results if res[2] is None]
 
@@ -1176,7 +1176,7 @@ async def _(ctx: SekaiHandlerContext):
         reply_text = f"所有支持的服务器尝试绑定失败，请检查ID是否正确"
         for region, _, err_msg in check_results:
             if err_msg:
-                reply_text += f"\n{get_region_name(region)}: {err_msg}"
+                reply_text += f"\n{region.name}: {err_msg}"
         return await ctx.asend_reply_msg(reply_text)
     
     if len(ok_check_results) > 1:
@@ -1203,23 +1203,23 @@ async def _(ctx: SekaiHandlerContext):
 
         daily_info['ids'] = list(today_ids)
         if len(daily_info['ids']) > DAILY_BIND_LIMITS.get().get(region, 1e9):
-            return await ctx.asend_reply_msg(f"你今日绑定{get_region_name(region)}帐号的数量已达上限")
+            return await ctx.asend_reply_msg(f"你今日绑定{region.name}帐号的数量已达上限")
         all_daily_info[qid] = daily_info
         bind_history_db.set(f"{region}_daily", all_daily_info)
 
-    msg = f"{get_region_name(region)}绑定成功: {user_name}"
+    msg = f"{region.name}绑定成功: {user_name}"
 
     # 如果以前没有绑定过其他区服，设置默认服务器
     other_bind = None
-    for r in ALL_SERVER_REGIONS:
+    for r in get_regions(RegionAttributes.ENABLE):
         if r == region: continue
         other_bind = other_bind or get_player_bind_id(SekaiHandlerContext.from_region(r), ctx.user_id, check_bind=False)
     default_region = get_user_default_region(ctx.user_id, None)
     if not other_bind and not default_region:
-        msg += f"\n已设置你的默认服务器为{get_region_name(region)}，如需修改可使用\"/pjsk服务器\""
+        msg += f"\n已设置你的默认服务器为{region.name}，如需修改可使用\"/pjsk服务器\""
         set_user_default_region(ctx.user_id, region)
     if default_region and default_region != region:
-        msg += f"\n你的默认服务器为{get_region_name(default_region)}，查询{get_region_name(region)}需加前缀{region}，或使用\"/pjsk服务器\"修改默认服务器"
+        msg += f"\n你的默认服务器为{default_region.name}，查询{region.name}需加前缀{region}，或使用\"/pjsk服务器\"修改默认服务器"
 
     # 如果该区服以前没有绑定过，设置默认隐藏id
     if not last_bind_main_id:
@@ -1329,7 +1329,7 @@ async def _(ctx: SekaiHandlerContext):
     if ctx.user_id not in lst[ctx.region]:
         lst[ctx.region].append(ctx.user_id)
     profile_db.set("hide_suite_list", lst)
-    return await ctx.asend_reply_msg(f"已隐藏{get_region_name(ctx.region)}抓包信息")
+    return await ctx.asend_reply_msg(f"已隐藏{ctx.region.name}抓包信息")
     
 
 # 展示抓包信息
@@ -1346,7 +1346,7 @@ async def _(ctx: SekaiHandlerContext):
     if ctx.user_id in lst[ctx.region]:
         lst[ctx.region].remove(ctx.user_id)
     profile_db.set("hide_suite_list", lst)
-    return await ctx.asend_reply_msg(f"已展示{get_region_name(ctx.region)}抓包信息")
+    return await ctx.asend_reply_msg(f"已展示{ctx.region.name}抓包信息")
 
 
 # 隐藏id信息
@@ -1363,7 +1363,7 @@ async def _(ctx: SekaiHandlerContext):
     if ctx.user_id not in lst[ctx.region]:
         lst[ctx.region].append(ctx.user_id)
     profile_db.set("hide_id_list", lst)
-    return await ctx.asend_reply_msg(f"已隐藏{get_region_name(ctx.region)}ID信息")
+    return await ctx.asend_reply_msg(f"已隐藏{ctx.region.name}ID信息")
 
 
 # 展示id信息
@@ -1381,7 +1381,7 @@ async def _(ctx: SekaiHandlerContext):
     if ctx.user_id in lst[ctx.region]:
         lst[ctx.region].remove(ctx.user_id)
     profile_db.set("hide_id_list", lst)
-    return await ctx.asend_reply_msg(f"已展示{get_region_name(ctx.region)}ID信息")
+    return await ctx.asend_reply_msg(f"已展示{ctx.region.name}ID信息")
 
 
 # 查询个人名片
@@ -1433,7 +1433,7 @@ async def _(ctx: SekaiHandlerContext):
     uid = get_player_bind_id(ctx)
     reg_time = get_register_time(ctx.region, uid)
     elapsed = datetime.now() - reg_time
-    region_name = get_region_name(ctx.region)
+    region_name = ctx.region.name
     return await ctx.asend_reply_msg(f"{region_name}注册时间: {reg_time.strftime('%Y-%m-%d %H:%M:%S')} ({elapsed.days}天前)")
 
 
@@ -1465,7 +1465,7 @@ async def _(ctx: SekaiHandlerContext):
     data_modes = profile_db.get("data_modes", {})
     cur_mode = data_modes.get(ctx.region, {}).get(str(ctx.user_id), DEFAULT_DATA_MODE)
     help_text = f"""
-你的{get_region_name(ctx.region)}抓包数据获取模式: {cur_mode} 
+你的{ctx.region.name}抓包数据获取模式: {cur_mode} 
 ---
 使用\"{ctx.original_trigger_cmd} 模式名\"来切换模式，可用模式名如下:
 【latest】
@@ -1495,9 +1495,9 @@ async def _(ctx: SekaiHandlerContext):
     profile_db.set("data_modes", data_modes)
 
     if qid == ctx.user_id:
-        return await ctx.asend_reply_msg(f"切换{get_region_name(ctx.region)}抓包数据获取模式:\n{cur_mode} -> {args}")
+        return await ctx.asend_reply_msg(f"切换{ctx.region.name}抓包数据获取模式:\n{cur_mode} -> {args}")
     else:
-        return await ctx.asend_reply_msg(f"切换 {qid} 的{get_region_name(ctx.region)}抓包数据获取模式:\n{cur_mode} -> {args}")
+        return await ctx.asend_reply_msg(f"切换 {qid} 的{ctx.region.name}抓包数据获取模式:\n{cur_mode} -> {args}")
 
 
 # 查询抓包数据
@@ -1589,7 +1589,7 @@ get_verified_uids.check_cdrate(cd).check_wblist(gbl)
 async def _(ctx: SekaiHandlerContext):
     uids = get_user_verified_uids(ctx)
     msg = ""
-    region_name = get_region_name(ctx.region)
+    region_name = ctx.region.name
     if not uids:
         msg += f"你还没有验证过任何{region_name}游戏ID\n"
     else:
@@ -1667,7 +1667,7 @@ async def _(ctx: SekaiHandlerContext):
         args = args.replace('force', '').strip()
 
     await set_profile_bg_settings(ctx, remove_image=True, force=force)
-    return await ctx.asend_reply_msg(f"已清空{get_region_name(ctx.region)}个人信息背景图片")
+    return await ctx.asend_reply_msg(f"已清空{ctx.region.name}个人信息背景图片")
 
 
 # 调整个人信息背景设置
@@ -1699,7 +1699,7 @@ async def _(ctx: SekaiHandlerContext):
     args = ctx.get_args().strip()
     if not args:
         settings = get_profile_bg_settings(ctx)
-        msg = f"当前{get_region_name(ctx.region)}个人信息背景设置:\n"
+        msg = f"当前{ctx.region.name}个人信息背景设置:\n"
         msg += f"ID: {process_hide_uid(ctx, uid, keep=6)}\n"
         msg += f"方向: {'竖屏' if settings.vertical else '横屏'}\n"
         msg += f"模糊度: {settings.blur}\n"
@@ -1797,7 +1797,7 @@ async def _(ctx: HandlerContext):
     msg = "所有群聊统计:\n" if not group_mode else "当前群聊统计:\n"
     group_qids = set([str(m['user_id']) for m in await get_group_users(ctx.bot, ctx.group_id)])
 
-    for region in ALL_SERVER_REGIONS:
+    for region in get_regions(RegionAttributes.ENABLE):
         qids = set(bind_list.get(region, {}).keys())
         uids = set()
         if group_mode:
@@ -1817,7 +1817,7 @@ async def _(ctx: HandlerContext):
             mysekais = [m for m in mysekais if m.split('/')[-1].split('.')[0] in uids]
         mysekai_total += len(mysekais)
 
-        msg += f"【{get_region_name(region)}】\n绑定 {len(qids)} | Suite {len(suites)} | MySekai {len(mysekais)}\n"
+        msg += f"【{region.name}】\n绑定 {len(qids)} | Suite {len(suites)} | MySekai {len(mysekais)}\n"
 
         if detail_mode:
             suite_source_num: dict[str, int] = {}
@@ -1855,7 +1855,7 @@ pjsk_bind_history.check_cdrate(cd).check_wblist(gbl).check_superuser()
 async def _(ctx: HandlerContext):
     args = ctx.get_args().strip()
     uid = None
-    for region in ALL_SERVER_REGIONS:
+    for region in get_regions(RegionAttributes.ENABLE):
         if validate_uid(SekaiHandlerContext.from_region(region), args):
             uid = args
             break
@@ -1879,7 +1879,7 @@ async def _(ctx: HandlerContext):
         # QQ号查游戏ID
         has_any = False
         msg = f"用户{qid}当前绑定:\n"
-        for region in ALL_SERVER_REGIONS:
+        for region in get_regions(RegionAttributes.ENABLE):
             region_ctx = SekaiHandlerContext.from_region(region)
             main_uid = get_player_bind_id(region_ctx, qid, check_bind=False)
             lines = []
@@ -1892,7 +1892,7 @@ async def _(ctx: HandlerContext):
                 lines.append(line)
             if lines:
                 has_any = True
-                msg += f"【{get_region_name(region)}】\n" + '\n'.join(lines) + '\n'
+                msg += f"【{region.name}】\n" + '\n'.join(lines) + '\n'
         if not has_any:
             msg += "当前没有绑定任何游戏ID\n"
 
@@ -1913,7 +1913,7 @@ guest_account_create_rate_limit = RateLimit(file_db, logger, 2, 'd', rate_limit_
 pjsk_create_guest_account.check_cdrate(cd).check_wblist(gbl).check_cdrate(guest_account_create_rate_limit)
 @pjsk_create_guest_account.handle()
 async def _(ctx: SekaiHandlerContext):
-    region_name = get_region_name(ctx.region)
+    region_name = ctx.region.name
     # data = await request_gameapi(url, method="POST")
     try:
         data = await create_account()

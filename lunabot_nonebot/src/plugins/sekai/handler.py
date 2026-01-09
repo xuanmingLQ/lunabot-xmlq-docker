@@ -9,15 +9,20 @@ from .asset import (
 HELP_DOC_PATH = "helps/sekai.md"
 
 
-def get_user_default_region(user_id: int, fallback: str) -> str:
+def get_user_default_region(user_id: int, fallback: str) -> SekaiRegion|None:
     """
     获取用户不填指令区服时的默认区服
     """
     user_id = str(user_id)
     default_regions = file_db.get("default_region", {})
-    return default_regions.get(user_id, fallback)
+    try:
+        # 这里的region_id可能为None，而get_region_by_id在region_id位None时会报错
+        # 所以用try except处理一下
+        return get_region_by_id(default_regions.get(user_id, fallback))
+    except RuntimeError:
+        return None
 
-def set_user_default_region(user_id: int, region: str):
+def set_user_default_region(user_id: int, region: SekaiRegion):
     """
     设置用户不填指令区服时的默认区服
     """
@@ -29,7 +34,7 @@ def set_user_default_region(user_id: int, region: str):
 
 @dataclass
 class SekaiHandlerContext(HandlerContext):
-    region: str = None
+    region: SekaiRegion = None
     original_trigger_cmd: str = None
     md: RegionMasterDataCollection = None
     rip: RegionRipAssetManger = None
@@ -39,9 +44,9 @@ class SekaiHandlerContext(HandlerContext):
     uid_arg: str = None
 
     @classmethod
-    def from_region(cls, region: str) -> 'SekaiHandlerContext':
+    def from_region(cls, region: str|SekaiRegion) -> 'SekaiHandlerContext':
         ctx = SekaiHandlerContext()
-        ctx.region = region
+        ctx.region = get_region_by_id(region)
         ctx.md = RegionMasterDataCollection(region)
         ctx.rip = RegionRipAssetManger.get(region)
         ctx.static_imgs = StaticImageRes()
@@ -52,24 +57,25 @@ class SekaiHandlerContext(HandlerContext):
     def block_region(self, key="", timeout=3*60, err_msg: str = None):
         if not self.create_from_region:
             return self.block(f"{self.region}_{key}", timeout=timeout, err_msg=err_msg)
-
+# 默认的ctx，主要用于 get static imgs
+DEFAULT_SK_CTX = SekaiHandlerContext.from_region('jp')
 
 class SekaiCmdHandler(CmdHandler):
-    DEFAULT_AVAILABLE_REGIONS = ALL_SERVER_REGIONS
+    DEFAULT_AVAILABLE_REGIONS = get_regions(RegionAttributes.ENABLE)
 
     def __init__(
         self, 
         commands: List[str],
-        regions: List[str] = None, 
+        regions: List[SekaiRegion] = None, 
         prefix_args: List[str] = None,
         parse_uid_arg: bool = True,
         **kwargs
     ):
-        self.available_regions = regions or self.DEFAULT_AVAILABLE_REGIONS
+        self.available_regions = get_regions_by_ids(regions) or self.DEFAULT_AVAILABLE_REGIONS
         self.prefix_args = sorted(prefix_args or [''], key=lambda x: len(x), reverse=True)
         all_region_commands = []
         for prefix in self.prefix_args:
-            for region in ALL_SERVER_REGIONS:
+            for region in get_regions(RegionAttributes.ENABLE):
                 for cmd in commands:
                     assert not cmd.startswith(f"/{region}{prefix}")
                     all_region_commands.append(cmd)
@@ -85,7 +91,7 @@ class SekaiCmdHandler(CmdHandler):
         with ProfileTimer("sekaihandler.parse_prefix"):
             cmd_region = None
             original_trigger_cmd = context.trigger_cmd
-            for region in ALL_SERVER_REGIONS:
+            for region in get_regions(RegionAttributes.ENABLE):
                 if context.trigger_cmd.strip().startswith(f"/{region}"):
                     cmd_region = region
                     context.trigger_cmd = context.trigger_cmd.replace(f"/{region}", "/")
@@ -159,7 +165,7 @@ async def _(ctx: HandlerContext):
 
     SET_HELP = f"""
 ---
-使用\"{ctx.trigger_cmd} 区服英文缩写\"设置默认区服，可用的区服有: {', '.join(ALL_SERVER_REGIONS)}
+使用\"{ctx.trigger_cmd} 区服英文缩写\"设置默认区服，可用的区服有: {', '.join(get_regions(RegionAttributes.ENABLE))}
 """.strip()
 
     if not args:
@@ -177,7 +183,7 @@ async def _(ctx: HandlerContext):
 {SET_HELP}
 """.strip())
         
-    assert_and_reply(args in ALL_SERVER_REGIONS, f"""
+    assert_and_reply(args in get_regions(RegionAttributes.ENABLE), f"""
 无效的区服参数: {args}
 {SET_HELP}
 """.strip())

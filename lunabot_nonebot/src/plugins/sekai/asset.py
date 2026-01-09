@@ -41,7 +41,7 @@ class RegionMasterDbManager:
     _all_mgrs = {}
     _update_hooks = []
 
-    def __init__(self, region: str, version_update_interval: timedelta):
+    def __init__(self, region: SekaiRegion, version_update_interval: timedelta):
         self.region = region
         self.version_update_interval = version_update_interval
         self.version_update_time = None
@@ -109,10 +109,9 @@ class RegionMasterDbManager:
     def get(cls, region: str) -> "RegionMasterDbManager":
         if region not in cls._all_mgrs:
             # 从本地配置中获取
-            regions = asset_config.get('masterdata')
-            assert region in regions , f"未找到 {region} 的 masterdata 配置"
+            # 如果region不存在或者没有配置 masterdata，会报错
             cls._all_mgrs[region] = RegionMasterDbManager(
-                region=region, 
+                region=get_region_by_id(region, RegionAttributes.MASTERDATA), 
                 # sources=[RegionMasterDbSource(**source) for source in region_config["sources"]],
                 version_update_interval=timedelta(minutes=asset_config.get("default_version_update_interval", 10))
             )
@@ -140,7 +139,7 @@ class MasterDataManager:
         if isinstance(index_keys, str):
             index_keys = [index_keys]
         if isinstance(index_keys, list):
-            index_keys = {region: index_keys for region in ALL_SERVER_REGIONS}
+            index_keys = {region: index_keys for region in get_regions(RegionAttributes.MASTERDATA)}
         self.index_keys = index_keys
 
     def get_cache_path(self, region: str) -> str:
@@ -348,7 +347,7 @@ class RegionMasterDataWrapper:
     """
     特定区服的MasterData资源包装器
     """
-    def __init__(self, region: str, name: str):
+    def __init__(self, region: SekaiRegion, name: str):
         self.region = region
         self.mgr = MasterDataManager.get(name)
     
@@ -424,6 +423,7 @@ class RegionMasterDataCollection:
     所有的MasterData资源集合
     """
     def __init__(self, region: str):
+        region = get_region_by_id(region)
         self._region = region
 
         self.musics                                                         = RegionMasterDataWrapper(region, "musics")
@@ -548,7 +548,7 @@ MasterDataManager.set_index_keys("levels", ['id', 'levelType'])
 
 # ================================ MasterData自定义下载 ================================ #
 
-COMPACT_DATA_REGIONS = [ region.id for region in REGIONS if region.compact_data ]
+COMPACT_DATA_REGIONS = get_regions(RegionAttributes.COMPACT_DATA)
 
 def convert_compact_data(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     enums = data.get('__ENUM__', {})
@@ -752,7 +752,7 @@ class RegionRipAssetManger:
     """
     _all_mgrs = {}
 
-    def __init__(self, region: str):
+    def __init__(self, region: SekaiRegion):
         self.region = region
         self.cache_dir = pjoin(DEFAULT_RIP_ASSET_DIR, region)
         self.cached_images: Dict[str, Image.Image] = {}
@@ -762,10 +762,8 @@ class RegionRipAssetManger:
     def get(cls, region: str) -> "RegionRipAssetManger":
         if region not in cls._all_mgrs:
             # 从本地配置中获取
-            regions = asset_config.get('asset')
-            assert region in regions, f"未找到 {region} 的 Asset 配置"
             cls._all_mgrs[region] = RegionRipAssetManger(
-                region=region, 
+                region=get_region_by_id(region, RegionAttributes.ASSET), 
                 # sources=[RegionRipAssetSource(**source) for source in region_config["sources"]]
             )
         return cls._all_mgrs[region]

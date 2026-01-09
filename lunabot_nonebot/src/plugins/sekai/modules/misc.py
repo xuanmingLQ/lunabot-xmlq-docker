@@ -19,10 +19,10 @@ from .card import (
     get_card_image,
     get_character_sd_image,
 )
-from ....api.game.misc import get_ad_result,get_ad_result_update_time
+from src.api.game.misc import get_ad_result,get_ad_result_update_time
 
-md_update_group_sub = SekaiGroupSubHelper("update", "MasterData更新通知", ALL_SERVER_REGIONS)
-ad_result_sub = SekaiUserSubHelper("ad", "广告奖励推送", ['jp'], hide=True)
+md_update_group_sub = SekaiGroupSubHelper("update", "MasterData更新通知", get_regions(RegionAttributes.ENABLE))
+ad_result_sub = SekaiUserSubHelper("ad", "广告奖励推送", get_regions(RegionAttributes.AD_RESULT), hide=True)
 
 
 # ======================= 指令处理 ======================= #
@@ -34,7 +34,7 @@ pjsk_update.check_cdrate(cd).check_wblist(gbl)
 @pjsk_update.handle()
 async def _(ctx: SekaiHandlerContext):
     mgr = RegionMasterDbManager.get(ctx.region)
-    msg = f"{get_region_name(ctx.region)}MasterData数据源"
+    msg = f"{ctx.region.name}MasterData数据源"
     for source in await mgr.update():
         msg += f"\n[{source.name}] {source.version}"
     return await ctx.asend_reply_msg(msg.strip())
@@ -189,7 +189,7 @@ async def _(ctx: SekaiHandlerContext):
     bd_infos.sort(key=lambda x: x['next'])
 
     # 判断是否五周年
-    is_fifth_anniv = is_fifth_anniversary(ctx.region)
+    is_fifth_anniv = ctx.region.fifth_anniversary
 
     if not args:
         info = bd_infos[0]
@@ -251,7 +251,7 @@ async def _(ctx: SekaiHandlerContext):
 
             with VSplit().set_sep(4).set_padding(16).set_content_align('l').set_item_align('l'):
                 with HSplit().set_sep(8).set_padding(0).set_content_align('l').set_item_align('l'):
-                    TextBox(f"({get_region_name(ctx.region)}) 距离下次生日还有{(next_time - datetime.now()).days}天", style1)
+                    TextBox(f"({ctx.region.name}) 距离下次生日还有{(next_time - datetime.now()).days}天", style1)
                     Spacer(w=16)
                     TextBox(f"应援色", style1)
                     TextBox(colorcode, TextStyle(DEFAULT_FONT, 20, ADAPTIVE_WB)) \
@@ -320,7 +320,8 @@ async def send_masterdata_update_notify(
     version: str, last_version: str,
     asset_version: str, last_asset_version: str,
 ):
-    region_name = get_region_name(region)
+    region = get_region_by_id(region)
+    region_name = region.name
 
     # 防止重复通知
     last_notified_version = file_db.get(f"last_notified_md_version_{region}", None)
@@ -345,8 +346,8 @@ async def send_masterdata_update_notify(
 # 广告奖励推送
 # @repeat_with_interval(5, '广告奖励推送', logger) # 不支持广告奖励
 async def msr_auto_push():
-    for region in ALL_SERVER_REGIONS:
-        region_name = get_region_name(region)
+    for region in get_regions(RegionAttributes.AD_RESULT):
+        region_name = region.name
         ctx = SekaiHandlerContext.from_region(region)
 
         if region not in ad_result_sub.regions: continue

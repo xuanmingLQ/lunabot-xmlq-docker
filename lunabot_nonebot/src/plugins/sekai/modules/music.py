@@ -22,10 +22,10 @@ from src.api.assets.music import get_music_alias
 import pandas as pd
 
 
-music_group_sub = SekaiGroupSubHelper("music", "新曲通知", ALL_SERVER_REGIONS)
-music_user_sub = SekaiUserSubHelper("music", "新曲@提醒", ALL_SERVER_REGIONS, related_group_sub=music_group_sub)
-apd_group_sub = SekaiGroupSubHelper("apd", "新APD通知", ALL_SERVER_REGIONS)
-apd_user_sub = SekaiUserSubHelper("apd", "新APD@提醒", ALL_SERVER_REGIONS, related_group_sub=apd_group_sub)
+music_group_sub = SekaiGroupSubHelper("music", "新曲通知", get_regions(RegionAttributes.ENABLE))
+music_user_sub = SekaiUserSubHelper("music", "新曲@提醒", get_regions(RegionAttributes.ENABLE), related_group_sub=music_group_sub)
+apd_group_sub = SekaiGroupSubHelper("apd", "新APD通知", get_regions(RegionAttributes.ENABLE))
+apd_user_sub = SekaiUserSubHelper("apd", "新APD@提醒", get_regions(RegionAttributes.ENABLE), related_group_sub=apd_group_sub)
 
 music_name_retriever = get_text_retriever(f"music_name") 
 
@@ -395,7 +395,7 @@ def remove_music_alias_for_search(mid: int, alias: str):
 # 根据参数查询曲目
 async def search_music(ctx: SekaiHandlerContext, query: str, options: MusicSearchOptions = None) -> MusicSearchResult:
     global alias_mid_for_search
-    region_name = get_region_name(ctx.region)
+    region_name = ctx.region.name
 
     options = options or MusicSearchOptions()
 
@@ -728,7 +728,7 @@ async def get_valid_musics(ctx: SekaiHandlerContext, leak=False) -> List[Dict]:
 
 # 在所有服务器根据id检索歌曲（优先在ctx.region)
 async def find_music_by_id_all_region(ctx: SekaiHandlerContext, mid: int) -> Optional[Dict]:
-    regions = ALL_SERVER_REGIONS.copy()
+    regions = get_regions(RegionAttributes.ENABLE).copy()
     regions.remove(ctx.region)
     regions.insert(0, ctx.region)
     for region in regions:
@@ -1809,7 +1809,7 @@ async def _(ctx: SekaiHandlerContext):
             m for m in await ctx.md.musics.get() 
             if datetime.fromtimestamp(m['publishedAt'] / 1000) > datetime.now()
         ]
-        assert_and_reply(leak_musics, f"当前{get_region_name(ctx.region)}没有leak曲目")
+        assert_and_reply(leak_musics, f"当前{ctx.region.name}没有leak曲目")
         leak_musics = sorted(leak_musics, key=lambda x: (x['publishedAt'], x['id']))
         return await ctx.asend_reply_msg(await get_image_cq(
             await compose_music_brief_list_image(ctx, leak_musics, hide_too_far=True),
@@ -2086,8 +2086,8 @@ async def new_music_notify():
     notified_musics = file_db.get("notified_new_musics", {})
     updated = False
 
-    for region in ALL_SERVER_REGIONS:
-        region_name = get_region_name(region)
+    for region in get_regions(RegionAttributes.ENABLE):
+        region_name = region.name
         ctx = SekaiHandlerContext.from_region(region)
         musics = await ctx.md.musics.get()
         now = datetime.now()
@@ -2173,8 +2173,8 @@ async def new_apd_notify():
     SEND_LIMIT = 5
     total_send = 0
 
-    for region in ALL_SERVER_REGIONS:
-        region_name = get_region_name(region)
+    for region in get_regions(RegionAttributes.ENABLE):
+        region_name = region.name
         ctx = SekaiHandlerContext.from_region(region)
         musics = await ctx.md.musics.get()
 
