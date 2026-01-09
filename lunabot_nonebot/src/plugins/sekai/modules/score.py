@@ -195,9 +195,9 @@ async def compose_score_control_image(ctx: SekaiHandlerContext, target_point: in
     style3 = TextStyle(font=DEFAULT_BOLD_FONT, size=16, color=(200, 50, 50))
     
     with Canvas(bg=SEKAI_BLUE_BG).set_padding(BG_PADDING) as canvas:
-        with VSplit().set_content_align('lt').set_item_align('lt').set_sep(8).set_item_bg(roundrect_bg()):
+        with VSplit().set_content_align('lt').set_item_align('lt').set_sep(8).set_item_bg(roundrect_bg()) as vs:
             # 标题
-            with VSplit().set_content_align('lt').set_item_align('lt').set_sep(8).set_padding(8):
+            with VSplit().set_content_align('lt').set_item_align('lt').set_sep(8).set_padding(8) as title_vs:
                 with HSplit().set_content_align('lb').set_item_align('lb').set_sep(4):
                     ImageBox(music_cover, size=(20, 20), use_alphablend=False)
                     TextBox(f"【{music_id}】{music_title} (任意难度)", style1)
@@ -208,14 +208,14 @@ async def compose_score_control_image(ctx: SekaiHandlerContext, target_point: in
                     TextBox(f"PT系数非100有误差风险，不推荐控较大PT", style3)
                 if target_point > 3000:
                     TextBox(f"目标PT过大可能存在误差，推荐以多次控分", style3)
-                TextBox(f"控分教程：1. 选取表中一个活动加成和体力", style1)
-                TextBox(f"2. 单人游玩歌曲到对应分数范围内放置", style1)
+                TextBox(f"控分教程: 1.选取表中一个加成和体力", style1)
+                TextBox(f"2.单人游玩歌曲到对应分数范围内放置", style1)
                 TextBox(f"友情提醒：控分前请核对加成和体力设置", style3)
-                TextBox(f"特别注意核对加成是否多了0.5", style3)
-                TextBox(f'若有上传抓包，可用"/控分组卡"加速配队', style1)
+                TextBox(f"特别注意核对加成不能有小数", style3)
+                TextBox(f'若有上传抓包可用"/控分组卡"加速配队', style1)
             
             # 数据
-            with HSplit().set_content_align('lt').set_item_align('lt').set_sep(8).set_omit_parent_bg(True).set_item_bg(roundrect_bg()):
+            with HSplit().set_content_align('lt').set_item_align('lt').set_sep(8).set_omit_parent_bg(True).set_item_bg(roundrect_bg()) as data_hs:
                 for i in range(0, len(valid_scores), SHOW_SEG_LEN):
                     scores = valid_scores[i:i + SHOW_SEG_LEN]
                     gh, gw1, gw2, gw3, gw4 = 20, 54, 48, 90, 90
@@ -238,12 +238,21 @@ async def compose_score_control_image(ctx: SekaiHandlerContext, target_point: in
                                 TextBox(f"{score_min}",         style2).set_bg(bg).set_size((gw3, gh)).set_content_align('r')
                                 TextBox(f"{score_max}",         style2).set_bg(bg).set_size((gw4, gh)).set_content_align('r')
 
+    # 如果数据panel比较多，重新调整标题文字的布局
+    if len(data_hs.items) > 1:
+        vs.remove_item(title_vs)
+        title_grid = Grid(col_count=len(data_hs.items), hsep=4, vsep=4).set_content_align('lt').set_item_align('lt').set_padding(8)
+        title_grid.set_items(title_vs.items)
+        vs.add_item(title_grid, index=0)
+
     add_watermark(canvas)
     return await canvas.get_img()
 
 # 查找自定义房间控分获取指定活动PT的所有可能(pt系数,加成)
 def get_custom_room_valid_scores(target_point: int, limit: int = None) -> List[tuple[int, int]]:
     csv_path = f"{SEKAI_DATA_DIR}/custom_room_pt.csv"
+    if not os.path.isfile(csv_path):
+        raise ReplyException("未配置自定义房间控分数据文件，无法使用100以下PT控分")
     df = pd.read_csv(csv_path)
     ret: List[tuple[int, int]] = []
     # df的第一列是歌曲pt系数，之后每一列的列名是加成，值是对应的pt

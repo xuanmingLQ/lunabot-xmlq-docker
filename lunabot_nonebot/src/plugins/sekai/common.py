@@ -29,9 +29,6 @@ class CharacterNicknameData:
 
 _character_nickname_data = CharacterNicknameData()
 
-# 因为这个ALL_SERVER_REGIONS引用太多，就先不删了
-ALL_SERVER_REGIONS = get_regions(RegionAttributes.ENABLE)
-
 UNITS = [
     "light_sound",
     "idol",

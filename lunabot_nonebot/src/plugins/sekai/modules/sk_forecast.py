@@ -247,7 +247,7 @@ FORECAST_DATA_GET_FUNCS = {
 _forecast_locks: dict[str, asyncio.Lock] = {
     source + region: asyncio.Lock() 
     for source in FORECAST_DATA_GET_FUNCS.keys() 
-    for region in ALL_SERVER_REGIONS
+    for region in get_regions(RegionAttributes.ENABLE)
 }
 _forecast_last_error_time: dict[str, datetime] = {}
 
@@ -325,7 +325,7 @@ async def get_forecast_data(region: str, event_id: int, chapter_id: int | None =
 
 @repeat_with_interval(60, '更新预测数据', logger, every_output=False, error_limit=1)
 async def _update_forecast_data():
-    for region in ALL_SERVER_REGIONS:
+    for region in REGIONS:
         ctx = SekaiHandlerContext.from_region(region)
 
         event = await get_current_event(ctx)

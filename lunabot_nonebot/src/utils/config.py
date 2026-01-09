@@ -53,7 +53,7 @@ class _GlobalConfigState:
         cls._callbacks[name].append(func)
 
     @classmethod
-    async def trigger_callbacks(cls, name: str):
+    def trigger_callbacks(cls, name: str):
         """触发回调，支持同步函数"""
         if name in cls._callbacks:
             current_data = cls.get_data(name)

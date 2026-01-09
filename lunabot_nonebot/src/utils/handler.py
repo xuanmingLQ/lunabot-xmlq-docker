@@ -443,19 +443,26 @@ async def get_image_cq(
             return f"[图片加载失败:{truncate(str(e), 16)}]"
         raise e
 
-async def download_napcat_file(ftype: str, file: str) -> str:
+async def download_bot_file(bot: Bot, ftype: str, file: str) -> str:
     """
-    下载napcat文件，返回本地路径
+    下载onebot端文件，返回本地路径
     """
-    raise NotImplementedError("该函数已被弃用")
+    if ftype == 'image':
+        ret = await bot.call_api('get_image', **{'file': file})
+    elif ftype == 'record':
+        ret = await bot.call_api('get_record', **{'file': file, 'out_format': 'wav'})
+    else:
+        ret = await bot.call_api('get_file', **{'file': file})
+    return ret['file']
 
 class TempBotOrInternetFilePath:
     """
-    用于临时下载网络文件或bot(napcat)文件的上下文管理器
+    用于临时下载网络文件或bot文件的上下文管理器
     """
-    def __init__(self, ftype: str, file: str):
+    def __init__(self, ftype: str, file: str, bot: Bot = None):
         self.ftype = ftype
         self.file = file
+        self.bot = bot
         self.ext = file.split('.')[-1]
 
     async def __aenter__(self) -> str:
@@ -470,7 +477,9 @@ class TempBotOrInternetFilePath:
             path = pjoin(get_data_path('utils/tmp'), rand_filename(self.ext))
             await download_file(self.file, path)
         else:
-            path = await download_napcat_file(self.ftype, self.file)
+            if not self.bot:
+                raise Exception('下载napcat文件但没有提供bot对象')
+            path = await download_bot_file(self.bot, self.ftype, self.file)
         self.path = path
         return path
     

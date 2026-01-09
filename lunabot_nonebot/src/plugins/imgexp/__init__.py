@@ -19,7 +19,7 @@ search.check_cdrate(cd).check_wblist(gbl)
 @search.handle()
 async def _(ctx: HandlerContext):
     img_data = await ctx.aget_image_datas(return_first=True)
-    img, results = await search_image(img_data['url'], img_data.get('file_size', 0))
+    img, results = await search_image(img_data['url'], int(img_data.get('file_size', 0)))
     msg = ""
     for result in results:
         if result.results:

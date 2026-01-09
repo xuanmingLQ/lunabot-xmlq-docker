@@ -33,9 +33,9 @@ https://github.com/NeuraXmy/lunabot.git
 
 #### 6. 可选的，打开autochat
 
-- 自己填充 lunabot_nonebot/config/llm/providers 中的内容，或者写自己的供应商。
+- 自己填充 lunabot_nonebot/config/llm/providers 中的内容，或者添加其它供应商。
 - 在 docker-compose.yaml 中将 autochat 服务取消注释。然后运行docker compose。
 - 在 autochat/config/chat/autochat.yaml 中调整chat.willing相关内容，在其中的group_scale中填入要开启autochat的群聊，比例越高bot的回复意愿越高。rpc需要保持与lunabot_nonebot/config/chat/autochat.yaml中的一致。
-- 启动后，在要开启autochat的群聊中用管理员发送 /autochat on。
+- 启动后，在要开启autochat的群聊中用管理员发送 `/chat on` 和 '/autochat on'。
 
 

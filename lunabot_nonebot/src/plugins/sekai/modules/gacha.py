@@ -3,6 +3,11 @@ from ..common import *
 from ..handler import *
 from ..asset import *
 from ..draw import *
+from .profile import (
+    get_detailed_profile,
+    get_detailed_profile_card_filter,
+    get_detailed_profile_card,
+)
 from .card import (
     get_card_full_thumbnail,
     get_card_image,
@@ -50,6 +55,7 @@ GACHA_RARE_NAMES = {
 
 @dataclass
 class GachaBehavior:
+    id: int
     type: str
     spin_count: int
     cost_type: Optional[int]
@@ -141,8 +147,8 @@ def gachas_map_fn(gachas):
             type=item['gachaType'],
             summary=item['gachaInformation'].get('summary', ""),
             desc=item['gachaInformation'].get('description', ""),
-            start_at=datetime.fromtimestamp(item['startAt'] / 1000),
-            end_at=datetime.fromtimestamp(item['endAt'] / 1000 + 1),
+            start_at=datetime.fromtimestamp(item['startAt'] // 1000),
+            end_at=datetime.fromtimestamp(item['endAt'] // 1000 + 1),
             asset_name=item['assetbundleName'],
             ceilitem_id=item.get('gachaCeilItemId'),
         )
@@ -154,6 +160,7 @@ def gachas_map_fn(gachas):
             ))
         for behavior in item['gachaBehaviors']:
             g.behaviors.append(GachaBehavior(
+                id=behavior['id'],
                 type=behavior['gachaBehaviorType'],
                 spin_count=behavior['spinCount'],
                 cost_type=behavior.get('costResourceType'),
@@ -174,6 +181,24 @@ def gachas_map_fn(gachas):
             ))
         ret.append(g)
     return ret
+
+# 获取抽卡行为文本描述
+def get_gacha_behavior_text(behavior: GachaBehavior | None) -> str:
+    text = "未知类型"
+    if not behavior:
+        return text
+    match behavior.type:
+        case 'normal': text = "普通"
+        case 'over_rarity_4_once': text = "保底4星"
+        case 'over_rarity_3_once': text = "保底3星"
+        case 'once_a_day': text = "每日"
+        case 'once_a_week': text = "每周"
+    if behavior.spin_count == 1:    text += "/单抽"
+    elif behavior.spin_count == 10: text += "/十连"
+    if behavior.colorful_pass:  text = "月卡" + text
+    if behavior.execute_limit:
+        text += f"(限{behavior.execute_limit}次)"
+    return text
 
 # 获取稀有度图片
 async def get_rarity_img(ctx: SekaiHandlerContext, rarity: str) -> Optional[Image.Image]:
@@ -483,18 +508,7 @@ async def compose_gacha_detail_image(ctx: SekaiHandlerContext, gacha: Gacha):
                     # 合并相同类型不同消耗
                     behaviors: Dict[str, List[GachaBehavior]] = {}
                     for behavior in gacha.behaviors:
-                        text = "未知"
-                        match behavior.type:
-                            case 'normal': text = "普通"
-                            case 'over_rarity_4_once': text = "保底4星"
-                            case 'over_rarity_3_once': text = "保底3星"
-                            case 'once_a_day': text = "每日"
-                            case 'once_a_week': text = "每周"
-                        if behavior.spin_count == 1:    text += "/单抽"
-                        elif behavior.spin_count == 10: text += "/十连"
-                        if behavior.colorful_pass:  text = "月卡" + text
-                        if behavior.execute_limit:
-                            text += f"(限{behavior.execute_limit}次)"
+                        text = get_gacha_behavior_text(behavior)
                         behaviors.setdefault(text, []).append(behavior)
                     with Grid(col_count=2).set_padding(0).set_sep(8, 8).set_content_align('l').set_item_align('l'):
                         for text, behavior_list in behaviors.items():
@@ -652,6 +666,215 @@ async def get_gacha_by_event_id(ctx: SekaiHandlerContext, eid: int) -> Gacha:
     cid = event_card_ids[min(2, len(event_card_ids)-1)]
     return await get_gacha_by_card_id(ctx, cid)
 
+# 合成抽卡记录图片
+async def compose_gacha_record_image(ctx: SekaiHandlerContext, qid: int, spec_gids: list[int] | None = None):
+    profile, err_msg = await get_detailed_profile(
+        ctx, qid, raise_exc=True,
+        filter=get_detailed_profile_card_filter('userCards', 'userGachas'),
+    )
+
+    # 数据获取
+    assert_and_reply(profile.get('userGachas'), "没有找到抽卡记录，可能是最近没有抽过卡，或者Suite数据源未提供userGachas字段")
+    ugachas = profile.get('userGachas', [])
+
+    # 统计信息
+    with ProfileTimer('gacha_record.records'):
+        records: dict[int, dict] = {}
+        for ug in ugachas:
+            gacha_id, behavior_id = ug['gachaId'], ug['gachaBehaviorId']
+            count, last_spin_at = ug.get('count', 0), ug.get('lastSpinAt')
+
+            if not count:
+                continue
+            if spec_gids and gacha_id not in spec_gids:
+                continue
+            gacha: Gacha = await ctx.md.gachas.find_by_id(gacha_id)
+            if not gacha:
+                logger.warning(f"找不到卡池{ctx.region.upper()}-{gacha_id}，跳过该抽卡记录")
+                continue
+
+            records.setdefault(gacha_id, {
+                'gacha': gacha,
+                'name': gacha.name,
+                'start_at': gacha.start_at,
+                'end_at': gacha.end_at,
+                'behaviors': {},
+            })
+            if last_spin_at:
+                last_spin_at = datetime.fromtimestamp(last_spin_at // 1000)
+                records[gacha_id]['last_spin_at'] = max(records[gacha_id].get('last_spin_at', datetime.min), last_spin_at)
+
+            behavior: GachaBehavior = find_by_predicate(gacha.behaviors, lambda b: b.id == behavior_id)
+            if not behavior:
+                logger.warning(f"找不到卡池{ctx.region.upper()}-{gacha_id}的抽卡行为{behavior_id}，跳过该抽卡记录")
+                continue
+
+            behavior_text = get_gacha_behavior_text(behavior)
+            if behavior_text not in records[gacha_id]['behaviors']:
+                records[gacha_id]['behaviors'][behavior_text] = ({
+                    'total': 0,
+                    'costs': {},
+                })
+
+            records[gacha_id]['behaviors'][behavior_text]['total'] += count
+            if behavior.cost_type:
+                res_key = (behavior.cost_type, behavior.cost_id)
+                if res_key not in records[gacha_id]['behaviors'][behavior_text]['costs']:
+                    res_icon = await get_res_icon(ctx, behavior.cost_type, behavior.cost_id)
+                    res_text = "(付费)" if "paid" in behavior.cost_type else None
+                    records[gacha_id]['behaviors'][behavior_text]['costs'][res_key] = {
+                        'res_icon': res_icon,
+                        'res_text': res_text,
+                        'quantity': 0,
+                    }
+                records[gacha_id]['behaviors'][behavior_text]['costs'][res_key]['quantity'] += behavior.cost_quantity * count
+
+    # 查找卡池可能的NEW卡
+    with ProfileTimer('gacha_record.cards'):
+        # 处理每个卡池的cards字典加速查找
+        gcards_dict: dict[int, dict[int, GachaCard]] = {}
+        for gid, gdata in records.items():
+            gacha: Gacha = gdata['gacha']
+            gcards_dict[gid] = { c.id: c for c in gacha.cards }
+
+        # 查找每个卡牌的可能卡池
+        ucards = profile.get('userCards', [])
+        ucard_possible_gacha_info: dict[int, list[dict]] = {}
+        ucard_create_at: dict[int, datetime] = {}
+        for uc in ucards:
+            card = await ctx.md.cards.find_by_id(uc['cardId'])
+            if not card:
+                continue
+            if card['cardRarityType'] in ('rarity_1', 'rarity_2'):
+                continue
+
+            cid = uc['cardId']
+            created_at = datetime.fromtimestamp(uc['createdAt'] // 1000)
+            ucard_create_at[cid] = created_at
+            for rec in records.values():
+                start_at = rec['start_at']
+                end_at = rec.get('last_spin_at', rec['end_at'])
+                if created_at < start_at or created_at > end_at:
+                    continue
+                gid = rec['gacha'].id
+                if gcard := gcards_dict[gid].get(cid):
+                    # 估计一个卡牌属于该卡池的可能性
+                    weight = 0
+                    if created_at == end_at: # 抽卡时间等于最后抽卡时间，可以肯定是
+                        weight += 1e18
+                    elif gcard.is_pickup: # 当期UP卡，可能性极大
+                        weight += 1e9
+                    else:   # 优先选择时间较短的一个卡池
+                        weight += -(end_at - start_at).total_seconds()
+                    ucard_possible_gacha_info.setdefault(cid, []).append((gid, weight))
+
+        # 选择可能性最大的卡池作为NEW卡来源
+        for cid, info in ucard_possible_gacha_info.items():
+            if not info:
+                continue
+            info.sort(key=lambda x: x[1], reverse=True)
+            gid, weight = info[0]
+            determined = False
+            if len(info) == 1 or weight > info[1][1] * 1e6:
+                determined = True
+            records[gid].setdefault('cards', []).append((cid, determined, ucard_create_at[cid]))
+
+    # 清理记录
+    for gid in list(records.keys()):
+        gdata = records[gid]
+        cards = gdata.get('cards')
+        for btext in list(gdata['behaviors'].keys()):
+            bdata = gdata['behaviors'][btext]
+            # 删除次数为0的
+            if bdata['total'] == 0: 
+                del gdata['behaviors'][btext]
+                continue
+            # 如果没有new卡，删除免费抽卡
+            if not cards and not any(cost['quantity'] > 0 for cost in bdata['costs'].values()):  
+                del gdata['behaviors'][btext]
+                continue
+        # 删除没有抽卡行为且没有new卡的池子
+        if not cards and not any(bdata['total'] > 0 for bdata in gdata['behaviors'].values()):
+            del records[gid]
+            continue
+
+    assert_and_reply(records, "没有找到对应的抽卡记录")
+
+    MAX_DRAW_COUNT = 50
+    records = sorted([(gid, gdata) for gid, gdata in records.items() ], key=lambda x: x[1]['end_at'], reverse=True)
+    hide_num = max(0, len(records) - MAX_DRAW_COUNT)
+    records = records[:MAX_DRAW_COUNT]
+
+    # 获取图片资源
+    card_ids = set()
+    for gid, gdata in records:
+        card_ids.update([cid for cid, _, _ in gdata.get('cards', [])])
+    card_ids = list(card_ids)
+    card_thumbs = await batch_gather(*[get_card_full_thumbnail(ctx, cid) for cid in card_ids])
+    card_thumbs = { cid: thumb for cid, thumb in zip(card_ids, card_thumbs) }
+    
+    gacha_ids = [gid for gid, _ in records]
+    gacha_logos = await batch_gather(*[get_gacha_logo(ctx, gid) for gid in gacha_ids])
+    gacha_logos = { gid: banner for gid, banner in zip(gacha_ids, gacha_logos) }
+
+    style1 = TextStyle(font=DEFAULT_BOLD_FONT, size=18, color=(0, 0, 0))
+    style2 = TextStyle(font=DEFAULT_FONT, size=16, color=(50, 50, 50))
+    style3 = TextStyle(font=DEFAULT_FONT, size=16, color=(100, 0, 0))
+
+    with Canvas(bg=SEKAI_BLUE_BG).set_padding(BG_PADDING) as canvas:
+        with VSplit().set_content_align('lt').set_item_align('lt').set_sep(16):
+            await get_detailed_profile_card(ctx, profile, err_msg)
+
+            with VSplit().set_content_align('l').set_item_align('l').set_sep(16).set_item_bg(roundrect_bg()):
+                msg = "上传时进行增量更新，未上传的记录将丢失\n"
+                msg += "NEW卡通过抽卡时间与获得时间推测，可能不准确\n"
+                msg += "未出NEW的免费抽卡(月卡单抽)不会显示"
+                TextBox(msg, style1, use_real_line_count=True).set_padding(12)
+
+                for gid, gdata in records:
+                    with VSplit().set_content_align('lt').set_item_align('lt').set_sep(8).set_padding(16):
+                        # 卡池信息
+                        with HSplit().set_content_align('l').set_item_align('l').set_sep(8):
+                            ImageBox(gacha_logos.get(gid), size=(None, 80))
+                            with VSplit().set_content_align('l').set_item_align('l').set_sep(4):
+                                TextBox(f"【{gid}】{gdata['name']}", style1, line_count=2).set_w(300)
+                                TextBox(f"S {gdata['start_at'].strftime('%Y-%m-%d %H:%M')}", style2)
+                                TextBox(f"T {gdata['end_at'].strftime('%Y-%m-%d %H:%M')}", style2)
+                        # 抽卡记录
+                        for btext, bdata in gdata['behaviors'].items():
+                            with VSplit().set_content_align('l').set_item_align('l').set_sep(8).set_padding(6).set_bg(roundrect_bg()):
+                                with HSplit().set_content_align('l').set_item_align('l').set_sep(4):
+                                    TextBox(f"{btext} 共{bdata['total']}次  ", style2)
+                                    for _, cost in bdata['costs'].items():
+                                        ImageBox(cost['res_icon'], size=(None, 30))
+                                        if cost['res_text']:
+                                            TextBox(cost['res_text'], style2)
+                                        TextBox(f"x{cost['quantity']} ", style2)
+                        # NEW卡
+                        if cards := gdata.get('cards', []):
+                            cards.sort(key=lambda x: x[2])  # 按获得时间排序
+                            if len(cards) <= 7:
+                                max_col_count = 7
+                                size, sep = 64, 6
+                            else:
+                                max_col_count = 12
+                                size, sep = 40, 4
+                            with Grid(col_count=min(len(cards), max_col_count)).set_content_align('l').set_item_align('l') \
+                                .set_sep(sep, sep).set_padding(4):
+                                for cid, determined, _ in cards:
+                                    with Frame().set_content_align('rt'):
+                                        ImageBox(card_thumbs[cid], size=(size, size), shadow=True)
+                                        if not determined:
+                                            qs = int(size * 0.3)
+                                            TextBox("?", TextStyle(DEFAULT_BOLD_FONT, int(qs * 0.8), BLACK)).set_size((qs, qs)) \
+                                                .set_bg(RoundRectBg((255, 255, 255, 200), radius=qs // 2)).set_content_align('c')
+
+                if hide_num:
+                    TextBox(f"{hide_num}条抽卡记录已隐藏，可指定卡池ID查看", style2, use_real_line_count=True).set_padding(8)
+
+    add_watermark(canvas)
+    return await canvas.get_img()
+
 
 # ======================= 指令处理 ======================= #
         
@@ -685,3 +908,27 @@ async def _(ctx: SekaiHandlerContext):
         low_quality=True,
     ))
 
+
+# 抽卡记录
+pjsk_gacha_record = SekaiCmdHandler([
+    "/pjsk gacha record", "/抽卡记录", "/抽卡历史",
+])
+pjsk_gacha_record.check_cdrate(cd).check_wblist(gbl)
+@pjsk_gacha_record.handle()
+async def _(ctx: SekaiHandlerContext):
+    args = ctx.get_args().strip()
+    spec_gids: list[int] | None = None
+    if args:
+        spec_gids = []
+        for part in args.split():
+            try:
+                gid = int(part)
+            except ValueError:
+                raise ReplyException(f"卡池ID参数错误: {part}")
+            assert_and_reply(await ctx.md.gachas.find_by_id(gid), f"找不到卡池{ctx.region.upper()}-{gid}")
+            spec_gids.append(gid)
+
+    return await ctx.asend_reply_msg(await get_image_cq(
+        await compose_gacha_record_image(ctx, ctx.user_id, spec_gids),
+        low_quality=True,
+    ))

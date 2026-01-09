@@ -136,12 +136,12 @@ async def get_mysekai_info(
         try:
             uid = get_player_bind_id(ctx)
         except Exception as e:
-            logger.info(f"获取 {qid} mysekai抓包数据失败: 未绑定游戏账号")
+            logger.info(f"获取 {qid} {ctx.region} mysekai抓包数据失败: 未绑定游戏账号")
             raise e
         try:
             mysekai_info = await get_mysekai(ctx.region, uid, filter)
         except HttpError as e:
-            logger.info(f"获取 {qid} mysekai抓包数据失败: {get_exc_desc(e)}")
+            logger.info(f"获取 {qid} {ctx.region} mysekai抓包数据失败: {get_exc_desc(e)}")
             if e.status_code == 404:
                 msg = f"获取你的{ctx.region.name}Mysekai抓包数据失败，发送\"/抓包\"指令可获取帮助\n"
                 # if local_err is not None: msg += f"[本地数据] {local_err}\n"
@@ -152,27 +152,27 @@ async def get_mysekai_info(
         except ApiError as e:
             raise ReplyException(f"获取 {qid} mysekai抓包数据失败：{e.msg}")
         except Exception as e:
-            logger.info(f"获取 {qid} mysekai抓包数据失败: {get_exc_desc(e)}")
+            logger.info(f"获取 {qid} {ctx.region} mysekai抓包数据失败: {get_exc_desc(e)}")
             raise e
 
         if not mysekai_info:
-            logger.info(f"获取 {qid} mysekai抓包数据失败: 找不到ID为 {uid} 的玩家")
+            logger.info(f"获取 {qid} {ctx.region} mysekai抓包数据失败: 找不到ID为 {uid} 的玩家")
             raise ReplyException(f"找不到ID为 {uid} 的玩家")
         
         # 缓存数据（目前已不缓存）
         cache_path = f"{SEKAI_PROFILE_DIR}/mysekai_cache/{ctx.region}/{uid}.json"
         # if not upload_time_only:
         #     dump_json(mysekai_info, cache_path)
-        logger.info(f"获取 {qid} mysekai抓包数据成功，数据已缓存")
+        logger.info(f"获取 {qid} {ctx.region} mysekai抓包数据成功，数据已缓存")
 
     except Exception as e:
         # 获取失败的情况，尝试读取缓存
         if cache_path and os.path.exists(cache_path):
             mysekai_info = load_json(cache_path)
-            logger.info(f"从缓存获取 {qid} mysekai抓包数据")
+            logger.info(f"从缓存获取 {qid} {ctx.region} mysekai抓包数据")
             return mysekai_info, str(e) + "(使用先前的缓存数据)"
         else:
-            logger.info(f"未找到 {qid} 的缓存mysekai抓包数据")
+            logger.info(f"未找到 {qid} 的缓存{ctx.region} mysekai抓包数据")
 
         if raise_exc:
             raise e
@@ -1612,7 +1612,7 @@ async def compose_mysekai_musicrecord_image(ctx: SekaiHandlerContext, qid: int, 
                 await get_mysekai_info_card(ctx, mysekai_info, basic_profile, pmsg)
 
                 a, b = obtained_num, total_num
-                TextBox(f"总收集进度: {a}/{b} ({a/b*100:.1f}%)", TextStyle(font=DEFAULT_BOLD_FONT, size=20, color=(100, 100, 100))) \
+                TextBox(f"总收集进度: {a}/{b} ({a/b*100:.1f}%)", TextStyle(font=DEFAULT_BOLD_FONT, size=20, color=(25, 25, 25))) \
                     .set_padding(16).set_bg(roundrect_bg())
 
                 with VSplit().set_content_align('lt').set_item_align('lt').set_sep(16).set_item_bg(roundrect_bg()):
@@ -1624,9 +1624,9 @@ async def compose_mysekai_musicrecord_image(ctx: SekaiHandlerContext, qid: int, 
                                     tag_icon = get_unit_icon(MUSIC_TAG_UNIT_MAP[tag])
                                     ImageBox(tag_icon, size=(None, 30))
                                 else:
-                                    TextBox("其他", TextStyle(font=DEFAULT_HEAVY_FONT, size=20, color=(100, 100, 100)))
+                                    TextBox("其他", TextStyle(font=DEFAULT_HEAVY_FONT, size=20, color=(50, 50, 50)))
                                 a, b = category_obtained_num[tag], category_total_num[tag]
-                                TextBox(f"{a}/{b} ({a/b*100:.1f}%)", TextStyle(font=DEFAULT_BOLD_FONT, size=16, color=(100, 100, 100)))
+                                TextBox(f"{a}/{b} ({a/b*100:.1f}%)", TextStyle(font=DEFAULT_BOLD_FONT, size=16, color=(50, 50, 50)))
 
                             # 歌曲列表
                             sz = 30
@@ -1636,7 +1636,7 @@ async def compose_mysekai_musicrecord_image(ctx: SekaiHandlerContext, qid: int, 
                                         with Frame():
                                             ImageBox(cover, size=(sz, sz))
                                             if mid not in mid_obtained_at:
-                                                Spacer(w=sz, h=sz).set_bg(FillBg((0,0,0,120)))
+                                                Spacer(w=sz, h=sz).set_bg(FillBg((0,0,0,150)))
                                         if show_id:
                                             TextBox(f"{mid}", TextStyle(font=DEFAULT_FONT, size=10, color=(50, 50, 50)))
 

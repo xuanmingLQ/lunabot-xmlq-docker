@@ -13,6 +13,7 @@ ASSET_DEBUG_CFG = asset_config.item('debug')
 DEFAULT_VERSION = "0.0.0.0"
 MASTER_DB_CACHE_DIR = f"{SEKAI_ASSET_DIR}/masterdata/"
 DEFAULT_INDEX_KEYS = ['id']
+DEFAULT_SORT_KEYS = []
 
 def get_multi_keys(data: dict, keys: List[Any]):
     for key in keys:
@@ -109,10 +110,9 @@ class RegionMasterDbManager:
     def get(cls, region: str) -> "RegionMasterDbManager":
         if region not in cls._all_mgrs:
             # 从本地配置中获取
-            # 如果region不存在或者没有配置 masterdata，会报错
+            
             cls._all_mgrs[region] = RegionMasterDbManager(
                 region=get_region_by_id(region, RegionAttributes.MASTERDATA), 
-                # sources=[RegionMasterDbSource(**source) for source in region_config["sources"]],
                 version_update_interval=timedelta(minutes=asset_config.get("default_version_update_interval", 10))
             )
         return cls._all_mgrs[region]
@@ -132,7 +132,9 @@ class MasterDataManager:
         self.map_fn = {}
         self.download_fn = {}
         self._set_index_keys(DEFAULT_INDEX_KEYS)
-        self.indices: Dict[str, Dict[str, Dict[str, Any]]] = {}    # indexes[region]['id'][id] = [item1, item2, ...]
+        self.indexed_data: Dict[str, Dict[str, Dict[str, Any]]] = {}    # indexed_data[region]['id'][id] = [item1, item2, ...]
+        self._set_sort_keys(DEFAULT_SORT_KEYS)
+        self.sorted_data: Dict[str, Dict[str, List[Any]]] = {}          # sorted_data[region][key] = [item1, item2, ...]
         self.lock = asyncio.Lock()
 
     def _set_index_keys(self, index_keys: Union[str, List[str], Dict[str, List[str]]]):
@@ -142,11 +144,18 @@ class MasterDataManager:
             index_keys = {region: index_keys for region in get_regions(RegionAttributes.MASTERDATA)}
         self.index_keys = index_keys
 
+    def _set_sort_keys(self, sort_keys: Union[str, List[str], Dict[str, List[str]]]):
+        if isinstance(sort_keys, str):
+            sort_keys = [sort_keys]
+        if isinstance(sort_keys, list):
+            sort_keys = {region: sort_keys for region in get_regions(RegionAttributes.MASTERDATA)}
+        self.sort_keys = sort_keys
+
     def get_cache_path(self, region: str) -> str:
         create_folder(pjoin(MASTER_DB_CACHE_DIR, region))
         return pjoin(MASTER_DB_CACHE_DIR, region, f"{self.name}.json")
 
-    def _build_indices(self, region: str):
+    def _build_indexed_data(self, region: str):
         try:
             if self.data.get(region, None) is None:
                 logger.warning(f"MasterData [{region}.{self.name}] 构建索引发生在数据加载前")
@@ -154,7 +163,7 @@ class MasterDataManager:
             if not self.data[region] or not isinstance(self.data[region], list):
                 return
             logger.debug(f"MasterData [{region}.{self.name}] 开始构建索引")
-            self.indices[region] = {}
+            self.indexed_data[region] = {}
             for key in self.index_keys.get(region, []):
                 ind = {}
                 for item in self.data[region]:
@@ -163,10 +172,27 @@ class MasterDataManager:
                     k = item[key]
                     ind.setdefault(k, []).append(item)
                 if ind:
-                    self.indices[region][key] = ind
+                    self.indexed_data[region][key] = ind
             logger.debug(f"MasterData [{region}.{self.name}] 构建索引成功")
         except:
             logger.print_exc(f"MasterData [{region}.{self.name}] 构建索引失败")
+
+    def _build_sorted_data(self, region: str):
+        try:
+            if self.data.get(region, None) is None:
+                logger.warning(f"MasterData [{region}.{self.name}] 构建排序发生在数据加载前")
+                return
+            if not self.data[region] or not isinstance(self.data[region], list):
+                return
+            logger.debug(f"MasterData [{region}.{self.name}] 开始构建排序")
+            self.sorted_data[region] = {}
+            for key in self.sort_keys.get(region, []):
+                sorted_list = sorted(self.data[region], key=lambda x: x.get(key))
+                if sorted_list:
+                    self.sorted_data[region][key] = sorted_list
+            logger.debug(f"MasterData [{region}.{self.name}] 构建排序成功")
+        except:
+            logger.print_exc(f"MasterData [{region}.{self.name}] 构建排序失败")
 
     async def _load_from_cache(self, region: str):
         """
@@ -183,7 +209,8 @@ class MasterDataManager:
         if map_fn:
             self.data[region] = await run_in_pool(map_fn, self.data[region])
             logger.info(f"MasterData [{region}.{self.name}] 映射函数执行完成")
-        await run_in_pool(self._build_indices, region)
+        await run_in_pool(self._build_indexed_data, region)
+        await run_in_pool(self._build_sorted_data, region)
 
     async def _download_from_db(self, region: str, db_mgr: RegionMasterDbManager):
         """
@@ -223,7 +250,8 @@ class MasterDataManager:
         if map_fn:
             self.data[region] = await run_in_pool(map_fn, self.data[region])
             logger.info(f"MasterData [{region}.{self.name}] 映射函数执行完成")
-        await run_in_pool(self._build_indices, region)
+        await run_in_pool(self._build_indexed_data, region)
+        await run_in_pool(self._build_sorted_data, region)
 
         # 执行更新后回调
         for name, hook, regions in self.update_hooks:
@@ -265,13 +293,20 @@ class MasterDataManager:
         await self._update_before_get(region)
         return self.get_cache_path(region)
     
-    async def get_indices(self, region: str, key: str) -> Dict[str, Any]:
+    async def get_indexed(self, region: str, key: str) -> Dict[str, Any]:
         """
         获取索引，如果key没有索引，返回None
         """
         await self._update_before_get(region)
-        return self.indices.get(region, {}).get(key)
-        
+        return self.indexed_data.get(region, {}).get(key)
+    
+    async def get_sorted(self, region: str, key: str) -> List[Any]:
+        """
+        获取排序后的数据，如果key没有排序，返回None
+        """
+        await self._update_before_get(region)
+        return self.sorted_data.get(region, {}).get(key)
+
     @classmethod
     def get(cls, name: str) -> "MasterDataManager":
         if name not in cls._all_mgrs:
@@ -342,6 +377,13 @@ class MasterDataManager:
         """
         cls.get(name)._set_index_keys(index_keys)
 
+    @classmethod
+    def set_sort_keys(cls, name: str, sort_keys: Union[str, List[str], Dict[str, List[str]]]):
+        """
+        设置排序键
+        """
+        cls.get(name)._set_sort_keys(sort_keys)
+
 
 class RegionMasterDataWrapper:
     """
@@ -363,15 +405,18 @@ class RegionMasterDataWrapper:
         """
         return await self.mgr.get_path(self.region)
 
-    async def _indices(self, key: str):
-        return await self.mgr.get_indices(self.region, key)
+    async def get_indexed(self, key: str):
+        return await self.mgr.get_indexed(self.region, key)
     
+    async def get_sorted(self, key: str):
+        return await self.mgr.get_sorted(self.region, key)
+
     async def find_by(self, key: str, value: Any, mode='first'):
         """
         查找item[key]=value的元素，mode=first/last/all
         """
         # 使用indices优化
-        ind = await self._indices(key)
+        ind = await self.get_indexed(key)
         if ind is not None:
             ret = ind.get(value)
             if not ret: 
@@ -390,7 +435,7 @@ class RegionMasterDataWrapper:
         收集item[key]在values中的所有元素
         """
         # 使用索引
-        ind = await self._indices(key)
+        ind = await self.get_indexed(key)
         if ind is not None:
             ret = []
             for value in values:
@@ -423,8 +468,7 @@ class RegionMasterDataCollection:
     所有的MasterData资源集合
     """
     def __init__(self, region: str):
-        region = get_region_by_id(region)
-        self._region = region
+        self._region = get_region_by_id(region)
 
         self.musics                                                         = RegionMasterDataWrapper(region, "musics")
         self.music_diffs                                                    = RegionMasterDataWrapper(region, "musicDifficulties")
@@ -544,7 +588,9 @@ MasterDataManager.set_index_keys("shopItems", ['id', 'resourceBoxId'])
 MasterDataManager.set_index_keys("areaItemLevels", ['areaItemId'])
 MasterDataManager.set_index_keys("limitedTimeMusics", ['id', 'musicId'])
 MasterDataManager.set_index_keys("levels", ['id', 'levelType'])
+MasterDataManager.set_index_keys("eventMusics", ['id', 'eventId'])
 
+MasterDataManager.set_sort_keys('events', ['startAt'])
 
 # ================================ MasterData自定义下载 ================================ #
 
@@ -763,8 +809,7 @@ class RegionRipAssetManger:
         if region not in cls._all_mgrs:
             # 从本地配置中获取
             cls._all_mgrs[region] = RegionRipAssetManger(
-                region=get_region_by_id(region, RegionAttributes.ASSET), 
-                # sources=[RegionRipAssetSource(**source) for source in region_config["sources"]]
+                region=get_region_by_id(region, RegionAttributes.ASSET)
             )
         return cls._all_mgrs[region]
 

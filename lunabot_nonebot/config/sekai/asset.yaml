@@ -3,12 +3,3 @@ default_masterdata_download_timeout: 30       # 默认MasterData下载超时时�
 default_rip_asset_download_timeout: 60         # 默认解包资源下载超时时间（秒）
 rip_img_cache_max_res: 256*256                # 解包资源图片缓存最大分辨率
 default_version_update_interval: 10 # 版本更新间隔
-
-# 可以获取masterdata和asset的服务器列表
-masterdata:
-  - jp
-  - cn
-
-asset:
-  - jp
-  - cn

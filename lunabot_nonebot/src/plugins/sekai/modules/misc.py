@@ -21,7 +21,7 @@ from .card import (
 )
 from src.api.game.misc import get_ad_result,get_ad_result_update_time
 
-md_update_group_sub = SekaiGroupSubHelper("update", "MasterData更新通知", get_regions(RegionAttributes.ENABLE))
+md_update_group_sub = SekaiGroupSubHelper("update", "MasterData更新通知", get_regions(RegionAttributes.MASTERDATA))
 ad_result_sub = SekaiUserSubHelper("ad", "广告奖励推送", get_regions(RegionAttributes.AD_RESULT), hide=True)
 
 

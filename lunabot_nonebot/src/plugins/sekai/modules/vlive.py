@@ -147,7 +147,7 @@ async def vlive_notify():
     notified_vlives: Dict[str, Dict[str, List[int]]] = file_db.get(f"notified_vlives", {})
     updated = False
 
-    for region in get_regions(RegionAttributes.ENABLE): 
+    for region in REGIONS: 
         ctx = SekaiHandlerContext.from_region(region)
         region_name = region.name
 

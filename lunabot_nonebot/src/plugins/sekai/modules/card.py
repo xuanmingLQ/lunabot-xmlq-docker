@@ -269,6 +269,16 @@ async def compose_card_list_image(ctx: SekaiHandlerContext, cards: List[Dict], q
     card_and_thumbs.sort(key=lambda x: (x[0]['releaseAt'], x[0]['id']), reverse=True)
 
     bg_unit = await get_unit_by_card_id(ctx, cards[0]['id'])
+    
+    sz = 100
+    def draw_card(card, img):
+        with Frame().set_content_align('rt'):
+            ImageBox(img, size=(sz, sz), shadow=True)
+            supply_name = card['supply_show_name']
+            if supply_name in ['期间限定', 'WL限定', '联动限定']:
+                ImageBox(ctx.static_imgs.get(f"card/term_limited.png"), size=(int(sz*0.6), None))
+            elif supply_name in ['Fes限定', 'BFes限定']:
+                ImageBox(ctx.static_imgs.get(f"card/fes_limited.png"), size=(int(sz*0.6), None))
 
     with Canvas(bg=random_unit_bg(bg_unit)).set_padding(BG_PADDING) as canvas:
         with VSplit().set_sep(16).set_content_align('lt').set_item_align('lt'):
@@ -294,9 +304,9 @@ async def compose_card_list_image(ctx: SekaiHandlerContext, cards: List[Dict], q
                                 GW = 300
                                 with HSplit().set_content_align('c').set_w(GW).set_padding(8).set_sep(16):
                                     if normal is not None:
-                                        ImageBox(normal, size=(100, 100), image_size_mode='fill', shadow=True)
+                                        draw_card(card, normal)
                                     if after is not None:
-                                        ImageBox(after,  size=(100, 100), image_size_mode='fill', shadow=True)
+                                        draw_card(card, after)
 
                                 name_text = card['prefix']
                                 TextBox(name_text, TextStyle(font=DEFAULT_BOLD_FONT, size=20, color=BLACK)).set_w(GW).set_content_align('c')
@@ -488,13 +498,11 @@ async def get_card_story_summary(ctx: SekaiHandlerContext, card: dict, refresh: 
 
 # 合成卡牌一览图片
 async def compose_box_image(ctx: SekaiHandlerContext, qid: int, cards: dict, show_id: bool, show_box: bool, use_after_training=True):
-    pcards, bg_unit = [], None
+    pcards = []
     if qid:
         profile, pmsg = await get_detailed_profile(ctx, qid, filter=get_detailed_profile_card_filter('userCards'), raise_exc=show_box)
         if profile:
             pcards = profile['userCards']
-            avatar_info = await get_player_avatar_info_by_detailed_profile(ctx, profile)
-            bg_unit = avatar_info.unit
         
     # collect card imgs
     async def get_card_full_thumbnail_nothrow(card):
@@ -546,14 +554,26 @@ async def compose_box_image(ctx: SekaiHandlerContext, qid: int, cards: dict, sho
         if value < best_value:
             best_height, best_value = i, value
 
+    # 计算总宽度并决定绘制卡牌的大小
+    total_width = 0
+    for _, cards in chara_cards:
+        width = max(1, math.ceil(len(cards) / best_height))
+        total_width += width
+    area = total_width * (best_height + 4)
+
+    start_area, start_sz, start_sep = 9 * 5, 100, 8
+    end_area, end_sz, end_sep = 26 * 50, 48, 4
+    interp = min(1.0, max(0.0, (area - start_area) / (end_area - start_area)))
+    sep = int(start_sep + (end_sep - start_sep) * interp)
+    sz = int(start_sz + (end_sz - start_sz) * interp)
+
     # 绘制单张卡
-    sz = 48
     def draw_card(card):
         with Frame().set_content_align('rt'):
             ImageBox(card['img'], size=(sz, sz))
             supply_name = card['supply_show_name']
             if supply_name in ['期间限定', 'WL限定', '联动限定']:
-                ImageBox(ctx.static_imgs.get(f"card/term_limited.png"), size=(int(sz*0.75), None))
+                ImageBox(ctx.static_imgs.get(f"card/term_limited.png"), size=(int(sz*0.6), None))
             elif supply_name in ['Fes限定', 'BFes限定']:
                 ImageBox(ctx.static_imgs.get(f"card/fes_limited.png"), size=(int(sz*0.35), None))
             if not card['has'] and profile:
@@ -562,20 +582,20 @@ async def compose_box_image(ctx: SekaiHandlerContext, qid: int, cards: dict, sho
             TextBox(f"{card['id']}", TextStyle(font=DEFAULT_FONT, size=12, color=BLACK)).set_w(sz)
 
     with Canvas(bg=SEKAI_BLUE_BG).set_padding(BG_PADDING) as canvas:
-        with VSplit().set_content_align('lt').set_item_align('lt').set_sep(16) as vs:
+        with VSplit().set_content_align('lt').set_item_align('lt').set_sep(16):
             if qid:
                 await get_detailed_profile_card(ctx, profile, pmsg)
             with HSplit().set_bg(roundrect_bg()).set_content_align('lt').set_item_align('lt').set_padding(16).set_sep(4):
                 for chara_id, cards in chara_cards:
-                    with VSplit().set_content_align('t').set_item_align('t').set_sep(4):
+                    with VSplit().set_content_align('t').set_item_align('t').set_sep(sep):
                         ImageBox(get_chara_icon_by_chara_id(chara_id), size=(sz, sz))
                         chara_color = color_code_to_rgb((await ctx.md.game_character_units.find_by_id(chara_id))['colorCode'])
                         col_num = max(1, len(range(0, len(cards), best_height)))
                         row_num = max(1, min(best_height, len(cards)))
-                        Spacer(w=sz * col_num + 4 * (col_num - 1), h=4).set_bg(FillBg(chara_color))
-                        with Grid(row_count=row_num, vertical=row_num > col_num).set_content_align('lt').set_item_align('lt').set_sep(4, 4):
+                        Spacer(w=sz * col_num + sep * (col_num - 1), h=sep).set_bg(FillBg(chara_color))
+                        with Grid(row_count=row_num, vertical=row_num > col_num).set_content_align('lt').set_item_align('lt').set_sep(sep, sep):
                             for card in cards:
-                                draw_card(card) 
+                                draw_card(card)
             
     add_watermark(canvas)
     return await canvas.get_img()

@@ -279,17 +279,25 @@ def extract_event_type(text: str, default: str = None) -> Tuple[str, str]:
     return default, text
 
 # 获取所有箱活id集合（往期通过书下曲判断，当期书下可能还没上线通过活动加成判断）
-async def get_ban_events_id_set(ctx: SekaiHandlerContext) -> Set[int]:
-    ret = set([item['eventId'] for item in await ctx.md.event_musics.get()])
-    cur_event = await get_current_event(ctx, fallback="next_first")
-    if cur_event and cur_event['eventType'] in ('marathon', 'cheerful_carnival'):
+async def get_ban_events_id_set(ctx: SekaiHandlerContext) -> set[int]:
+    # 获取已有书下的活动
+    ret = set((await ctx.md.event_musics.get_indexed('eventId')).keys())
+    # 查找书下未上线的活动进行判断
+    for event in reversed(await ctx.md.events.get_sorted('startAt')):
+        event_id = event['id']
+        if datetime.fromtimestamp(event['aggregateAt'] / 1000 + 1) < datetime.now():
+            break    # 已结束的活动书下肯定已经上线，不重复判断
+        if await ctx.md.event_musics.find_by('eventId', event_id):
+            continue    # 已有书下，跳过
+        if event['eventType'] not in ('marathon', 'cheerful_carnival'):
+            continue    # 跳过非普通活动
         bonus_unit = set()
-        for deck_bonus in await ctx.md.event_deck_bonuses.find_by('eventId', cur_event['id'], mode="all"):
+        for deck_bonus in await ctx.md.event_deck_bonuses.find_by('eventId', event_id, mode="all"):
             cuid = deck_bonus.get('gameCharacterUnitId')
             if cuid and cuid <= 20:
                 bonus_unit.add((await ctx.md.game_character_units.find_by_id(cuid))['unit'])
-        if len(bonus_unit) == 1:
-            ret.add(cur_event['id'])
+        if len(bonus_unit) == 1:    # 所有角色加成都是同一个团
+            ret.add(event_id)
     # 特判sdl3
     ret.add(74)
     return ret
@@ -301,7 +309,7 @@ async def is_ban_event(ctx: SekaiHandlerContext, event: dict) -> bool:
     return event['id'] in await get_ban_events_id_set(ctx)
 
 # 获取箱活ban主角色id 不是箱活返回None
-async def get_event_banner_chara_id(ctx: SekaiHandlerContext, event: dict) -> int:
+async def get_event_banner_chara_id(ctx: SekaiHandlerContext, event: dict) -> int | None:
     if not await is_ban_event(ctx, event):
         return None
     event_cards = await ctx.md.event_cards.find_by('eventId', event['id'], mode="all")
@@ -324,7 +332,7 @@ async def get_chara_ban_events(ctx: SekaiHandlerContext, cid: int) -> List[dict]
 
 # 合成活动列表图片
 async def compose_event_list_image(ctx: SekaiHandlerContext, filter: EventListFilter) -> Image.Image:
-    events = sorted(await ctx.md.events.get(), key=lambda x: x['startAt'])    
+    events = await ctx.md.events.get_sorted('startAt')
     details: List[EventDetail] = await batch_gather(*[get_event_detail(ctx, e, ['banner', 'card_thumbs']) for e in events])
 
     filtered_details: List[EventDetail] = []
@@ -422,24 +430,30 @@ async def get_event_by_ban_name(ctx: SekaiHandlerContext, ban_name: str) -> Opti
     return events[idx-1]
                                 
 # 解析查单个活动参数，返回活动或抛出异常
-async def parse_search_single_event_args(ctx: SekaiHandlerContext, args: str) -> dict:
-    if args.removeprefix('-').isdigit():
-        events = await ctx.md.events.get()
-        events = sorted(events, key=lambda x: x['startAt'])
-        cur_event = await get_current_event(ctx, fallback="next_first")
+async def parse_search_single_event_args(ctx: SekaiHandlerContext, args: str, fallback: str="next_first") -> dict:
+    if args.startswith(('-', '+')) and args[1:].isdigit():
+        events = await ctx.md.events.get_sorted('startAt')
+        cur_event = await get_current_event(ctx, fallback=fallback)
         cur_idx = len(events) - 1
-        for i, event in enumerate(events):
+        for i, event in enumerate(reversed(events)):
             if event['id'] == cur_event['id']:
-                cur_idx = i
+                cur_idx = len(events) - 1 - i
                 break
-        events = events[:cur_idx + 1]
-        args = int(args)
-        if args < 0:
-            if -args > len(events):
-                raise ReplyException("倒数索引超出范围")
-            return events[args]
-        event = await ctx.md.events.find_by_id(args)
-        assert_and_reply(event, f"活动{ctx.region.upper()}-{args}不存在")
+        offset = int(args.removeprefix('+'))
+        if offset < 0:
+            index = cur_idx + offset + 1
+            assert_and_reply(index >= 0, "倒数索引超出范围")
+            return events[index]
+        elif offset > 0:
+            index = cur_idx + offset
+            assert_and_reply(index < len(events), "正数索引超出范围")
+            return events[index]
+        else:
+            return cur_event
+    elif args.isdigit():
+        event_id = int(args)
+        event = await ctx.md.events.find_by_id(event_id)
+        assert_and_reply(event, f"活动{ctx.region.upper()}-{event_id}不存在")
         return event
     elif event := await get_event_by_ban_name(ctx, args):
         return event
@@ -909,7 +923,7 @@ async def compose_event_record_image(ctx: SekaiHandlerContext, qid: int) -> Imag
     with Canvas(bg=SEKAI_BLUE_BG).set_padding(BG_PADDING) as canvas:
         with VSplit().set_content_align('lt').set_item_align('lt').set_sep(16):
             await get_detailed_profile_card(ctx, profile, err_msg)
-            TextBox("每次上传时进行增量更新，未上传过的记录将会丢失\n领取活动牌子后上传数据才能记录排名", style4, use_real_line_count=True) \
+            TextBox("每次抓包仅包含最近一次活动的记录\n上传时进行增量更新，未上传过的记录将会丢失\n领取活动牌子后上传数据才能记录排名", style4, use_real_line_count=True) \
                 .set_bg(roundrect_bg()).set_padding(12)
             with HSplit().set_sep(16).set_item_align('lt').set_content_align('lt'):
                 if user_events:

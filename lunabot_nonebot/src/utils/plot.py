@@ -185,8 +185,31 @@ class Widget:
         if not local.wstack:
             self._thread_local.set(None)
 
-    def add_item(self, item: 'Widget'):
-        raise NotImplementedError()
+    def add_item(self, item: 'Widget', index: int = None):
+        item.set_parent(self)
+        if index is None:
+            self.items.append(item)
+        else:
+            self.items.insert(index, item)
+        return self
+    
+    def remove_item(self, item: 'Widget'):
+        self.items.remove(item)
+        item.set_parent(None)
+        return self
+
+    def remove_item_at(self, index: int):
+        item = self.items.pop(index)
+        item.set_parent(None)
+        return self
+    
+    def set_items(self, items: List['Widget']):
+        for item in self.items:
+            item.set_parent(None)
+        self.items = items
+        for item in self.items:
+            item.set_parent(self)
+        return self
 
     def set_parent(self, parent: 'Widget'):
         self.parent = parent
@@ -351,19 +374,6 @@ class Frame(Widget):
         self.items = items or []
         for item in self.items:
             item.set_parent(self)
-    
-    def add_item(self, item: Widget):
-        item.set_parent(self)
-        self.items.append(item)
-        return self
-    
-    def set_items(self, items: List[Widget]):
-        for item in self.items:
-            item.set_parent(None)
-        self.items = items
-        for item in self.items:
-            item.set_parent(self)
-        return self
 
     def _get_content_size(self):
         size = (0, 0)
@@ -408,19 +418,6 @@ class HSplit(Widget):
             raise ValueError('Invalid align')
         self.item_halign, self.item_valign = ALIGN_MAP[item_align]
         self.item_bg = None
-
-    def set_items(self, items: List[Widget]):
-        for item in self.items:
-            item.set_parent(None)
-        self.items = items
-        for item in self.items:
-            item.set_parent(self)
-        return self
-    
-    def add_item(self, item: Widget):
-        item.set_parent(self)
-        self.items.append(item)
-        return self
 
     def set_item_align(self, align: str):
         if align not in ALIGN_MAP:
@@ -514,19 +511,6 @@ class VSplit(Widget):
             raise ValueError('Invalid align')
         self.item_halign, self.item_valign = ALIGN_MAP[item_align]
         self.item_bg = None
-
-    def set_items(self, items: List[Widget]):
-        for item in self.items:
-            item.set_parent(None)
-        self.items = items
-        for item in self.items:
-            item.set_parent(self)
-        return self
-        
-    def add_item(self, item: Widget):
-        item.set_parent(self)
-        self.items.append(item)
-        return self
 
     def set_item_align(self, align: str):
         if align not in ALIGN_MAP:
@@ -627,19 +611,6 @@ class Grid(Widget):
 
     def set_vertical(self, vertical: bool):
         self.vertical = vertical
-        return self
-
-    def set_items(self, items: List[Widget]):
-        for item in self.items:
-            item.set_parent(None)
-        self.items = items
-        for item in self.items:
-            item.set_parent(self)
-        return self
-        
-    def add_item(self, item: Widget):
-        item.set_parent(self)
-        self.items.append(item)
         return self
     
     def set_item_align(self, align: str):

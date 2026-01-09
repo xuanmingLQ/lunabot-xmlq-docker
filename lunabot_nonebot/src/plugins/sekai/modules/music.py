@@ -1373,7 +1373,6 @@ async def compose_music_rewards_image(ctx: SekaiHandlerContext, qid: int) -> Ima
 
     # 有抓包的模式
     if profile:
-        avatar_info = await get_player_avatar_info_by_detailed_profile(ctx, profile)
         # 按照歌曲分组
         umas: Dict[int, List[int]] = { mid: [] for mid in mids }
         # 按照歌曲id分组

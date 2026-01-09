@@ -587,17 +587,17 @@ async def get_detailed_profile(
         try:
             uid = get_player_bind_id(ctx)
         except Exception as e:
-            logger.info(f"获取 {qid} 抓包数据失败: 未绑定游戏账号")
+            logger.info(f"获取 {qid} {ctx.region}抓包数据失败: 未绑定游戏账号")
             raise e
         # 检测是否隐藏抓包信息
         if not ignore_hide and is_user_hide_suite(ctx, qid):
-            logger.info(f"获取 {qid} 抓包数据失败: 用户已隐藏抓包信息")
+            logger.info(f"获取 {qid} {ctx.region}抓包数据失败: 用户已隐藏抓包信息")
             raise ReplyException(f"你已隐藏抓包信息，发送\"/{ctx.region}展示抓包\"可重新展示")
         
         try:
             profile = await get_suite(ctx.region, uid, filter)
         except HttpError as e:
-            logger.info(f"获取 {qid} 抓包数据失败: {get_exc_desc(e)}")
+            logger.info(f"获取 {qid} {ctx.region}抓包数据失败: {get_exc_desc(e)}")
             if e.status_code == 404:
                 msg = f"获取你的{ctx.region.name}Suite抓包数据失败，发送\"/抓包\"指令可获取帮助\n"
                 # if local_err is not None: msg += f"[本地数据] {local_err}\n"
@@ -605,29 +605,28 @@ async def get_detailed_profile(
                 raise ReplyException(msg.strip())
             else:
                 raise
-        except ApiError as e:
-            raise ReplyException(f"获取 {qid} 抓包数据失败：{e.msg}")
         except Exception as e:
-            logger.info(f"获取 {qid} 抓包数据失败: {get_exc_desc(e)}")
-            raise
+            logger.info(f"获取 {qid} {ctx.region}抓包数据失败: {get_exc_desc(e)}")
+            raise e
+            
         if not profile:
-            logger.info(f"获取 {qid} 抓包数据失败: 找不到ID为 {uid} 的玩家")
+            logger.info(f"获取 {qid} {ctx.region}抓包数据失败: 找不到ID为 {uid} 的玩家")
             raise ReplyException(f"找不到ID为 {uid} 的玩家")
         
         # 缓存数据（目前已不缓存）
         cache_path = f"{SEKAI_PROFILE_DIR}/suite_cache/{ctx.region}/{uid}.json"
         # if not upload_time_only:
         #     dump_json(profile, cache_path)
-        logger.info(f"获取 {qid} 抓包数据成功，数据已缓存")
+        logger.info(f"获取 {qid} {ctx.region}抓包数据成功，数据已缓存")
         
     except Exception as e:
         # 获取失败的情况，尝试读取缓存
         if cache_path and os.path.exists(cache_path):
             profile = load_json(cache_path)
-            logger.info(f"从缓存获取{qid}抓包数据")
+            logger.info(f"从缓存获取 {qid} {ctx.region}抓包数据")
             return profile, str(e) + "(使用先前的缓存数据)"
         else:
-            logger.info(f"未找到 {qid} 的缓存抓包数据")
+            logger.info(f"未找到 {qid} 的缓存{ctx.region}抓包数据")
 
         if raise_exc:
             raise e
@@ -1152,7 +1151,7 @@ async def _(ctx: SekaiHandlerContext):
     
     # 检查有效的服务器
     checked_regions = []
-    async def check_bind(region: str) -> Optional[Tuple[str, str, str]]:
+    async def check_bind(region: SekaiRegion) -> Optional[Tuple[str, str, str]]:
         try:
             region_ctx = SekaiHandlerContext.from_region(region)
             # 检查格式

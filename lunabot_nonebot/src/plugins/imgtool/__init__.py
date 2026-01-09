@@ -1573,7 +1573,7 @@ async def _(ctx: HandlerContext):
     filesize = int(video['file_size'])
     size_limit = int(config.get('video_to_gif.size_limit') * 1024 * 1024)
     assert_and_reply(filesize <= size_limit, "视频文件过大，无法处理")
-    async with TempBotOrInternetFilePath('video', video['file']) as video_path:
+    async with TempBotOrInternetFilePath('video', video['file'], ctx.bot) as video_path:
         with TempFilePath("gif") as gif_path:
             await run_in_pool(convert_video_to_gif, video_path, gif_path, args.max_fps, args.max_size, args.max_frame_num)
             return await ctx.asend_reply_msg(await get_image_cq(gif_path))
