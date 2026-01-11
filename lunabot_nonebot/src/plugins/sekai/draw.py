@@ -56,6 +56,8 @@ def get_attr_icon(attr: str, size: int = None):
 
 SEKAI_BLUE_BG = RandomTriangleBg("sekai.bg_preset.blue")
 SEKAI_RED_BG = RandomTriangleBg("sekai.bg_preset.red")
+SEKAI_BLUE_BG_DAY   = RandomTriangleBg("sekai.bg_preset.blue", dt = datetime.strptime("10:00", "%H:%M"))
+SEKAI_BLUE_BG_NIGHT = RandomTriangleBg("sekai.bg_preset.blue", dt = datetime.strptime("22:00", "%H:%M"))
 
 BG_PADDING = 20
 WIDGET_BG_COLOR_CFG = config.item("draw.widget_bg_color")

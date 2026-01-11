@@ -270,6 +270,7 @@ TRANSPARENT = (0, 0, 0, 0)
 SHADOW = (0, 0, 0, 150)
 
 ROUNDRECT_ANTIALIASING_TARGET_RADIUS_CFG = global_config.item('painter.roundrect_aa_target_radius')
+EMOJI_SCALE_CFG = global_config.item('painter.emoji.scale')
 
 FONT_DIR = get_data_path("utils/fonts/")
 DEFAULT_FONT = "SourceHanSansCN-Regular"
@@ -405,11 +406,20 @@ def has_emoji(text: str) -> bool:
     return False
 
 def get_text_size(font: Font, text: str) -> Size:
+    if not text: 
+        return (0, 0)
     if has_emoji(text):
-        return getsize_emoji(text, font=font)
-    else:
-        bbox = font.getbbox(text)
-        return bbox[2] - bbox[0], bbox[3] - bbox[1]
+        return getsize_emoji(text, font=font, emoji_scale_factor=EMOJI_SCALE_CFG.get())
+    bbox = font.getbbox(text)
+    return bbox[2] - bbox[0], bbox[3] - bbox[1]
+    
+def get_text_width(font: Font, text: str) -> int:
+    if not text:
+        return 0
+    if has_emoji(text):
+        size = getsize_emoji(text, font=font, emoji_scale_factor=EMOJI_SCALE_CFG.get())
+        return size[0]
+    return font.getlength(text)
 
 def get_text_offset(font: Font, text: str) -> Position:
     bbox = font.getbbox(text)

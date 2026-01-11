@@ -151,6 +151,9 @@ MUSIC_TAG_UNIT_MAP = {
     'other': None,
 }
 
+STORYSUMMARY_WATERMARK = " [LunaBot生成-请勿转载] "
+
+
 # ======================= 通用功能 ======================= #
 
 # 获取角色生日
@@ -328,3 +331,9 @@ def extract_card_skill(text: str, default=None) -> Tuple[str, str]:
             return first_name, text.replace(name, "").strip()
     return default, text
 
+# 在文本中间添加水印
+def add_watermark_to_text(text: str, watermark_text: str) -> str:
+    if len(text) <= 2:
+        return text
+    mid_index = len(text) // 2
+    return text[:mid_index] + watermark_text + text[mid_index:]

@@ -742,6 +742,8 @@ class TextBox(Widget):
         assert overflow in ('shrink', 'clip')
         self.overflow = overflow
         self.use_real_line_count = use_real_line_count
+        self.text_offset_x = 0
+        self.text_offset_y = 0
 
         if line_count is None:
             self.line_count = 99999 if use_real_line_count else 1
@@ -773,50 +775,116 @@ class TextBox(Widget):
         assert overflow in ('shrink', 'clip')
         self.overflow = overflow
 
+    def set_text_offset(self, offset: Tuple[int, int]):
+        self.text_offset_x = offset[0]
+        self.text_offset_y = offset[1]
+        return self
+
     def _get_pil_font(self):
         return get_font(self.style.font, self.style.size)
     
     def _get_font_desc(self):
         return get_font_desc(self.style.font, self.style.size)
 
-    def _get_clip_text_to_width_idx(self, text: str, width: int, suffix=''):
-        font = self._get_pil_font()
-        w, _ = get_text_size(font, text + suffix)
-        if w <= width:
+    def _get_clip_text_to_width_idx(self, font, text: str, width: int, suffix=''):
+        """
+        基于“估算+步进”的线性查找。
+        通常比二分法更快，因为不需要反复在大范围内测量。
+        """
+        suffix_width = 0
+        if suffix:
+            suffix_width = get_text_width(font, suffix)
+            
+        target_width = width - suffix_width
+        
+        # 1. 快速检查：如果连后缀都放不下
+        if target_width < 0:
+            return 0
+            
+        # 2. 快速检查：如果整行都放得下
+        full_width = get_text_width(font, text)
+        if full_width <= target_width:
             return None
-        l, r = 0, len(text)
-        while l <= r:
-            m = (l + r) // 2
-            w, _ = get_text_size(font, text[:m] + suffix)
-            if   w < width: l = m + 1
-            elif w > width: r = m - 1
-            else: return m
-        return r
+
+        text_len = len(text)
+        
+        # 3. 估算起点
+        # 假设ascii字符宽度为1，非ascii字符宽度为2，计算要跳到哪个字符位置
+        if full_width > 0:
+            char_len_weight_sum = 0
+            for c in text:
+                char_len_weight_sum += 1 if ord(c) < 128 else 2
+            avg_char_width = full_width / char_len_weight_sum
+            cur_w = 0
+            idx = text_len
+            for i, c in enumerate(text):
+                cur_w += avg_char_width if ord(c) < 128 else avg_char_width * 2
+                if cur_w >= target_width:
+                    idx = i + 1
+                    break
+        else:
+            idx = 0
+        idx = max(0, min(idx, text_len))
+
+        # 4. 局部步进修正 
+        current_w = get_text_width(font, text[:idx])
+
+        if current_w < target_width:
+            # 估算小了，向右步进 (Forward)
+            while idx < text_len:
+                next_idx = idx + 1
+                w = get_text_width(font, text[:next_idx])
+                if w > target_width:
+                    return idx
+                idx = next_idx
+                current_w = w
+            return idx
+
+        elif current_w > target_width:
+            # 估算大了，向左步进 (Backward)
+            while idx > 0:
+                w = get_text_width(font, text[:idx])
+                if w <= target_width:
+                    return idx
+                idx -= 1
+            return 0
+
+        else:
+            return idx
 
     def _get_lines(self):
+        font = self._get_pil_font()
         lines = self.text.split('\n')  
         clipped_lines = []
+        # 对文本中原本包含的每一行进行处理
         for line in lines:
             if self.w:
                 w = self.w - self.hpadding * 2
                 suffix = '...' if self.overflow == 'shrink' else ''
                 if self.wrap:
+                    # 需要自动换行的情况，迭代进行裁剪
                     while True:
+                        # 首先判断是否能直接放得下
+                        clip_idx = self._get_clip_text_to_width_idx(font, line, w, '')
+                        if clip_idx is None:
+                            clipped_lines.append(line)
+                            break
+                        # 如果不能放下，则进行裁剪，首先判断是否需要添加后缀（是限制的最后一行）
                         line_suffix = suffix if len(clipped_lines) == self.line_count - 1 else ''
-                        clip_idx = self._get_clip_text_to_width_idx(line, w, '')
-                        if clip_idx is None:
-                            clipped_lines.append(line)
-                            break
-                        clip_idx = self._get_clip_text_to_width_idx(line, w, line_suffix)
-                        if clip_idx is None:
-                            clipped_lines.append(line)
-                            break
+                        if line_suffix:
+                            # 需要添加后缀，需要考虑后缀重新计算裁剪位置
+                            clip_idx = self._get_clip_text_to_width_idx(font, line, w, line_suffix)
+                            if clip_idx is None:
+                                clipped_lines.append(line)
+                                break
+                        # 进行裁剪并添加后缀
                         clipped_lines.append(line[:clip_idx] + line_suffix)
                         line = line[clip_idx:]
+                        # 检查是否达到行数限制
                         if len(clipped_lines) == self.line_count:
                             break
                 else:
-                    clip_idx = self._get_clip_text_to_width_idx(line, w, suffix)
+                    clip_idx = self._get_clip_text_to_width_idx(font, line, w, suffix)
                     if clip_idx is not None:
                         line = line[:clip_idx] + suffix
                     clipped_lines.append(line)
@@ -859,6 +927,8 @@ class TextBox(Widget):
                 x += p.w - lw
             elif self.content_halign == 'c':
                 x += (p.w - lw) // 2
+            x += self.text_offset_x
+            y += self.text_offset_y
             p.move_region((x, y), (lw, self.style.size))
 
             if self.style.use_shadow:
@@ -996,6 +1066,10 @@ class Canvas(Frame):
         assert size[0] * size[1] <= size_limit[0] * size_limit[1], f'Canvas size is too large ({size[0]}x{size[1]})'
         p = Painter(size=size)
         self.draw(p)
+        if global_config.get('plot.log_draw_time', False):
+            print(f"Canvas layouted in {(datetime.now() - t).total_seconds():.3f}s, size={size}")
+
+        t = datetime.now()
         img = await p.get(cache_key)
         if scale:
             img = img.resize((int(size[0] * scale), int(size[1] * scale)), Image.Resampling.BILINEAR)

@@ -1,4 +1,5 @@
 from .utils import *
+from .blacklist import HARDCODING_BLACKLIST_USERS
 from nonebot import on_command
 from nonebot import get_bot as nb_get_bot
 from nonebot import get_bots as nb_get_bots
@@ -787,7 +788,7 @@ def check_in_blacklist(user_id: int):
     检查用户是否在黑名单中
     """
     blacklist = utils_file_db.get('blacklist', [])
-    return int(user_id) in blacklist
+    return int(user_id) in blacklist or int(user_id) in HARDCODING_BLACKLIST_USERS
 
 def check_group_disabled(group_id: int):
     """

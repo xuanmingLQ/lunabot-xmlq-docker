@@ -351,36 +351,39 @@ async def compose_skp_image(ctx: SekaiHandlerContext) -> Image.Image:
                     else:
                         time_to_end_text = f"距离活动结束还有{get_readable_timedelta(time_to_end)}"
                     TextBox(time_to_end_text, TextStyle(font=DEFAULT_BOLD_FONT, size=18, color=BLACK))
+                    at_start_phase, at_end_phase = False, False
                     if time_from_start < timedelta(hours=start_hours):
+                        at_start_phase = True
                         TextBox(f"活动开始{start_hours}小时后开始更新数据", TextStyle(font=DEFAULT_BOLD_FONT, size=18, color=RED))
                     elif time_to_end < timedelta(hours=end_hours):
+                        at_end_phase = True
                         TextBox(f"活动结束前{end_hours}小时停止更新数据", TextStyle(font=DEFAULT_BOLD_FONT, size=18, color=RED))
 
                 if banner_img:
                     ImageBox(banner_img, size=(140, None))
 
-            gh = 30
+            gh, gw = 30, 180
             with Grid(col_count=len(sources)+2).set_content_align('c').set_sep(hsep=8, vsep=5).set_padding(16):
                 bg1 = FillBg((255, 255, 255, 200))
                 bg2 = FillBg((255, 255, 255, 100))
                 title_style = TextStyle(font=DEFAULT_BOLD_FONT, size=18, color=BLACK)
                 item_style  = TextStyle(font=DEFAULT_FONT,      size=20, color=BLACK)
 
-                TextBox("排名", title_style).set_bg(bg1).set_size((160, gh)).set_content_align('c')
-                TextBox("当前榜线", title_style).set_bg(bg1).set_size((160, gh)).set_content_align('c')
+                TextBox("排名", title_style).set_bg(bg1).set_size((gw, gh)).set_content_align('c')
+                TextBox("当前榜线", title_style).set_bg(bg1).set_size((gw, gh)).set_content_align('c')
                 for source in sources.keys():
-                    TextBox(sources[source]['name'], title_style).set_bg(bg1).set_size((160, gh)).set_content_align('c')
+                    TextBox(sources[source]['name'], title_style).set_bg(bg1).set_size((gw, gh)).set_content_align('c')
 
                 bg = bg1
                 for i, rank in enumerate(ranks):
                     bg = bg2 if bg == bg1 else bg1
 
-                    TextBox(get_board_rank_str(rank), item_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('c')
+                    TextBox(get_board_rank_str(rank), item_style, overflow='clip').set_bg(bg).set_size((gw, gh)).set_content_align('c')
 
                     cur_text = "-"
                     if cur_rank := find_by_predicate(latest_rankings, lambda x: x.rank == rank):
                        cur_text = get_board_score_str(cur_rank.score)
-                    TextBox(cur_text, item_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('r').set_padding((16, 0))
+                    TextBox(cur_text, item_style, overflow='clip').set_bg(bg).set_size((gw, gh)).set_content_align('r').set_padding((16, 0))
 
                     for source in sources.keys():
                         forecast_final = "-"
@@ -388,11 +391,14 @@ async def compose_skp_image(ctx: SekaiHandlerContext) -> Image.Image:
                             if rank_data := forecast.rank_data.get(rank, None):
                                 if rank_data.final_score is not None:
                                     forecast_final = get_board_score_str(rank_data.final_score)
-                        TextBox(forecast_final, item_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('r').set_padding((16, 0))
+                        TextBox(forecast_final, item_style, overflow='clip').set_bg(bg).set_size((gw, gh)).set_content_align('r').set_padding((16, 0))
+
+                OUTDATE_COLOR = (200, 0, 0)
+                FROZEN_COLOR = (0, 100, 200)
 
                 bg = bg2 if bg == bg1 else bg1
-                TextBox("预测时间", title_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('c')
-                TextBox('-', item_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('c').set_padding((0, 0))
+                TextBox("预测时间", title_style, overflow='clip').set_bg(bg).set_size((gw, gh)).set_content_align('c')
+                TextBox('-', item_style, overflow='clip').set_bg(bg).set_size((gw, gh)).set_content_align('c').set_padding((0, 0))
                 for source in sources.keys():
                     forcast_time_text = "-"
                     style = item_style
@@ -401,19 +407,28 @@ async def compose_skp_image(ctx: SekaiHandlerContext) -> Image.Image:
                             forecast_time = datetime.fromtimestamp(forecast.forecast_ts)
                             forcast_time_text = get_readable_datetime(forecast_time, show_original_time=False)
                             if datetime.now() - forecast_time > timedelta(hours=3):
-                                style = style.replace(color=(200, 0, 0))
-                    TextBox(forcast_time_text, style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('c').set_padding((0, 0))
+                                style = style.replace(color=OUTDATE_COLOR)
+                                forcast_time_text += "⚠️"
+                    if at_end_phase:
+                        if forcast_time_text != '-': 
+                            forcast_time_text = forcast_time_text.removesuffix("⚠️") + "❄️"
+                        style = style.replace(color=FROZEN_COLOR)
+                    TextBox(forcast_time_text, style, overflow='clip').set_bg(bg).set_size((gw, gh)).set_content_align('c').set_padding((0, 0))
 
                 bg = bg2 if bg == bg1 else bg1
-                TextBox("获取时间", title_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('c')
+                TextBox("获取时间", title_style, overflow='clip').set_bg(bg).set_size((gw, gh)).set_content_align('c')
                 update_time = get_readable_datetime(latest_rankings[0].time, show_original_time=False) if latest_rankings else "-"
-                TextBox(update_time, item_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('c').set_padding((0, 0))
+                TextBox(update_time, item_style, overflow='clip').set_bg(bg).set_size((gw, gh)).set_content_align('c').set_padding((0, 0))
                 for source in sources.keys():
+                    style = item_style
                     update_time_text = "-"
                     if forecast := find_by_predicate(forecasts, lambda x: x.source == source):
                         if forecast.mtime:
                             update_time_text = get_readable_datetime(datetime.fromtimestamp(forecast.mtime), show_original_time=False)
-                    TextBox(update_time_text, item_style, overflow='clip').set_bg(bg).set_size((160, gh)).set_content_align('c').set_padding((0, 0))
+                    if at_end_phase:
+                        if update_time_text != '-': update_time_text += "❄️"
+                        style = style.replace(color=FROZEN_COLOR)
+                    TextBox(update_time_text, style, overflow='clip').set_bg(bg).set_size((gw, gh)).set_content_align('c').set_padding((0, 0))
 
     add_watermark(canvas)
     return await canvas.get_img()
@@ -1334,6 +1349,7 @@ async def compose_rank_trace_image(ctx: SekaiHandlerContext, rank: int, event: d
                     history_times = [x[0] for x in history]
                     history_preds = [x[1] for x in history]
                 ax2.plot(history_times, history_preds, color=color, linestyle='-', linewidth=1.0, alpha=1.0)
+                ax2.plot(history_times[-1], history_preds[-1], marker='x', color=color, markersize=6, alpha=1.0)
                 ax2.plot([], [], label=f'{name}历史', color=color, linestyle='-', linewidth=2)
         # 统一绘制最终预测线对应的文本，避免重叠
         draw_nocollide_texts(

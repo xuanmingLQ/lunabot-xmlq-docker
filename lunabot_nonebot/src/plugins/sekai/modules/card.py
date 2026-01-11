@@ -336,23 +336,132 @@ async def get_card_cutout_image(ctx: SekaiHandlerContext, cid: int, after_traini
     if not card: raise Exception(f"找不到ID为{cid}的卡牌") 
     return await ctx.rip.img(f"character/member_cutout_trm/{card['assetbundleName']}/{image_type}.png", timeout=30, allow_error=allow_error)
 
-# 获取卡牌剧情总结
-async def get_card_story_summary(ctx: SekaiHandlerContext, card: dict, refresh: bool, summary_model: List[str], save: bool) -> List[str]:
+# 合成卡牌剧情总结文本版
+async def compose_card_story_summary_msg_list(
+    ctx: SekaiHandlerContext, 
+    card: dict,
+    card_thumbs: list[Image.Image],
+    card_thumbs_cq: str,
+    eps: list[dict],
+    summary: dict,
+) -> List[str]:
     cid = card['id']
     title = card['prefix']
     cn_title = await translate_text(title, additional_info="该文本是偶像抽卡游戏中卡牌的标题", default=title)
+
+    msg_lists = []
+
+    msg_lists.append(f"""
+【{cid}】{title} - {cn_title} 
+{card_thumbs_cq}
+!! 剧透警告 !!
+!! 内容由AI生成，不保证完全准确 !!
+""".strip() + "\n" * 16)
+    
+    for i, ep in enumerate(eps, 1):
+        with Canvas(bg=SEKAI_BLUE_BG).set_padding(8) as canvas:
+            row_count = int(math.sqrt(len(ep['cids'])))
+            with Grid(row_count=row_count).set_sep(2, 2):
+                for cid in ep['cids']:
+                    if not cid: continue
+                    icon = get_chara_icon_by_chara_id(cid, raise_exc=False)
+                    if not icon: continue
+                    ImageBox(icon, size=(32, 32), use_alphablend=True)
+
+        text = summary.get(ep['title'], {}).get('summary', '')
+        text = add_watermark_to_text(text, STORYSUMMARY_WATERMARK)
+        msg_lists.append(f"""
+【{ep['title']}】
+{await get_image_cq(await canvas.get_img())}
+{text}
+""".strip())
+
+        chara_talk_count_text = "【角色对话次数】\n"
+        for name, count in ep['talk_count']:
+            chara_talk_count_text += f"{name}: {count}\n"
+        msg_lists.append(chara_talk_count_text.strip())
+
+    additional_info_text = ""
+    for i, ep in enumerate(eps, 1):
+        additional_info_text += f"EP#{i} {summary.get(ep['title'], {}).get('additional_info', '')}\n"
+
+    msg_lists.append(f"""
+以上内容由Lunabot生成
+{additional_info_text.strip()}
+使用\"/卡牌剧情 卡牌id\"查询对应活动总结
+使用\"/卡牌剧情 卡牌id refresh\"可刷新AI活动总结
+""".strip())
+        
+    return msg_lists
+
+# 合成卡牌剧情总结图片版
+async def compose_card_story_summary_image(
+    ctx: SekaiHandlerContext, 
+    card: dict,
+    card_thumbs: list[Image.Image],
+    card_thumbs_cq: str,
+    eps: list[dict],
+    summary: dict,
+) -> Image.Image:
+    cid = card['id']
+    title = card['prefix']
+    cn_title = await translate_text(title, additional_info="该文本是偶像抽卡游戏中卡牌的标题", default=title)
+
+    style1 = TextStyle(font=DEFAULT_BOLD_FONT, size=25, color=(0, 0, 0))
+    style2 = TextStyle(font=DEFAULT_FONT, size=20, color=(0, 0, 0))
+
+    w = 720
+    line_sep = 5
+
+    with Canvas(bg=SEKAI_BLUE_BG_DAY).set_padding(BG_PADDING) as canvas:
+        with VSplit().set_sep(8).set_item_align('lt').set_content_align('lt').set_item_bg(roundrect_bg()):
+            with HSplit().set_padding(16).set_sep(16).set_item_align('l').set_content_align('l'):
+                for thumb in card_thumbs:
+                    ImageBox(thumb, size=(80, None), shadow=True)
+                with VSplit().set_padding(0).set_sep(4).set_item_align('l').set_content_align('l'):
+                    TextBox(f"#{cid} {title}", style1)
+                    TextBox(f"{cn_title} - 卡牌故事剧情总结", style1)
+                    TextBox("内容由AI生成，请勿转载到其他地方", style2)
+
+            for i, ep in enumerate(eps, 1):
+                with VSplit().set_padding(16).set_sep(16).set_item_align('lt').set_content_align('lt'):
+                    TextBox(f"第{i}章 {summary.get(f'ep_{i}_title', ep['title'])}", style1)
+                    with VSplit().set_padding(0).set_sep(8).set_item_align('lt').set_content_align('lt'):
+                        with HSplit().set_sep(2):
+                            for cid in ep['cids']:
+                                if not cid: continue
+                                icon = get_chara_icon_by_chara_id(cid, raise_exc=False)
+                                if not icon: continue
+                                ImageBox(icon, size=(32, 32), use_alphablend=True)
+                        text = summary.get(ep['title'], {}).get('summary', '')
+                        text = add_watermark_to_text(text, STORYSUMMARY_WATERMARK)
+                        TextBox(text, style2, use_real_line_count=True, line_sep=line_sep).set_w(w)
+
+                    TextBox(f"角色对话次数", style1.replace(size=22))
+                    chara_talk_count_text = ""
+                    for name, count in ep['talk_count']:
+                        chara_talk_count_text += f"{name}: {count} | "
+                    chara_talk_count_text = chara_talk_count_text.strip().rstrip('|')
+                    TextBox(chara_talk_count_text, style2, use_real_line_count=True, line_sep=line_sep).set_w(w)
+        
+    add_watermark(canvas)
+    return await canvas.get_img(cache_key=f"card_story_{ctx.region}_{cid}")
+
+# 获取卡牌剧情总结，返回待发送的消息列表或图片
+async def get_card_story_summary(ctx: SekaiHandlerContext, card: dict, refresh: bool, summary_model: List[str], save: bool) -> list[str] | Image.Image:
+    cid = card['id']
     
     card_thumbs = []
     if not only_has_after_training(card):
         card_thumbs.append(await get_card_full_thumbnail(ctx, card, False))
     if has_after_training(card):
         card_thumbs.append(await get_card_full_thumbnail(ctx, card, True))
-    card_thumbs = await get_image_cq(resize_keep_ratio(concat_images(card_thumbs, 'h'), 80, mode='short'))
+    card_thumbs_cq = await get_image_cq(resize_keep_ratio(concat_images(card_thumbs, 'h'), 80, mode='short'))
 
     summary_db = get_file_db(f"{SEKAI_DATA_DIR}/story_summary/card/{ctx.region}/{cid}.json", logger)
     summary = summary_db.get_copy("summary", {})
     if not summary or refresh:
-        await ctx.asend_reply_msg(f"{card_thumbs}正在生成卡面剧情总结...")
+        await ctx.asend_reply_msg(f"{card_thumbs_cq}正在生成卡面剧情总结...")
 
     ## 读取数据
     stories = await ctx.md.card_episodes.find_by("cardId", cid, mode='all')
@@ -453,48 +562,13 @@ async def get_card_story_summary(ctx: SekaiHandlerContext, card: dict, refresh: 
             summary_db.set("summary", summary)
 
     ## 生成回复
-    msg_lists = []
+    compose_method = compose_card_story_summary_image if config.get('story_summary.output_as_image') \
+                    else compose_card_story_summary_msg_list
+    return await compose_method(
+        ctx, card, card_thumbs, card_thumbs_cq,
+        eps, summary,
+    )
 
-    msg_lists.append(f"""
-【{cid}】{title} - {cn_title} 
-{card_thumbs}
-!! 剧透警告 !!
-!! 内容由AI生成，不保证完全准确 !!
-""".strip() + "\n" * 16)
-    
-    for i, ep in enumerate(eps, 1):
-        with Canvas(bg=SEKAI_BLUE_BG).set_padding(8) as canvas:
-            row_count = int(math.sqrt(len(ep['cids'])))
-            with Grid(row_count=row_count).set_sep(2, 2):
-                for cid in ep['cids']:
-                    if not cid: continue
-                    icon = get_chara_icon_by_chara_id(cid, raise_exc=False)
-                    if not icon: continue
-                    ImageBox(icon, size=(32, 32), use_alphablend=True)
-
-        msg_lists.append(f"""
-【{ep['title']}】
-{await get_image_cq(await canvas.get_img())}
-{summary.get(ep['title'], {}).get('summary', '')}
-""".strip())
-
-        chara_talk_count_text = "【角色对话次数】\n"
-        for name, count in ep['talk_count']:
-            chara_talk_count_text += f"{name}: {count}\n"
-        msg_lists.append(chara_talk_count_text.strip())
-
-    additional_info_text = ""
-    for i, ep in enumerate(eps, 1):
-        additional_info_text += f"EP#{i} {summary.get(ep['title'], {}).get('additional_info', '')}\n"
-
-    msg_lists.append(f"""
-以上内容由Lunabot生成
-{additional_info_text.strip()}
-使用\"/卡牌剧情 卡牌id\"查询对应活动总结
-使用\"/卡牌剧情 卡牌id refresh\"可刷新AI活动总结
-""".strip())
-        
-    return msg_lists
 
 # 合成卡牌一览图片
 async def compose_box_image(ctx: SekaiHandlerContext, qid: int, cards: dict, show_id: bool, show_box: bool, use_after_training=True):
@@ -1061,7 +1135,12 @@ async def _(ctx: SekaiHandlerContext):
 
     card = await search_single_card(ctx, args)
     await ctx.block_region(str(card['id']))
-    return await ctx.asend_fold_msg(await get_card_story_summary(ctx, card, refresh, model, save))
+
+    resp = await get_card_story_summary(ctx, card, refresh, model, save)
+    if isinstance(resp, Image.Image):
+        return await ctx.asend_reply_msg(await get_image_cq(resp, low_quality=True))
+    else:
+        return await ctx.asend_fold_msg(resp)
 
 
 # 查询卡牌一览

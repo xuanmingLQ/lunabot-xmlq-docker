@@ -80,7 +80,7 @@ func HttpRequest(
 		body, _ := io.ReadAll(resp.Body)
 		if len(body) == 0 {
 			return nil, &httpError
-		} else if body[0] == '{' {
+		} else if strings.Contains(resp.Header.Get("Content-Type"), "application/json") {
 			// json格式，全部保存
 			httpError.Detail = string(body)
 		} else {
@@ -89,9 +89,13 @@ func HttpRequest(
 			start := strings.Index(detail, "<body>")
 			end := strings.Index(detail, "</body>")
 			if -1 < start && start < end {
-				detail = detail[start+6 : end]
+				detail = detail[start+len("<body>") : end]
 			}
-			httpError.Detail = detail[:100]
+			if end-start > 100 {
+				httpError.Detail = detail[:100] + "..."
+			} else {
+				httpError.Detail = detail
+			}
 		}
 		return nil, &httpError
 	}

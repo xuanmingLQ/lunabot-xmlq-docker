@@ -275,7 +275,7 @@ async def _(ctx: SekaiHandlerContext):
                             ImageBox(card_thumbs[i], size=(80, 80), shadow=True)
                             TextBox(f"{info['cards'][i]['id']}", TextStyle(DEFAULT_FONT, 16, (50, 50, 50)))
                 
-            with Grid(col_count=13).set_sep(0, 0).set_padding(16).set_content_align('c').set_item_align('c'):
+            with Grid(col_count=13).set_sep(2, 2).set_padding(16).set_content_align('c').set_item_align('c'):
                 idx = 0
                 start_cid = 6
                 for i, item in enumerate(bd_infos):
@@ -285,9 +285,12 @@ async def _(ctx: SekaiHandlerContext):
                 for _ in range(len(bd_infos)):
                     chara_id = bd_infos[idx % len(bd_infos)]['cid']
                     idx += 1
-                    b = ImageBox(get_chara_icon_by_chara_id(chara_id), size=(40, 40)).set_padding(4)
-                    if chara_id == cid:
-                        b.set_bg(roundrect_bg(radius=8))
+                    with VSplit().set_sep(0).set_content_align('c').set_item_align('c'):
+                        b = ImageBox(get_chara_icon_by_chara_id(chara_id), size=(40, 40)).set_padding(4)
+                        if chara_id == cid:
+                            b.set_bg(roundrect_bg(radius=8))
+                        month, day = get_character_birthday(chara_id)
+                        TextBox(f"{month}/{day}", TextStyle(DEFAULT_FONT, 14, (50, 50, 80)))
 
     add_watermark(canvas)
 

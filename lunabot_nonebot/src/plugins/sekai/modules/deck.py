@@ -1871,9 +1871,10 @@ async def compose_deck_recommend_image(
                                 TextBox(f"禁用双技能自动切换", setting_style)
                             
                     if recommend_type in ["bonus", "wl_bonus"]:
-                        TextBox(f"友情提醒：控分前请核对加成和体力设置", TextStyle(font=DEFAULT_BOLD_FONT, size=26, color=(255, 50, 50)))
+                        TextBox(f"该功能需要输入活动加成而不是要控的PT", TextStyle(font=DEFAULT_BOLD_FONT, size=24, color=(255, 50, 50)))
+                        TextBox(f"友情提醒：控分前请核对加成和体力设置", TextStyle(font=DEFAULT_BOLD_FONT, size=24, color=(255, 50, 50)))
                         if recommend_type == "wl_bonus":
-                            TextBox(f"WL仅支持自动组主队，支援队请自行配置", TextStyle(font=DEFAULT_FONT, size=26, color=(50, 50, 50)))
+                            TextBox(f"WL仅支持自动组主队，支援队请自行配置", TextStyle(font=DEFAULT_FONT, size=24, color=(50, 50, 50)))
                     
                     if recommend_type not in NO_MUSIC_TYPES and not music_compare:
                         with HSplit().set_content_align('l').set_item_align('l').set_sep(16):
@@ -2015,10 +2016,10 @@ async def compose_deck_recommend_image(
                                                     if options.fixed_cards and card_id in options.fixed_cards \
                                                     or options.fixed_characters and character_id in options.fixed_characters:
                                                         TextBox(str(card_id), TextStyle(font=DEFAULT_FONT, size=10, color=WHITE)) \
-                                                            .set_bg(RoundRectBg((200, 50, 50, 200), 2)).set_offset((-2, 0))
+                                                            .set_bg(RoundRectBg((200, 50, 50, 200), 2)).set_offset((-2, 0)).set_text_offset((0, -2))
                                                     else:
                                                         TextBox(str(card_id), TextStyle(font=DEFAULT_FONT, size=10, color=(75, 75, 75))) \
-                                                            .set_bg(RoundRectBg((255, 255, 255, 200), 2)).set_offset((-2, 0))
+                                                            .set_bg(RoundRectBg((255, 255, 255, 200), 2)).set_offset((-2, 0)).set_text_offset((0, -2))
                                                     if card.has_canvas_bonus:
                                                         ImageBox(ctx.static_imgs.get(f"mysekai/icon_canvas.png"), size=(11, 11)) \
                                                                 .set_offset((-32, 65))

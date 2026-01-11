@@ -460,13 +460,152 @@ async def parse_search_single_event_args(ctx: SekaiHandlerContext, args: str, fa
     else:
         raise ReplyException(f"查单个活动参数错误")
 
-# 获取活动剧情总结
-async def get_event_story_summary(ctx: SekaiHandlerContext, event: dict, refresh: bool, summary_model: List[str], save: bool) -> List[str]:
+# 合成活动剧情总结文本版
+async def compose_event_story_summary_msg_list(
+    ctx: SekaiHandlerContext, 
+    event: dict, 
+    eps: list[dict], 
+    no_snippet_eps: list[dict], 
+    summary: dict,
+    chara_talk_count: list[tuple[str, int]],
+) -> List[str]:
     eid = event['id']
     title = event['name']
     banner_img_cq = await get_image_cq(await get_event_banner_img(ctx, event))
+
+    msg_lists = []
+
+    msg_lists.append(f"""
+【{eid}】{title} - {summary.get('title', '')} 
+{banner_img_cq}
+!! 剧透警告 !!
+!! 内容由AI生成，不保证完全准确 !!
+!! 请勿转载到其他地方 !!
+""".strip() + "\n" * 16)
+
+    text = summary.get('outline', '').strip()
+    msg_lists.append(f"【剧情概要】\n{text}")
+    
+    for i, ep in enumerate(eps + no_snippet_eps, 1):
+        with Canvas(bg=SEKAI_BLUE_BG).set_padding(8) as canvas:
+            with VSplit().set_sep(8):
+                ImageBox(ep['image'], size=(None, 80))
+                with Grid(col_count=5).set_sep(2, 2):
+                    for cid in ep['cids']:
+                        if not cid: continue
+                        icon = get_chara_icon_by_chara_id(cid, raise_exc=False)
+                        if not icon: continue
+                        ImageBox(icon, size=(32, 32), use_alphablend=True)
+
+        if i <= len(eps):
+            text = summary.get(f'ep_{i}_summary', '')
+            text = add_watermark_to_text(text, STORYSUMMARY_WATERMARK)
+        else:
+            text = "(章节剧情未实装)"
+
+        msg_lists.append(f"""
+【第{i}章】{summary.get(f'ep_{i}_title', ep['title'])}
+{await get_image_cq(await canvas.get_img())}
+{text}
+""".strip())
+    
+    text = summary.get('summary', '').strip()
+    msg_lists.append(f"【剧情总结】\n{text}")
+
+    chara_talk_count_text = "【角色对话次数】\n"
+    for name, count in chara_talk_count:
+        chara_talk_count_text += f"{name}: {count}\n"
+    msg_lists.append(chara_talk_count_text.strip())
+
+    additional_info = "以上内容由LunaBot生成\n请勿转载\n"
+    for phase in ['start', *[f'ep{i}' for i in range(1, len(eps) + 1)], 'end']:
+        phase_info = summary.get(f'{phase}_additional_info', '')
+        if phase_info:
+            additional_info += f"{phase}: {phase_info}\n"
+    additional_info += "使用\"/活动剧情 活动id\"查询对应活动总结\n"
+    additional_info += "使用\"/活动剧情 活动id refresh\"可刷新AI活动总结"
+    msg_lists.append(additional_info.strip())
+        
+    return msg_lists
+
+# 合成活动剧情总结图片版
+async def compose_event_story_summary_image(
+    ctx: SekaiHandlerContext, 
+    event: dict, 
+    eps: list[dict], 
+    no_snippet_eps: list[dict], 
+    summary: dict,
+    chara_talk_count: list[tuple[str, int]],
+) -> Image.Image:
+    eid = event['id']
+    title = event['name']
+    banner_img = await get_event_banner_img(ctx, event)
+
+    style1 = TextStyle(font=DEFAULT_BOLD_FONT, size=25, color=(0, 0, 0))
+    style2 = TextStyle(font=DEFAULT_FONT, size=20, color=(0, 0, 0))
+
+    w = 720
+    line_sep = 5
+
+    with ProfileTimer("event_story.layout"):
+        with Canvas(bg=SEKAI_BLUE_BG_DAY).set_padding(BG_PADDING) as canvas:
+            with VSplit().set_sep(8).set_item_align('lt').set_content_align('lt').set_item_bg(roundrect_bg()):
+                with HSplit().set_padding(16).set_sep(16).set_item_align('l').set_content_align('l'):
+                    ImageBox(banner_img, size=(None, 100))
+                    with VSplit().set_padding(0).set_sep(4).set_item_align('l').set_content_align('l'):
+                        TextBox(f"#{eid} {title}", style1)
+                        TextBox(f"{summary.get('title', '')} - 剧情总结", style1)
+                        TextBox("内容由AI生成，请勿转载到其他地方", style2)
+                        
+                with VSplit().set_padding(16).set_sep(8).set_item_align('lt').set_content_align('lt'):
+                    TextBox(f"剧情概要", style1)
+                    text = summary.get('outline', '').strip()
+                    TextBox(text, style2, use_real_line_count=True, line_sep=line_sep).set_w(w)
+
+                for i, ep in enumerate(eps + no_snippet_eps, 1):
+                    with VSplit().set_padding(16).set_sep(16).set_item_align('lt').set_content_align('lt'):
+                        TextBox(f"第{i}章 {summary.get(f'ep_{i}_title', ep['title'])}", style1)
+                        with HSplit().set_padding(0).set_sep(16).set_item_align('lt').set_content_align('lt'):
+                            with VSplit().set_sep(8):
+                                ImageBox(ep['image'], size=(160, None))
+                                with Grid(col_count=5).set_sep(2, 2):
+                                    for cid in ep['cids']:
+                                        if not cid: continue
+                                        icon = get_chara_icon_by_chara_id(cid, raise_exc=False)
+                                        if not icon: continue
+                                        ImageBox(icon, size=(32, 32), use_alphablend=True)
+                            if i <= len(eps):
+                                text = summary.get(f'ep_{i}_summary', '')
+                                text = add_watermark_to_text(text, STORYSUMMARY_WATERMARK)
+                            else:
+                                text = "(章节剧情未实装)"
+                            TextBox(text, style2, use_real_line_count=True, line_sep=line_sep).set_w(w - 176)
+
+                with VSplit().set_padding(16).set_sep(8).set_item_align('lt').set_content_align('lt'):
+                    TextBox(f"剧情总结", style1)
+                    text = summary.get('summary', '').strip()
+                    TextBox(add_watermark_to_text(text, STORYSUMMARY_WATERMARK), style2, use_real_line_count=True, line_sep=line_sep).set_w(w)
+
+                with VSplit().set_padding(16).set_sep(8).set_item_align('lt').set_content_align('lt'):
+                    TextBox(f"角色对话次数", style1)
+                    chara_talk_count_text = ""
+                    for name, count in chara_talk_count:
+                        chara_talk_count_text += f"{name}: {count} | "
+                    chara_talk_count_text = chara_talk_count_text.strip().rstrip('|')
+                    TextBox(chara_talk_count_text, style2, use_real_line_count=True, line_sep=line_sep).set_w(w)
+                    
+        add_watermark(canvas)
+    
+    with ProfileTimer("event_story.get_img"): 
+        return await canvas.get_img(cache_key=f"event_story_{ctx.region}_{eid}")
+
+# 获取活动剧情总结，返回待发送的消息列表或图片
+async def get_event_story_summary(ctx: SekaiHandlerContext, event: dict, refresh: bool, summary_model: List[str], save: bool) -> list[str] | Image.Image:
+    eid = event['id']
+    title = event['name']
     summary_db = get_file_db(f"{SEKAI_DATA_DIR}/story_summary/event/{ctx.region}/{eid}.json", logger)
     summary = summary_db.get_copy("summary", {})
+    banner_img_cq = await get_image_cq(await get_event_banner_img(ctx, event))
 
     ## 读取数据
     story = await ctx.md.event_stories.find_by('eventId', eid)
@@ -477,49 +616,50 @@ async def get_event_story_summary(ctx: SekaiHandlerContext, event: dict, refresh
     no_snippet_eps = []
     chara_talk_count: Dict[str, int] = {}
 
-    for i, ep in enumerate(story['eventStoryEpisodes'], 1):
-        ep_id = ep['scenarioId']
-        ep_title = ep['title']
-        ep_image = await ctx.rip.img(f"event_story/{asset_name}/episode_image_rip/{asset_name}_{i:02d}.png")
-        ep_data = await ctx.rip.json(
-            f"event_story/{asset_name}/scenario_rip/{ep_id}.asset", 
-            allow_error=False, 
-            use_cache=True,
-            cache_expire_secs=0 if refresh else 60 * 60 * 24,    # refresh时读取最新的，否则一天更新一次
-        )
-        cids = set([
-            (await ctx.md.characters_2ds.find_by_id(item['Character2dId'])).get('characterId', None)
-            for item in ep_data['AppearCharacters']
-        ])
+    with ProfileTimer("event_story.load_eps"):
+        for i, ep in enumerate(story['eventStoryEpisodes'], 1):
+            ep_id = ep['scenarioId']
+            ep_title = ep['title']
+            ep_image = await ctx.rip.img(f"event_story/{asset_name}/episode_image_rip/{asset_name}_{i:02d}.png")
+            ep_data = await ctx.rip.json(
+                f"event_story/{asset_name}/scenario_rip/{ep_id}.asset", 
+                allow_error=False, 
+                use_cache=True,
+                cache_expire_secs=0 if refresh else 60 * 60 * 24,    # refresh时读取最新的，否则一天更新一次
+            )
+            cids = set([
+                (await ctx.md.characters_2ds.find_by_id(item['Character2dId'])).get('characterId', None)
+                for item in ep_data['AppearCharacters']
+            ])
 
-        snippets = []
-        for snippet in ep_data['Snippets']:
-            action = snippet['Action']
-            ref_idx = snippet['ReferenceIndex']
-            if action == 1:     # 对话
-                talk = ep_data['TalkData'][ref_idx]
-                names = talk['WindowDisplayName'].split('・')
-                snippets.append((names, talk['Body']))
-                for name in names:
-                    chara_talk_count[name] = chara_talk_count.get(name, 0) + 1
-            elif action == 6:   # 标题特效
-                effect = ep_data['SpecialEffectData'][ref_idx]
-                if effect['EffectType'] == 8:
-                    snippets.append((None, effect['StringVal']))
+            snippets = []
+            for snippet in ep_data['Snippets']:
+                action = snippet['Action']
+                ref_idx = snippet['ReferenceIndex']
+                if action == 1:     # 对话
+                    talk = ep_data['TalkData'][ref_idx]
+                    names = talk['WindowDisplayName'].split('・')
+                    snippets.append((names, talk['Body']))
+                    for name in names:
+                        chara_talk_count[name] = chara_talk_count.get(name, 0) + 1
+                elif action == 6:   # 标题特效
+                    effect = ep_data['SpecialEffectData'][ref_idx]
+                    if effect['EffectType'] == 8:
+                        snippets.append((None, effect['StringVal']))
 
-        if snippets:
-            eps.append({
-                'title': ep_title,
-                'image': ep_image,
-                'cids': cids,
-                'snippets': snippets,
-            })
-        else:
-            no_snippet_eps.append({
-                'title': ep_title,
-                'image': ep_image,
-                'cids': cids,
-            })
+            if snippets:
+                eps.append({
+                    'title': ep_title,
+                    'image': ep_image,
+                    'cids': cids,
+                    'snippets': snippets,
+                })
+            else:
+                no_snippet_eps.append({
+                    'title': ep_title,
+                    'image': ep_image,
+                    'cids': cids,
+                })
 
     chara_talk_count = sorted(chara_talk_count.items(), key=lambda x: x[1], reverse=True)
 
@@ -636,68 +776,14 @@ async def get_event_story_summary(ctx: SekaiHandlerContext, event: dict, refresh
             summary_db.set("summary", summary)
     
     ## 生成回复
-    msg_lists = []
-
-    msg_lists.append(f"""
-【{eid}】{title} - {summary.get('title', '')} 
-{banner_img_cq}
-!! 剧透警告 !!
-!! 内容由AI生成，不保证完全准确 !!
-""".strip() + "\n" * 16)
-
-    msg_lists.append(f"【剧情概要】\n{summary.get('outline', '').strip()}")
-    
-    for i, ep in enumerate(eps, 1):
-        with Canvas(bg=SEKAI_BLUE_BG).set_padding(8) as canvas:
-            with VSplit().set_sep(8):
-                ImageBox(ep['image'], size=(None, 80))
-                with Grid(col_count=5).set_sep(2, 2):
-                    for cid in ep['cids']:
-                        if not cid: continue
-                        icon = get_chara_icon_by_chara_id(cid, raise_exc=False)
-                        if not icon: continue
-                        ImageBox(icon, size=(32, 32), use_alphablend=True)
-
-        msg_lists.append(f"""
-【第{i}章】{summary.get(f'ep_{i}_title', ep['title'])}
-{await get_image_cq(await canvas.get_img())}
-{summary.get(f'ep_{i}_summary', '')}
-""".strip())
-        
-    for i, ep in enumerate(no_snippet_eps, 1):
-        with Canvas(bg=SEKAI_BLUE_BG).set_padding(8) as canvas:
-            with VSplit().set_sep(8):
-                ImageBox(ep['image'], size=(None, 80))
-                with Grid(col_count=5).set_sep(2, 2):
-                    for cid in ep['cids']:
-                        if not cid: continue
-                        icon = get_chara_icon_by_chara_id(cid, raise_exc=False)
-                        if not icon: continue
-                        ImageBox(icon, size=(32, 32), use_alphablend=True)
-
-        msg_lists.append(f"""
-【第{i + len(eps)}章】{ep['title']}
-{await get_image_cq(await canvas.get_img())}
-(章节剧情未实装)
-""".strip())
-        
-    msg_lists.append(f"【剧情总结】\n{summary.get('summary', '').strip()}")
-
-    chara_talk_count_text = "【角色对话次数】\n"
-    for name, count in chara_talk_count:
-        chara_talk_count_text += f"{name}: {count}\n"
-    msg_lists.append(chara_talk_count_text.strip())
-
-    additional_info = "以上内容由Lunabot生成\n"
-    for phase in ['start', *[f'ep{i}' for i in range(1, len(eps) + 1)], 'end']:
-        phase_info = summary.get(f'{phase}_additional_info', '')
-        if phase_info:
-            additional_info += f"{phase}: {phase_info}\n"
-    additional_info += "使用\"/活动剧情 活动id\"查询对应活动总结\n"
-    additional_info += "使用\"/活动剧情 活动id refresh\"可刷新AI活动总结"
-    msg_lists.append(additional_info.strip())
-        
-    return msg_lists
+    with ProfileTimer("event_story.compose_summary"):
+        compose_method = compose_event_story_summary_image if config.get('story_summary.output_as_image') \
+                        else compose_event_story_summary_msg_list
+        return await compose_method(
+            ctx, event, 
+            eps, no_snippet_eps, 
+            summary, chara_talk_count
+        )
 
 # 5v5自动送火
 async def send_boost(ctx: SekaiHandlerContext, qid: int) -> str:
@@ -1029,7 +1115,12 @@ async def _(ctx: SekaiHandlerContext):
     except:
         event = await get_current_event(ctx, fallback='next_first')
     await ctx.block_region(str(event['id']))
-    return await ctx.asend_fold_msg(await get_event_story_summary(ctx, event, refresh, model, save))
+
+    resp = await get_event_story_summary(ctx, event, refresh, model, save)
+    if isinstance(resp, Image.Image):
+        return await ctx.asend_reply_msg(await get_image_cq(resp, low_quality=True))
+    else:
+        return await ctx.asend_fold_msg(resp)
 
 
 # 5v5自动送火
