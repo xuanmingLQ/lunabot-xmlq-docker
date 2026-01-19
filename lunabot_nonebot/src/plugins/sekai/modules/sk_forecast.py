@@ -325,7 +325,7 @@ async def get_forecast_data(region: str, event_id: int, chapter_id: int | None =
 
 @repeat_with_interval(60, '更新预测数据', logger, every_output=False, error_limit=1)
 async def _update_forecast_data():
-    for region in REGIONS:
+    for region in get_regions(RegionAttributes.ENABLE):
         ctx = SekaiHandlerContext.from_region(region)
 
         event = await get_current_event(ctx)

@@ -698,6 +698,7 @@ async def compose_gacha_record_image(ctx: SekaiHandlerContext, qid: int, spec_gi
                 'name': gacha.name,
                 'start_at': gacha.start_at,
                 'end_at': gacha.end_at,
+                'too_long': (gacha.end_at - gacha.start_at).days > 60,
                 'behaviors': {},
             })
             if last_spin_at:
@@ -734,6 +735,9 @@ async def compose_gacha_record_image(ctx: SekaiHandlerContext, qid: int, spec_gi
         # 处理每个卡池的cards字典加速查找
         gcards_dict: dict[int, dict[int, GachaCard]] = {}
         for gid, gdata in records.items():
+            if gdata['too_long']:
+                gcards_dict[gid] = {}
+                continue
             gacha: Gacha = gdata['gacha']
             gcards_dict[gid] = { c.id: c for c in gacha.cards }
 
@@ -868,6 +872,8 @@ async def compose_gacha_record_image(ctx: SekaiHandlerContext, qid: int, spec_gi
                                             qs = int(size * 0.3)
                                             TextBox("?", TextStyle(DEFAULT_BOLD_FONT, int(qs * 0.8), BLACK)).set_size((qs, qs)) \
                                                 .set_bg(RoundRectBg((255, 255, 255, 200), radius=qs // 2)).set_content_align('c')
+                        if gdata['too_long']:
+                            TextBox("⚠️ 由于该卡池开放时间较长，不进行不准确的NEW卡推测", style3, use_real_line_count=True).set_padding(4)
 
                 if hide_num:
                     TextBox(f"{hide_num}条抽卡记录已隐藏，可指定卡池ID查看", style2, use_real_line_count=True).set_padding(8)

@@ -624,14 +624,14 @@ async def get_detailed_profile(
         if cache_path and os.path.exists(cache_path):
             profile = load_json(cache_path)
             logger.info(f"从缓存获取 {qid} {ctx.region}抓包数据")
-            return profile, str(e) + "(使用先前的缓存数据)"
+            return profile, get_exc_desc(e) + "(使用先前的缓存数据)"
         else:
             logger.info(f"未找到 {qid} 的缓存{ctx.region}抓包数据")
 
         if raise_exc:
             raise e
         else:
-            return None, str(e)
+            return None, get_exc_desc(e)
         
     return profile, ""
 # 获取包含了玩家详细信息的简单卡片控件所需要的filter
@@ -1868,12 +1868,28 @@ async def _(ctx: HandlerContext):
     bind_history = bind_history_db.get("history", {})
     if uid:
         # 游戏ID查QQ号
-        msg = f"绑定过{uid}的QQ用户:\n"
+        has_any = False
+        msg = f"当前绑定游戏ID{uid}的QQ用户:\n"
+        for region in get_regions(RegionAttributes.ENABLE):
+            bind_list: Dict[str, str | list[str]] = profile_db.get("bind_list", {}).get(region, {})
+            for qid, items in bind_list.items():
+                if uid in to_list(items):
+                    msg += f"{qid}\n"
+                    has_any = True
+        if not has_any:
+            msg += "无\n"
+
+        has_any = False
+        msg += f"曾经绑定过{uid}的QQ用户:\n"
         for qid, items in bind_history.items():
             for item in items:
                 if item['uid'] == uid:
                     time = datetime.fromtimestamp(item['time'] / 1000).strftime('%Y-%m-%d %H:%M:%S')
                     msg += f"[{time}] {qid}"
+                    has_any = True
+        if not has_any:
+            msg += "无\n"
+            
     else:
         # QQ号查游戏ID
         has_any = False
@@ -1893,13 +1909,17 @@ async def _(ctx: HandlerContext):
                 has_any = True
                 msg += f"【{region.name}】\n" + '\n'.join(lines) + '\n'
         if not has_any:
-            msg += "当前没有绑定任何游戏ID\n"
+            msg += "无\n"
 
+        has_any = False
         msg += f"用户{qid}的绑定历史:\n"
         items = bind_history.get(qid, [])
         for item in items:
             time = datetime.fromtimestamp(item['time'] / 1000).strftime('%Y-%m-%d %H:%M:%S')
             msg += f"[{time}]\n{item['region']} {item['uid']}\n"
+            has_any = True
+        if not has_any:
+            msg += "无\n"
 
     return await ctx.asend_fold_msg_adaptive(msg.strip())
 

@@ -40,9 +40,6 @@ class MsrIdNotMatchException(ReplyException):
 MYSEKAI_HARVEST_MAP_IMAGE_SCALE_CFG = config.item('mysekai.map_image_scale')
 MYSEKAI_HARVEST_MAP_SITE_BG_IMAGE_DOWNSAMPLE = 0.5
 
-MYSEKAI_REGIONS_CFG = config.item('mysekai.regions')
-BD_MYSEKAI_REGIONS_CFG = config.item('mysekai.bd_regions')
-
 MYSEKAI_RARE_RES_KEYS_CFG = config.item('mysekai.rare_res_keys')
 MYSEKAI_HARVEST_FIXTURE_IMAGE_NAME = {
     1001: "oak.png",
@@ -170,14 +167,14 @@ async def get_mysekai_info(
         if cache_path and os.path.exists(cache_path):
             mysekai_info = load_json(cache_path)
             logger.info(f"从缓存获取 {qid} {ctx.region} mysekai抓包数据")
-            return mysekai_info, str(e) + "(使用先前的缓存数据)"
+            return mysekai_info, get_exc_desc(e) + "(使用先前的缓存数据)"
         else:
             logger.info(f"未找到 {qid} 的缓存{ctx.region} mysekai抓包数据")
 
         if raise_exc:
             raise e
         else:
-            return None, str(e)
+            return None, get_exc_desc(e)
     return mysekai_info, ""
 
 # 获取玩家mysekai抓包数据的简单卡片 返回 Frame
@@ -277,6 +274,8 @@ async def get_mysekai_and_detail_profile_card(ctx: SekaiHandlerContext, mysekai_
 def get_mysekai_last_refresh_time_and_reason(ctx: SekaiHandlerContext, dt: datetime=None) -> Tuple[datetime, str]:
     # 自然刷新
     h1, h2 = get_mysekai_refresh_hours(ctx)
+    if h1 > h2:
+        h1, h2 = h2, h1
     now = dt or datetime.now()
     last_refresh_time = None
     if now.hour < h1:
@@ -518,7 +517,7 @@ async def compose_mysekai_harvest_map_image(ctx: SekaiHandlerContext, harvest_ma
                 assert cid
                 chara_eng_name = (await ctx.md.game_characters.find_by_id(cid))['givenNameEnglish'].lower()
                 image = await ctx.rip.img(
-                    f'mysekai/birthday/{chara_eng_name}_2025/icon_refresh.png',
+                    f'mysekai/birthday/{chara_eng_name}_{datetime.now().year}/icon_refresh.png',
                     use_img_cache=True,
                     default=None
                 )
@@ -729,7 +728,10 @@ async def compose_mysekai_res_image(ctx: SekaiHandlerContext, qid: int, show_har
 
     # 判断当前天气
     current_hour = upload_time.hour
-    phenom_idx = 1 if current_hour < h1 or current_hour >= h2 else 0
+    if h1 < h2:
+        phenom_idx = 1 if current_hour < h1 or current_hour >= h2 else 0
+    else:
+        phenom_idx = 1 if h2 <= current_hour < h1 else 0
     cur_phenom_id = phenom_ids[phenom_idx]
     phenom_color_info = get_mysekai_phenomena_color_info(cur_phenom_id)
     phenom_bg = FillBg(LinearGradient(c1=phenom_color_info['sky1'], c2=phenom_color_info['sky2'], p1=(0.25, 1.0), p2=(0.75, 0.0)))
@@ -1982,7 +1984,6 @@ async def _(ctx: SekaiHandlerContext):
     with ProfileTimer("msr.total"):
         if ctx.region in bd_msr_sub.regions and not bd_msr_sub.is_subbed(ctx.region, ctx.group_id): 
             raise ReplyException(f"不支持{ctx.region.name}的msr查询")
-        await ctx.block_region(key=f"{ctx.user_id}", timeout=0, err_msg="正在处理你的msr查询，请稍候")
         args = ctx.get_args().strip()
         show_harvested = 'all' in args
         check_time = not 'force' in args

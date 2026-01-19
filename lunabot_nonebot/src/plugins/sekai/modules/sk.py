@@ -1022,7 +1022,7 @@ async def compose_csb_image(ctx: SekaiHandlerContext, qtype: str, qval: Union[st
                                     color = HEAT_COLOR_MYSEKAI
                                 else:
                                     color = lerp_color(HEAT_COLOR_MIN, HEAT_COLOR_MAX, max(min((playcount - 15) / 15, 1.0), 0.0))
-                                TextBox(playcount_text, TextStyle(font=DEFAULT_FONT, size=16, color=BLACK)) \
+                                TextBox(playcount_text, TextStyle(font=DEFAULT_FONT, size=14, color=BLACK), overflow='clip') \
                                     .set_bg(RoundRectBg(color, radius=4)).set_content_align('c').set_size((30, 30)).set_offset((0, -2))
         
             with VSplit().set_content_align('lt').set_item_align('lt').set_sep(6).set_padding(16):

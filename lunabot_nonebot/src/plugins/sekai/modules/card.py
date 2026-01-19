@@ -115,6 +115,8 @@ async def search_single_card(ctx: SekaiHandlerContext, args: str) -> dict:
 
 # 解析查多张卡的参数 返回筛选后的cards列表和剩余参数
 async def search_multi_cards(ctx: SekaiHandlerContext, args: str, cards: List[dict]=None, contain_leak=True) -> Tuple[List[dict], str]:
+    args = args.lower().strip()
+
     if cards is None:
         cards = await ctx.md.cards.get()
 
@@ -198,7 +200,9 @@ async def search_multi_cards(ctx: SekaiHandlerContext, args: str, cards: List[di
         card["supply_show_name"] = CARD_SUPPLIES_SHOW_NAMES.get(supply_type, None)
         if supply is not None:
             search_supplies = []
-            if supply == "all_limited":
+            if supply == "festival_limited":
+                search_supplies = ["bloom_festival_limited", "colorful_festival_limited"]
+            elif supply == "all_limited":
                 search_supplies = CARD_SUPPLIES_SHOW_NAMES.keys()
             elif supply == "not_limited":
                 search_supplies = ["normal"]
@@ -277,8 +281,8 @@ async def compose_card_list_image(ctx: SekaiHandlerContext, cards: List[Dict], q
             supply_name = card['supply_show_name']
             if supply_name in ['期间限定', 'WL限定', '联动限定']:
                 ImageBox(ctx.static_imgs.get(f"card/term_limited.png"), size=(int(sz*0.6), None))
-            elif supply_name in ['Fes限定', 'BFes限定']:
-                ImageBox(ctx.static_imgs.get(f"card/fes_limited.png"), size=(int(sz*0.6), None))
+            elif supply_name in ['CFes限定', 'BFes限定']:
+                ImageBox(ctx.static_imgs.get(f"card/fes_limited.png"), size=(int(sz*0.35), None))
 
     with Canvas(bg=random_unit_bg(bg_unit)).set_padding(BG_PADDING) as canvas:
         with VSplit().set_sep(16).set_content_align('lt').set_item_align('lt'):
@@ -569,7 +573,6 @@ async def get_card_story_summary(ctx: SekaiHandlerContext, card: dict, refresh: 
         eps, summary,
     )
 
-
 # 合成卡牌一览图片
 async def compose_box_image(ctx: SekaiHandlerContext, qid: int, cards: dict, show_id: bool, show_box: bool, use_after_training=True):
     pcards = []
@@ -648,7 +651,7 @@ async def compose_box_image(ctx: SekaiHandlerContext, qid: int, cards: dict, sho
             supply_name = card['supply_show_name']
             if supply_name in ['期间限定', 'WL限定', '联动限定']:
                 ImageBox(ctx.static_imgs.get(f"card/term_limited.png"), size=(int(sz*0.6), None))
-            elif supply_name in ['Fes限定', 'BFes限定']:
+            elif supply_name in ['CFes限定', 'BFes限定']:
                 ImageBox(ctx.static_imgs.get(f"card/fes_limited.png"), size=(int(sz*0.35), None))
             if not card['has'] and profile:
                 Spacer(w=sz, h=sz).set_bg(RoundRectBg(fill=(0,0,0,120), radius=2))

@@ -278,6 +278,9 @@ class MasterDataManager:
             db_mgr = RegionMasterDbManager.get(region)
             if get_version_order(self.version.get(region, DEFAULT_VERSION)) < get_version_order(db_mgr.source.version):
                 await self._download_from_db(region, db_mgr)
+            # 检查是否存在，如果仍然不存在则报错
+            if self.data.get(region) is None:
+                raise Exception(f"获取 MasterData [{region}.{self.name}] 的数据失败")
 
     async def get_data(self, region: str):
         """

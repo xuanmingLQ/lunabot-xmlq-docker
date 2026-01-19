@@ -19,7 +19,7 @@ def get_user_default_region(user_id: int, fallback: str) -> SekaiRegion|None:
         # 这里的region_id可能为None，而get_region_by_id在region_id位None时会报错
         # 所以用try except处理一下
         return get_region_by_id(default_regions.get(user_id, fallback))
-    except RuntimeError:
+    except SekaiRegionError:
         return None
 
 def set_user_default_region(user_id: int, region: SekaiRegion):
@@ -71,7 +71,7 @@ class SekaiCmdHandler(CmdHandler):
         parse_uid_arg: bool = True,
         **kwargs
     ):
-        self.available_regions = get_regions_by_ids(regions) or self.DEFAULT_AVAILABLE_REGIONS
+        self.available_regions = get_regions(RegionAttributes.ENABLE, ids=regions) or self.DEFAULT_AVAILABLE_REGIONS
         self.prefix_args = sorted(prefix_args or [''], key=lambda x: len(x), reverse=True)
         all_region_commands = []
         for prefix in self.prefix_args:

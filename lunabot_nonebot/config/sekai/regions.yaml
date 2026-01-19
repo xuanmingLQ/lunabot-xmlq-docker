@@ -1,6 +1,6 @@
 jp:
   - "日服" # 中文名，必填，必须是字符串，必须放在第一位
-  - 9 # utc offset 必填，必须是整数，必须放在第二位
+  - Asia/Tokyo # 时区名 必填，必须放在第二位
   - enable # 即使不填，也默认是启用的
   - need_translate # 需要翻译
   - fifth_anniversary # 已过五周年
@@ -12,7 +12,7 @@ jp:
 
 cn:
   - "国服" # 中文名，必填
-  - 8 # utc offset 必填
+  - Asia/Shanghai
   - enable
   - local # 这个字段，用于指示本地时区，其它服务器的时间会被换算到本地时间
   - translated # 已翻译过
@@ -24,7 +24,7 @@ cn:
 
 tw:
   - "台服" # 中文名，必填
-  - 8 # utc offset 必填
+  - Asia/Taipei
   - disable # 如果填了disable，就禁用这个服务器
   - mysekai
   - bd_mysekai
@@ -32,7 +32,7 @@ tw:
 
 kr:
   - "韩服" # 中文名，必填
-  - 9 # utc offset 必填
+  - Asia/Seoul
   - disable # 如果填了disable，就禁用这个服务器
   - need_translate
   - mysekai
@@ -41,7 +41,7 @@ kr:
 
 en:
   - "国际服" # 中文名，必填
-  - -9 # utc offset 必填
+  - America/Los_Angeles
   - disable # 如果填了disable，就禁用这个服务器
   - need_translate
   - mysekai

@@ -128,3 +128,19 @@
 .meta {
     fill: #444;
 }
+
+
+.bar-line {
+    stroke: #6f6f6f;
+    stroke-width: 2;
+}
+
+.beat-line {
+    stroke: #646464;
+    stroke-width: 1;
+}
+
+.lane-line {
+    stroke: #646464;
+    stroke-width: 1;
+}

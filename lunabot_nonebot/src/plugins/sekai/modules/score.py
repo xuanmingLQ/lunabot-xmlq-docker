@@ -463,8 +463,12 @@ async def compose_music_meta_image(ctx: SekaiHandlerContext, mids: list[int]) ->
 async def compose_music_board_image(
     ctx: SekaiHandlerContext, 
     live_type: str,
+    target: str,
     strategy: str,
     skills: list[float],
+    power: int,
+    deck_bonus: float,
+    play_interval: float,
     music_num: int, 
     spec_mid_diffs: list[tuple[int, str]],
     diff_filter: list[str] | None,
@@ -472,8 +476,11 @@ async def compose_music_board_image(
 ) -> Image.Image:
     assert live_type in ('auto', 'solo', 'multi')
     assert strategy in ('max', 'min', 'avg')
+    assert target in ('score', 'pt', 'pt/time')
     assert len(spec_mid_diffs) <= music_num
     assert len(skills) == 5
+    if live_type == 'multi':    # 多人模式只支持其他人实效相同
+        assert len(set(skills)) == 1
 
     level_filter_op = None
     if level_filter:
@@ -489,7 +496,7 @@ async def compose_music_board_image(
         avg_skill = sum(skills) / len(skills)
         sorted_skills = [avg_skill] * 5
 
-    # 获取分数信息
+    # 计算分数信息
     rows: list[dict] = []
     for meta in await musicmetas_json.get():
         mid = meta['music_id']
@@ -533,7 +540,32 @@ async def compose_music_board_image(
         auto_skill_account = auto_skill / auto_score
         multi_skill_account = multi_skill / multi_score
 
-        rows.append({
+        def calc_real_score_and_pt(d: dict, live_type: str, power: int):
+            active_bonus = 0.0
+            if live_type == 'multi':
+                active_bonus = 5 * 0.015 * power
+            d[f'{live_type}_real_score'] = int(d[f'{live_type}_score'] * power * 4 + active_bonus)
+
+            event_rate = d['event_rate'] / 100.0
+            deck_rate = deck_bonus / 100.0 + 1
+
+            match live_type:
+                case 'solo':
+                    base = 100 + int(d['solo_real_score'] / 20000)
+                    d['solo_pt'] = int(base * event_rate * deck_rate)
+                case 'auto':
+                    base = 100 + int(d['auto_real_score'] / 20000)
+                    d['auto_pt'] = int(base * event_rate * deck_rate)
+                case 'multi':
+                    other_score = d['multi_real_score'] * 4
+                    base = 110 + int(d['multi_real_score'] / 17000) + min(13, int(other_score / 340000))
+                    d['multi_pt'] = int(base * event_rate * deck_rate)
+
+            play_time = d['music_time'] + play_interval
+            d['play_count_per_hour'] = 60 * 60 / play_time
+            d[f'{live_type}_pt_per_hour'] = d[f'{live_type}_pt'] * d['play_count_per_hour']
+            
+        data = {
             'music_id': mid,
             'difficulty': diff,
             'music_time': music_time,
@@ -545,10 +577,18 @@ async def compose_music_board_image(
             'solo_skill_account': solo_skill_account,
             'auto_skill_account': auto_skill_account,
             'multi_skill_account': multi_skill_account,
-        })
+        }
+
+        for live_type_key in ('solo', 'auto', 'multi'):
+            calc_real_score_and_pt(data, live_type_key, power)
+
+        rows.append(data)
 
     # 排序
-    sort_key = f"{live_type}_score"
+    match target:
+        case 'score':   sort_key = f"{live_type}_score"
+        case 'pt':      sort_key = f"{live_type}_pt"
+        case 'pt/time': sort_key = f"{live_type}_pt_per_hour"
     rows.sort(key=lambda x: x[sort_key], reverse=True)
     for i, row in enumerate(rows):
         row['rank'] = i + 1
@@ -600,21 +640,41 @@ async def compose_music_board_image(
     with Canvas(bg=SEKAI_BLUE_BG).set_padding(BG_PADDING) as canvas:
         with VSplit().set_content_align('lt').set_item_align('lt').set_sep(8).set_padding(16).set_bg(roundrect_bg()):
             # 标题
+            match target:
+                case "score":   target_text = "LIVE分数"
+                case "pt":      target_text = "活动PT/体力"
+                case "pt/time": target_text = "活动PT/时间"
             match live_type:
                 case "auto": live_text = "自动LIVE"
                 case "solo": live_text = "单人LIVE"
                 case "multi": live_text = "多人LIVE"
-            match strategy:
-                case "max": strategy_text = "最优"
-                case "min": strategy_text = "最差"
-                case "avg": strategy_text = "平均"
-            skill_text = ' '.join([f'{s*100:.0f}' for s in skills])
-            skill_tag = "五张卡牌的技能" if live_type != 'multi' else "五位玩家的实效"
-            TextBox(
-                f"{live_text}歌曲排行 - 技能顺序: {strategy_text}情况 - {skill_tag}: {skill_text} - 数据来自33Kit", 
-                title_style,
-            )
+
+            skill_text, strategy_text, power_text, deck_bonus_text, play_interval_text = "", "", "", "", ""
             
+            if live_type != 'multi':
+                skill_text = "五张卡牌的技能: " + ' '.join([f'{s*100:.0f}' for s in skills])
+                match strategy:
+                    case "max": strategy_text = "技能顺序: 最优情况"
+                    case "min": strategy_text = "技能顺序: 最差情况"
+                    case "avg": strategy_text = "技能顺序: 平均情况"
+            else:
+                skill_text = f"(五人相同) 实效: {skills[0]*100:.0f}"
+            
+            if target != 'score':
+                power_text = f"综合: {power}"
+                deck_bonus_text = f"活动加成: {deck_bonus:.0f}%"
+                if target in ('pt/time',):
+                    play_interval_text = f"游玩间隔: {play_interval:.0f}s"
+
+            texts = [s for s in (skill_text, strategy_text, power_text, deck_bonus_text, play_interval_text) if s]
+
+            TextBox(
+                f"{live_text}歌曲排行 - 排行依据: {target_text} - 数据与公式来自33Kit\n"
+                f"{' - '.join(texts)}\n"
+                f"添加参数: \"score\"比较live分数，\"pt\"比较歌曲的pt/火效率，\"pt/h\"比较歌曲的pt/时间效率",
+                title_style, use_real_line_count=True
+            )
+
             # 表格
             gh, vsep, hsep = 30, 5, 5
             def row_bg_fn(i: int, w: Widget):
@@ -645,12 +705,41 @@ async def compose_music_board_image(
                         w = TextBox(f"{row['level']}", TextStyle(DEFAULT_BOLD_FONT, 20, WHITE)) \
                             .set_size((None, gh)).set_content_align('c').set_padding((16, 0))
                         w.userdata['diff'] = row['difficulty']
-                # 分数
-                with VSplit().set_content_align('c').set_item_align('c').set_sep(vsep).set_item_bg(row_bg_fn):
-                    TextBox("分数", title_style).set_size((None, gh)).set_content_align('c')
-                    for row in show_rows:
-                        score = row[f"{live_type}_score"]
-                        TextBox(f"{score*100:.1f}%", item_style).set_size((None, gh)).set_content_align('c').set_padding((16, 0))
+                # 活动PT/时间
+                if target in ('pt/time',):
+                    with VSplit().set_content_align('c').set_item_align('c').set_sep(vsep).set_item_bg(row_bg_fn):
+                        TextBox("PT/h", title_style).set_size((None, gh)).set_content_align('c')
+                        for row in show_rows:
+                            pt_per_hour = row[f"{live_type}_pt_per_hour"]
+                            TextBox(f"{pt_per_hour:.0f}", item_style).set_size((None, gh)).set_content_align('c').set_padding((16, 0))
+                # 周回数
+                if target in ('pt/time',):
+                    with VSplit().set_content_align('c').set_item_align('c').set_sep(vsep).set_item_bg(row_bg_fn):
+                        TextBox("周回/h", title_style).set_size((None, gh)).set_content_align('c')
+                        for row in show_rows:
+                            play_count_per_hour = row['play_count_per_hour']
+                            TextBox(f"{play_count_per_hour:.1f}", item_style).set_size((None, gh)).set_content_align('c').set_padding((16, 0))
+                # 活动PT
+                if target in ('pt', 'pt/time'):
+                    with VSplit().set_content_align('c').set_item_align('c').set_sep(vsep).set_item_bg(row_bg_fn):
+                        TextBox("PT", title_style).set_size((None, gh)).set_content_align('c')
+                        for row in show_rows:
+                            pt = row[f"{live_type}_pt"]
+                            TextBox(f"{pt}", item_style).set_size((None, gh)).set_content_align('c').set_padding((16, 0))
+                # 分数（实际值）
+                if target in ('pt', 'pt/time'):
+                    with VSplit().set_content_align('c').set_item_align('c').set_sep(vsep).set_item_bg(row_bg_fn):
+                        TextBox("LIVE分数", title_style).set_size((None, gh)).set_content_align('c')
+                        for row in show_rows:
+                            real_score = row[f"{live_type}_real_score"]
+                            TextBox(f"{real_score:.0f}", item_style).set_size((None, gh)).set_content_align('c').set_padding((16, 0))
+                # 分数（倍率）
+                if target in ('score',):
+                    with VSplit().set_content_align('c').set_item_align('c').set_sep(vsep).set_item_bg(row_bg_fn):
+                        TextBox("分数", title_style).set_size((None, gh)).set_content_align('c')
+                        for row in show_rows:
+                            score = row[f"{live_type}_score"]
+                            TextBox(f"{score*100:.1f}%", item_style).set_size((None, gh)).set_content_align('c').set_padding((16, 0))
                 # 技能占比
                 with VSplit().set_content_align('c').set_item_align('c').set_sep(vsep).set_item_bg(row_bg_fn):
                     TextBox("技能占比", title_style).set_size((None, gh)).set_content_align('c')
@@ -658,11 +747,12 @@ async def compose_music_board_image(
                         skill_account = row[f"{live_type}_skill_account"]
                         TextBox(f"{skill_account*100:.1f}%", item_style).set_size((None, gh)).set_content_align('c').set_padding((16, 0))
                 # PT系数
-                with VSplit().set_content_align('c').set_item_align('c').set_sep(vsep).set_item_bg(row_bg_fn):
-                    TextBox("PT系数", title_style).set_size((None, gh)).set_content_align('c')
-                    for row in show_rows:
-                        event_rate = row['event_rate']
-                        TextBox(f"{event_rate:.0f}", item_style).set_size((None, gh)).set_content_align('c').set_padding((16, 0))
+                if target in ('pt', 'pt/time'):
+                    with VSplit().set_content_align('c').set_item_align('c').set_sep(vsep).set_item_bg(row_bg_fn):
+                        TextBox("PT系数", title_style).set_size((None, gh)).set_content_align('c')
+                        for row in show_rows:
+                            event_rate = row['event_rate']
+                            TextBox(f"{event_rate:.0f}", item_style).set_size((None, gh)).set_content_align('c').set_padding((16, 0))
                 # 时长
                 with VSplit().set_content_align('c').set_item_align('c').set_sep(vsep).set_item_bg(row_bg_fn):
                     TextBox("时长", title_style).set_size((None, gh)).set_content_align('c')
@@ -779,62 +869,105 @@ async def _(ctx: SekaiHandlerContext):
     SHOW_NUM = 30
 
     # live类型
-    live_type = 'solo'
-    for keyword in ('单人', 'solo', '挑战'):
-        if keyword in args:
-            live_type = 'solo'
-            args = args.replace(keyword, '', 1)
-            break
-    for keyword in ('多人', 'multi'):
-        if keyword in args:
-            live_type = 'multi'
-            args = args.replace(keyword, '', 1)
-            break
-    for keyword in ('自动', 'auto'):
-        if keyword in args:
-            live_type = 'auto'
-            args = args.replace(keyword, '', 1)
-            break
+    live_type = 'auto'
+    live_type, args = extract_param_from_args(args, {
+        'solo':  ('单人', 'solo', '挑战'),
+        'multi': ('多人', 'multi'),
+        'auto':  ('自动', 'auto'),
+    }, default=live_type)
 
+    # 比较目标
+    match live_type:
+        case 'solo':    target = 'score'
+        case 'multi':   target = 'pt/time'
+        case 'auto':    target = 'score'
+    target, args = extract_param_from_args(args, {
+        'score':    ('live分数', '分数', 'score'),
+        'pt/time':  ('时间效率', 'pt/h', 'pt时间'),
+        'pt':       ('火效率', 'pt/火', 'pt'),
+    }, default=target)
+       
     # 策略
     match live_type:
         case 'solo': strategy = 'max'
         case 'multi': strategy = 'avg'
         case 'auto': strategy = 'avg'
-    for keyword in ('最优', '最高', '最大', '最强'):
-        if keyword in args:
-            strategy = 'max'
-            args = args.replace(keyword, '', 1)
-            break
-    for keyword in ('最差', '最低', '最小', '最弱'):
-        if keyword in args:
-            strategy = 'min'
-            args = args.replace(keyword, '', 1)
-            break
-    for keyword in ('平均', '期望', '随机', '均值'):
-        if keyword in args:
-            strategy = 'avg'
-            args = args.replace(keyword, '', 1)
-            break
+    strategy, args = extract_param_from_args(args, {
+        'max': ('最优', '最高', '最大', '最强', 'max'),
+        'min': ('最差', '最低', '最小', '最弱', 'min'),
+        'avg': ('平均', '期望', '随机', '均值', 'avg'),
+    }, default=strategy)
 
     # 技能组
+    args = args.replace('技能', '').replace('实效', '')
     match live_type:
         case 'solo': skills = [1.0] * 5
-        case 'multi': skills = [1.8] * 5
+        case 'multi': skills = [2.0] * 5
         case 'auto': skills = [1.0] * 5
     args = args.strip()
     segs = args.split()
     numbers, number_segs = [], []
+    required_num = 5 if live_type != 'multi' else 1
     for seg in segs:
         if seg.replace('.', '', 1).isdigit():
             number_segs.append(seg)
             numbers.append(float(seg) / 100)
-    assert_and_reply(len(numbers) in (0, 5), f"解析技能加分失败\n发送\"{ctx.trigger_cmd}help\"获取帮助")
-    if len(numbers) == 5:
-        skills = numbers
+            if len(numbers) >= required_num:
+                break
+    assert_and_reply(len(numbers) in (0, required_num), f"解析技能加分失败\n发送\"{ctx.trigger_cmd}help\"获取帮助")
+    if len(numbers) == required_num:
+        skills = numbers if live_type != 'multi' else numbers * 5
         for seg in number_segs:
             args = args.replace(seg, '', 1)
     args = args.strip()
+
+    # 综合力
+    power = 300000
+    if target in ('pt', 'pt/time'):
+        segs = args.split()
+        for seg in segs:
+            if '综合' in seg:
+                rest = seg.replace('综合', '')
+                try:
+                    power = parse_large_number(rest)
+                except:
+                    raise ReplyException(f"解析综合力失败:\"{seg}\"\n发送\"{ctx.trigger_cmd}help\"获取帮助")
+                args = args.replace(seg, '', 1)
+                break
+        args = args.strip()
+
+    # 活动加成
+    deck_bonus = 400.0
+    if target in ('pt', 'pt/time'):
+        segs = args.split()
+        for seg in segs:
+            if '加成' in seg:
+                rest = seg.replace('加成', '').rstrip('%')
+                try:
+                    deck_bonus = float(rest)
+                except:
+                    raise ReplyException(f"解析活动加成失败:\"{seg}\"\n发送\"{ctx.trigger_cmd}help\"获取帮助")
+                args = args.replace(seg, '', 1)
+                break
+        args = args.strip()
+
+    # 游玩间隔
+    match live_type:
+        case 'solo': play_interval = 28.0
+        case 'auto': play_interval = 28.0
+        case 'multi': play_interval = 45.2
+    if target in ('pt/time',):
+        segs = args.split()
+        for seg in segs:
+            if '间隔' in seg:
+                rest = seg.replace('间隔', '').rstrip('秒s')
+                try:
+                    play_interval = float(rest)
+                except:
+                    raise ReplyException(f"解析游玩间隔失败:\"{seg}\"\n发送\"{ctx.trigger_cmd}help\"获取帮助")
+                args = args.replace(seg, '', 1)
+                break
+        args = args.strip()
 
     # 等级过滤
     level_filter = ""
@@ -874,8 +1007,12 @@ async def _(ctx: SekaiHandlerContext):
             await compose_music_board_image(
                 ctx=ctx,
                 live_type=live_type,
+                target=target,
                 strategy=strategy,
                 skills=skills,
+                power=power,
+                deck_bonus=deck_bonus,
+                play_interval=play_interval,
                 music_num=SHOW_NUM,
                 spec_mid_diffs=spec_mid_diffs,
                 diff_filter=diff_filter,

@@ -66,8 +66,9 @@ async def generate_music_chart(
 
     logger.info(f'生成谱面图片 mid={music_id} {difficulty}')
     if need_reply:
-        desc = "谱面图片" if not skill else "技能预览图片"
-        await ctx.asend_reply_msg(f'正在生成【{ctx.region.upper()}-{music_id}】{music_title} {difficulty.upper()}的{desc}...')
+        # desc = "谱面图片" if not skill else "技能预览图片"
+        desc = "谱面图片"
+        await ctx.asend_reply_msg(f'正在生成【{ctx.region.upper()}-{music_id}】{music_title} - {difficulty.upper()} {playlevel} 的{desc}...')
 
     asset_name = music['assetbundleName']
     jacket = await ctx.rip.img(f"music/jacket/{asset_name}_rip/{asset_name}.png")
@@ -154,15 +155,7 @@ async def _(ctx: SekaiHandlerContext):
         refresh = True
         query = query.replace('refresh', '').strip()
     
-    skill = False
-    if '技能' in ctx.trigger_cmd:
-        skill = True
-    for keyword in ('技能', 'skill', ):
-        if keyword in query:
-            skill = True
-            query = query.replace(keyword, '', 1).strip()
-            break
-
+    skill = True
     diff, query = extract_diff(query)
     ret = await search_music(ctx, query, MusicSearchOptions(diff=diff))
 

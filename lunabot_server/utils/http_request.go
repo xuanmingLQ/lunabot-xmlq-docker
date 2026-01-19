@@ -91,7 +91,7 @@ func HttpRequest(
 			if -1 < start && start < end {
 				detail = detail[start+len("<body>") : end]
 			}
-			if end-start > 100 {
+			if len(detail) > 100 {
 				httpError.Detail = detail[:100] + "..."
 			} else {
 				httpError.Detail = detail
