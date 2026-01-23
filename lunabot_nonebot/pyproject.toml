@@ -18,6 +18,7 @@ dependencies = [
     "imageio[ffmpeg]>=2.37.2",
     "jieba>=0.42.1",
     "matplotlib",
+    "memray>=1.19.1",
     "mistune",
     "nonebot-adapter-onebot",
     "nonebot-plugin-apscheduler",

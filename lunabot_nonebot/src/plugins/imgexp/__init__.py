@@ -240,20 +240,28 @@ async def _(ctx: HandlerContext):
     if not image_urls:
         return await ctx.asend_reply_msg('在推文中没有找到图片，可能是输入网页链接不正确或其他原因')
     
-    images = await asyncio.gather(*[download_image(u) for u in image_urls])
+    msg = url + "\n" + truncate(content, 64)
+
+    force_download_image = True     # 不下载到本地再发送可能导致napcat报错
+
+    if force_download_image or concat_mode or args.gif:
+        images = await asyncio.gather(*[download_image(u) for u in image_urls])
+    else:
+        images = image_urls
 
     if concat_mode:
         concated_image = await run_in_pool(concat_images, images, concat_mode)
         images = [concated_image]
-    
-    msg = url + "\n" + truncate(content, 64)
+
     for img in images:
         if args.gif:
             with TempFilePath("gif", remove_after=timedelta(minutes=3)) as gif_path:
                 await run_in_pool(save_transparent_static_gif, img, gif_path)
                 msg += await get_image_cq(gif_path)
-        else:
+        elif isinstance(img, Image.Image):
             msg += await get_image_cq(img)
+        else:
+            msg += await get_image_cq(img, send_url_as_is=True)
 
     if args.fold:
         return await ctx.asend_fold_msg(msg)

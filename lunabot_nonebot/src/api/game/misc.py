@@ -1,4 +1,4 @@
-from src.utils import ApiError
+from src.utils.request import ApiError
 
 def get_ad_result_update_time():
     raise ApiError("get_ad_result_update_time","暂不支持广告奖励", None)

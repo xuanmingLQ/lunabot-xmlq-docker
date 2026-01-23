@@ -386,8 +386,8 @@ def get_mysekai_phenomena_color_info(phenomena_id: int) -> dict:
     except Exception as e:
         return {
             'ground': (255, 255, 255, 255),
-            'sky1': (200, 255, 200, 255),
-            'sky2': (200, 255, 200, 255),
+            'sky1': (200, 200, 255, 255),
+            'sky2': (200, 200, 255, 255),
         }
 
 # 合成mysekai资源位置地图图片
@@ -1836,8 +1836,8 @@ async def compose_mysekai_talk_list_image(
                 single_talk_fixtures[main_genre_id][sub_genre_id].sort(key=lambda x: (len(x[0]), x[0][0]), reverse=True)
 
     # 绘制单个家具
+    f_sz = 40
     def draw_single_fid(fid: int):
-        f_sz = 40
         image = fixture_icons.get(fid)
         with VSplit().set_content_align('c').set_item_align('c').set_sep(2):
             with Frame():
@@ -1887,6 +1887,9 @@ async def compose_mysekai_talk_list_image(
             # 单人家具
             TextBox(f"单人对话家具", TextStyle(font=DEFAULT_BOLD_FONT, size=20, color=text_color)) \
                 .set_padding(12).set_bg(roundrect_bg())
+            
+            sep = 5
+            row_w = 15 * (f_sz + 8 + sep)
 
             with VSplit().set_content_align('lt').set_item_align('lt').set_sep(16).set_item_bg(roundrect_bg()):
                 has_single = False
@@ -1905,21 +1908,11 @@ async def compose_mysekai_talk_list_image(
                         # 家具列表
                         for sub_genre_id in sorted(single_talk_fixtures[main_genre_id].keys()):
                             if len(single_talk_fixtures[main_genre_id][sub_genre_id]) == 0: continue
-                            COL_COUNT, cur_idx = 15, 0
-                            sep = 5 if cid else 3
-                            with VSplit().set_content_align('lt').set_item_align('lt').set_sep(sep):
-                                while True:
-                                    cur_x = 0
-                                    with HSplit().set_content_align('lt').set_item_align('lt').set_sep(sep):
-                                        while cur_x < COL_COUNT:
-                                            fids, _ = single_talk_fixtures[main_genre_id][sub_genre_id][cur_idx]
-                                            draw_fids(fids, fids_single_reads)
-                                            cur_x += len(fids)
-                                            cur_idx += 1     
-                                            if cur_idx >= len(single_talk_fixtures[main_genre_id][sub_genre_id]):
-                                                break   
-                                    if cur_idx >= len(single_talk_fixtures[main_genre_id][sub_genre_id]):
-                                        break
+                            
+                            with Flow().set_item_align('lt').set_content_align('lt').set_sep(sep, sep).set_w(row_w):
+                                for fids, _ in single_talk_fixtures[main_genre_id][sub_genre_id]:
+                                    draw_fids(fids, fids_single_reads)   
+
                 if not has_single:
                     TextBox("全部已读", TextStyle(font=DEFAULT_BOLD_FONT, size=20, color=(50, 150, 50))).set_padding(16)
 
@@ -1927,7 +1920,7 @@ async def compose_mysekai_talk_list_image(
             TextBox(f"多人对话家具", TextStyle(font=DEFAULT_BOLD_FONT, size=20, color=text_color)) \
                 .set_padding(12).set_bg(roundrect_bg())    
 
-            with VSplit().set_content_align('lt').set_item_align('lt').set_sep(8).set_padding(8).set_bg(roundrect_bg()):
+            with Flow().set_item_align('lt').set_content_align('lt').set_sep(16, 8).set_w(row_w).set_padding(8).set_bg(roundrect_bg()):
                 has_multi = False
                 for fids, item in fids_multi_reads.items():
                     if not fids or item['total'] == item['read']:

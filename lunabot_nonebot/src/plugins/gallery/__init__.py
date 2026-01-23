@@ -723,7 +723,7 @@ async def _(ctx: HandlerContext):
     if len(pics) > limit:
         raise ReplyException(f'一次最多查看{limit}张图片')
 
-    await ctx.asend_msg(''.join([await get_image_cq(p.path, send_local_file_as_is=True) for p in pics]))
+    await ctx.asend_msg(''.join([await get_image_cq(p.path, send_url_as_is=True) for p in pics]))
 
 
 gall_add = CmdHandler([

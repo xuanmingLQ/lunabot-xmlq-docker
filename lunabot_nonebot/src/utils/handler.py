@@ -1,5 +1,5 @@
 from .utils import *
-from .blacklist import HARDCODING_BLACKLIST_USERS
+from src.common.blacklist import HARDCODED_BLACKLIST_USERS
 from nonebot import on_command
 from nonebot import get_bot as nb_get_bot
 from nonebot import get_bots as nb_get_bots
@@ -19,7 +19,7 @@ from nonebot.adapters.onebot.v11.message import MessageSegment, Message
 import nonebot.adapters.onebot.v11.bot as bot_module
 from argparse import ArgumentParser
 import requests
-from .data import get_data_path
+from src.common.data import get_data_path
 
 SUPERUSER_CFG = global_config.item('superuser')
 
@@ -396,7 +396,7 @@ async def get_image_cq(
     quality: int | ConfigItem = DEFAULT_LQ_IMAGE_QUALITY_CFG,
     subsampling: int | ConfigItem = DEFAULT_LQ_IMAGE_SUBSAMPLING_CFG,
     optimize: bool | ConfigItem = DEFAULT_LQ_IMAGE_OPTIMIZE_CFG,
-    send_local_file_as_is: bool = False,
+    send_url_as_is: bool = False,
 ):
     """
     获取图片的cq码用于发送
@@ -405,6 +405,8 @@ async def get_image_cq(
     try:
         # 如果是远程图片
         if isinstance(image, str) and image.startswith("http"):
+            if send_url_as_is:
+                return f'[CQ:image,file={image}]'
             image = await download_image(image)
             return await get_image_cq(image, *args)
         # 如果是bytes
@@ -415,7 +417,7 @@ async def get_image_cq(
         if isinstance(image, str):
             if not os.path.exists(image):
                 raise Exception(f'图片文件不存在: {image}')
-            if send_local_file_as_is:
+            if send_url_as_is:
                 return f'[CQ:image,file=file://{os.path.abspath(image)}]'
             image = open_image(image)
             return await get_image_cq(image, *args)
@@ -508,7 +510,7 @@ def process_msg_segs(msg: list[dict] | Message, event: MessageEvent | None = Non
     ret = []
     if event:
         if event.message_id in _reply_me_msg_ids:
-            ret.append({ 'type': 'reply', 'data': { 'id': str(event.message_id) } })
+            ret.append({ 'type': 'reply', 'data': { 'id': str(event.reply.message_id) } })
         if event.message_id in _at_me_msg_ids:
             ret.append({ 'type': 'at', 'data': { 'qq': str(event.self_id) } })
     for seg in msg:
@@ -788,7 +790,7 @@ def check_in_blacklist(user_id: int):
     检查用户是否在黑名单中
     """
     blacklist = utils_file_db.get('blacklist', [])
-    return int(user_id) in blacklist or int(user_id) in HARDCODING_BLACKLIST_USERS
+    return int(user_id) in blacklist or int(user_id) in HARDCODED_BLACKLIST_USERS
 
 def check_group_disabled(group_id: int):
     """

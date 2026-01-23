@@ -11,6 +11,13 @@ profile_at_starup:
   clock_type: "cpu"
   seconds: 10
 
+memray_at_startup:
+  enable: false
+  seconds: 300
+
+file_db:
+  save_interval_seconds: 5  # FileDB保存间隔时间，设为0则在修改后立刻保存
+
 timer:
   enable: false
   log_prefix:
@@ -76,6 +83,7 @@ painter:
   debug: False
   process_num: 4  # 设置为0时在主进程使用多线程绘制
   log_operation: False
+  font_cache_num: 16
   roundrect_aa_target_radius: 32
   emoji:
     offset: [0, 2]

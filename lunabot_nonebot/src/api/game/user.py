@@ -1,4 +1,4 @@
-from src.utils import server, ApiError
+from src.utils.request import server, ApiError
 def get_suite(region: str, user_id: str, filter: list[str] | set[str] | str | None=None):
     return server(
         path="/user/suite",

@@ -42,6 +42,14 @@
   ground: '#78a3dd'
   sky1: '#525bc5'
   sky2: '#104aaf'
+13:
+  ground: '#7f7fff'
+  sky1: '#4b61fb'
+  sky2: '#04029a'
+14:
+  ground: '#c4d5fe'
+  sky1: '#81c3fc'
+  sky2: '#dfaeff'
 15:
   ground: '#b79ff2'
   sky1: '#7471e7'

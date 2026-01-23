@@ -1,4 +1,5 @@
-from .config import *
+from src.common.config import *
+from datetime import datetime, timedelta, timezone
 
 # ============================ 启动时性能分析 ============================ #
 
@@ -9,6 +10,15 @@ if _profile_at_startup := global_config.get('profile_at_starup.enable'):
     yappi.set_clock_type(_profile_at_startup_clock_type)
     yappi.start()
     print(f"启动时性能分析已开启 (clocktype={_profile_at_startup_clock_type}, seconds={_profile_at_startup_seconds})", flush=True)
+
+if _memray_at_startup := global_config.get('memray_at_startup.enable'):
+    from memray import Tracker
+    _memray_at_startup_seconds = global_config.get('memray_at_startup.seconds')
+    _memray_save_path = get_data_path(f"misc/memray/{datetime.now().strftime('%Y%m%d_%H%M%S')}_memray.bin")
+    os.makedirs(osp.dirname(_memray_save_path), exist_ok=True)
+    _memray_tracker = Tracker(_memray_save_path, native_traces=True)
+    _memray_tracker.__enter__()
+    print(f"启动时内存分析已开启 (seconds={_memray_at_startup_seconds})", flush=True)
 
 
 # ============================ 模块导入 ============================ #
@@ -22,7 +32,7 @@ from copy import deepcopy
 import traceback
 import orjson
 from uuid import uuid4
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass, field, asdict
 from tenacity import retry, stop_after_attempt, wait_fixed
 import asyncio
 import base64
@@ -33,10 +43,16 @@ import re
 import math
 import io
 import zstandard
-from .data import get_data_path
+from src.common.data import get_data_path
 
 import faulthandler
 faulthandler.enable()
+
+
+from ..common.logger import get_logger, Logger, NumLimitLogger
+
+utils_logger = get_logger('Utils')
+profile_logger = get_logger('Profile')
 
 
 # ============================ 启动/停止hook ============================ #
@@ -745,130 +761,28 @@ async def adump_json_zstd(data: dict, path: str):
     return await run_in_pool(dump_json_zstd, data, path)
 
 
-# ============================ 日志 ============================ #
-
-LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
-
-# 日志输出
-class Logger:
-    def __init__(self, name):
-        self.name = name
-
-    def log(self, msg, flush=True, end='\n', level='INFO', real_level=None):
-        real_level = real_level or level
-        if real_level not in LOG_LEVELS:
-            raise Exception(f'未知日志等级 {real_level}')
-        log_level = global_config.get('log_level').upper()
-        if LOG_LEVELS.index(real_level) < LOG_LEVELS.index(log_level):
-            return
-        time = datetime.now().strftime("%m-%d %H:%M:%S.%f")[:-3]
-        print(f'{time} {level} [{self.name}] {msg}', flush=flush, end=end)
-    
-    def debug(self, msg, flush=True, end='\n'):
-        self.log(msg, flush=flush, end=end, level='DEBUG')
-    
-    def info(self, msg, flush=True, end='\n'):
-        self.log(msg, flush=flush, end=end, level='INFO')
-    
-    def warning(self, msg, flush=True, end='\n'):
-        self.log(msg, flush=flush, end=end, level='WARNING')
-
-    def error(self, msg, flush=True, end='\n'):
-        self.log(msg, flush=flush, end=end, level='ERROR')
-
-    def profile(self, msg, flush=True, end='\n'):
-        self.log(msg, flush=flush, end=end, level='PROFILE', real_level='INFO')
-
-    def print_exc(self, msg=None):
-        self.error(msg)
-        time = datetime.now().strftime("%m-%d %H:%M:%S.%f")[:-3]
-        print(f'{time} ERROR [{self.name}] ', flush=True, end='')
-        traceback.print_exc()
-
-
-class NumLimitLogger(Logger):
-    """
-    发送一定次数后会停止发送的Logger
-    """
-    _last_log_time_and_count: Dict[str, Tuple[datetime, int]] = {}
-
-    def __init__(
-        self, 
-        name: str, 
-        key: str, 
-        limit: int = 5, 
-        recover_after: timedelta = timedelta(minutes=10),
-    ):
-        super().__init__(name)
-        self.key = f"{name}__{key}"
-        self.limit = limit
-        self.recover_after = recover_after
-
-    def _check_can_log(self, update: bool) -> str:
-        """
-        检查是否可以发送日志，并更新最后发送时间
-        返回 'ok' 表示可以发送，'limit' 表示达到限制，'final' 表示最后一次发送
-        """
-        last_time, last_count = self._last_log_time_and_count.get(self.key, (None, 0))
-        if self.recover_after is not None and last_time is not None \
-            and datetime.now() - last_time > self.recover_after:
-            # 如果超过恢复时间，则重置计数
-            last_time, last_count = None, 0
-            self._last_log_time_and_count.pop(self.key, None)
-        if update:
-            self._last_log_time_and_count[self.key] = (datetime.now(), last_count + 1)
-        if last_count > self.limit:
-            return 'limit'
-        if last_count == self.limit:
-            return 'final'
-        return 'ok'
-
-    def recover(self, verbose=True):
-        """
-        立刻恢复日志发送
-        """
-        can_log = self._check_can_log(update=False)
-        if can_log == 'limit':
-            self._last_log_time_and_count.pop(self.key, None)
-            if verbose:
-                super().info(f"{self.key} 日志发送限制已恢复")
-
-    def log(self, msg, flush=True, end='\n', level='INFO'):
-        can_log = self._check_can_log(update=True)
-        if can_log == 'limit': return
-        if can_log == 'final':
-            msg += f" (已达到发送限制{self.limit}次，暂停发送)"
-        super().log(msg, flush=flush, end=end, level=level)
-    
-    def print_exc(self, msg=None):
-        can_log = self._check_can_log(update=True)
-        if can_log == 'limit': return
-        if can_log == 'final':
-            msg += f" (已达到发送限制{self.limit}次，暂停发送)"
-        super().print_exc(msg)
-
-
-_loggers: Dict[str, Logger] = {}
-def get_logger(name: str) -> Logger:
-    global _loggers
-    if name not in _loggers:
-        _loggers[name] = Logger(name)
-    return _loggers[name]
-
-utils_logger = get_logger('Utils')
-profile_logger = get_logger('Profile')
-
-
 # ============================ 文件数据库 ============================ #
 
+FILE_DB_SAVE_INTERVAL_CFG = global_config.item('file_db.save_interval_seconds')
+
 class FileDB:
+    _updated_dbs: set['FileDB'] = set()
+
     def __init__(self, path: str, logger: Logger):
-        self.path = path
+        self.path = os.path.abspath(path)
         self.data = {}
         self.logger = logger
         self.loaded = False
 
-    def ensure_load(self):
+    def __hash__(self) -> int:
+        return hash(self.path)
+    
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, FileDB):
+            return False
+        return self.path == other.path
+
+    def _ensure_load(self):
         if self.loaded:
             return
         try:
@@ -879,43 +793,115 @@ class FileDB:
             self.data = {}
         self.loaded = True
 
+    def _after_change(self):
+        if FILE_DB_SAVE_INTERVAL_CFG.get() == 0:
+            self.save()
+        else:
+            FileDB._updated_dbs.add(self)
+
+    def _get_last_dict_and_key(self, key: str, create_path: bool = False) -> tuple[dict | None, str | None]:
+        """
+        - 从多层key获取最后一层dict和key
+        - 设置create_path时找不到会创建直到last_dict的路径，否则返回(None,None)
+        - 设置create_path后需要自行保证_after_change被调用
+        """
+        assert isinstance(key, str), f'key: "{key}" 必须是字符串，当前类型: {type(key)}'
+        self._ensure_load()
+        keys = key.split('.')
+        last_dict = self.data
+        last_key = keys.pop()
+        for k in keys:
+            if k not in last_dict or not isinstance(last_dict[k], dict):
+                if create_path:
+                    last_dict[k] = {}
+                else:
+                    return None, None
+            last_dict = last_dict[k]
+        return last_dict, last_key
+    
+
     def keys(self) -> Set[str]:
-        self.ensure_load()
+        """
+        - 获取所有第一层key的集合
+        """
+        self._ensure_load()
         return self.data.keys()
 
     def save(self):
-        self.ensure_load()
-        dump_json(self.data, self.path)
-        self.logger.debug(f'保存数据库 {self.path}')
+        """
+        - 保存数据到文件，在修改后会被自动调用，一般不需要手动调用
+        """
+        try:
+            self._ensure_load()
+            dump_json(self.data, self.path)
+            self.logger.debug(f'保存数据库 {self.path}')
+        except:
+            self.logger.print_exc(f'保存数据库 {self.path} 失败')
 
     def get(self, key: str, default: Any=None) -> Any:
         """
         - 获取某个key的值，找不到返回default
-        - 直接返回缓存对象，若要进行修改又不影响DB内容则必须自行deepcopy
+        - 支持多层key，用点号分隔，如"a.b.c"
+        - 直接返回缓存对象，若要进行修改又不影响DB内容则必须自行deepcopy，或者使用get_copy方法
         """
-        self.ensure_load()
-        assert isinstance(key, str), f'key必须是字符串，当前类型: {type(key)}'
-        return self.data.get(key, default)
+        self._ensure_load()
+        d, k = self._get_last_dict_and_key(key)
+        if d is None:
+            return default
+        return d.get(k, default)
 
     def get_copy(self, key: str, default: Any=None) -> Any:
-        self.ensure_load()
-        assert isinstance(key, str), f'key必须是字符串，当前类型: {type(key)}'
-        return deepcopy(self.data.get(key, default))
+        """
+        - 获取某个key的值的深拷贝，找不到返回default的深拷贝
+        - 支持多层key，用点号分隔，如"a.b.c"
+        """
+        self._ensure_load()
+        d, k = self._get_last_dict_and_key(key)
+        if d is None:
+            return deepcopy(default)
+        return deepcopy(d.get(k, default))
 
     def set(self, key: str, value: Any):
-        self.ensure_load()
-        assert isinstance(key, str), f'key必须是字符串，当前类型: {type(key)}'
+        """
+        - 设置某个key的值，会自动保存
+        - 支持多层key，用点号分隔，如"a.b.c"
+        """
+        self._ensure_load()
         self.logger.debug(f'设置数据库 {self.path} {key}')
-        self.data[key] = deepcopy(value)
-        self.save()
+        d, k = self._get_last_dict_and_key(key, create_path=True)
+        d[k] = value
+        self._after_change()
 
     def delete(self, key: str):
-        self.ensure_load()
-        assert isinstance(key, str), f'key必须是字符串，当前类型: {type(key)}'
+        """
+        - 删除某个key的值，会自动保存
+        - 支持多层key，用点号分隔，如"a.b.c"
+        """
+        self._ensure_load()
         self.logger.debug(f'删除数据库 {self.path} {key}')
-        if key in self.data:
-            del self.data[key]
-            self.save()
+        d, k = self._get_last_dict_and_key(key)
+        if d is not None and k in d:
+            del d[k]
+            self._after_change()
+
+    @classmethod
+    def save_all_changed(cls):
+        """
+        - 保存所有修改过的数据库
+        """
+        for db in list(cls._updated_dbs):
+            db.save()
+        cls._updated_dbs.clear()
+
+
+@repeat_with_interval(FILE_DB_SAVE_INTERVAL_CFG, '保存文件数据库', utils_logger)
+async def _save_changed_file_dbs():
+    FileDB.save_all_changed()
+
+@on_shutdown()
+def _save_all_file_dbs_on_shutdown():
+    FileDB.save_all_changed()
+
 
 _file_dbs: Dict[str, FileDB] = {}
 def get_file_db(path: str, logger: Logger) -> FileDB:
@@ -1019,8 +1005,8 @@ class PlaywrightPage:
 
 # ============================ 图片处理 ============================ #
 
-from .plot import *
-from .img_utils import *
+from src.draw.plot import *
+from src.draw.img_utils import *
 import ffmpeg
 
 
@@ -1289,9 +1275,10 @@ def limit_image_by_pixels(image: Image.Image | list[Image.Image], max_pixels: in
 
 # ============================= 其他 ============================ #
 
+from ..common.process_pool import ProcessPool
+
 @on_shutdown()
 def _shutdown_process_pools():
-    from .process_pool import ProcessPool
     ProcessPool.shutdown_all()
 
 
@@ -1445,3 +1432,13 @@ if _profile_at_startup:
         stats.save(save_path, type="pstat")
         print(f"启动时性能分析已保存到 {save_path}")
         yappi.clear_stats()
+
+if _memray_at_startup:
+    @async_task("结束启动时内存分析", utils_logger, delay=_memray_at_startup_seconds)
+    async def _stop_startup_memray():
+        global _memray_tracker
+        if _memray_tracker is None:
+            return
+        _memray_tracker.__exit__(None, None, None)
+        print(f"启动时内存分析已保存到 {_memray_save_path}")
+        _memray_tracker = None

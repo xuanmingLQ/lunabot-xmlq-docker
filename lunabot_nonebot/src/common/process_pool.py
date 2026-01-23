@@ -1,4 +1,3 @@
-import nonebot
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 import asyncio
@@ -9,10 +8,6 @@ def init_worker_process(name: str | None = None):
         setproctitle.setproctitle(f'lunabot-worker')
     else:
         setproctitle.setproctitle(f'lunabot-worker-{name}')
-
-def init_nb_and_do_func(f, *args, **kwargs):
-    nonebot.init()
-    return f(*args, **kwargs)
 
 class ProcessPool:
     _process_pools: list['ProcessPool'] = []
@@ -28,7 +23,7 @@ class ProcessPool:
         ProcessPool._process_pools.append(self)
 
     def submit(self, fn, *args, **kwargs):
-        return asyncio.get_event_loop().run_in_executor(self.executor, init_nb_and_do_func, fn, *args, **kwargs)
+        return asyncio.get_event_loop().run_in_executor(self.executor, fn, *args, **kwargs)
     
     @staticmethod
     def shutdown_all():

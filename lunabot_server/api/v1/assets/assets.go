@@ -87,7 +87,6 @@ func (*AssetApi) DownloadAsset(c *gin.Context) {
 	defer cancel()
 	// 用来接收响应数据
 	respChan := make(chan *http.Response, len(tasks))
-	// 等待所有goroutine结束后，关闭chan，表示没有值了
 	for _, task := range tasks {
 		wg.Add(1)
 		go func(t downloadTask) {

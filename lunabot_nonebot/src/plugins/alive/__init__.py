@@ -115,7 +115,10 @@ async def _(ctx: HandlerContext):
 async def get_status_image_cq():
     bg = await bg_preloader.get()
     collected = await collect_all()
-    return await get_image_cq(await render_current_template(collected=collected, bg=bg))
+    return await get_image_cq(
+        await render_current_template(collected=collected, bg=bg),
+        low_quality=True,
+    )
 
 
 status = CmdHandler(["status", "状态"], logger, only_to_me=True, block=True)

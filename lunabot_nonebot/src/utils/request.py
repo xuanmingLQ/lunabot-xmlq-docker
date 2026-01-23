@@ -1,7 +1,7 @@
 import aiohttp
 from urllib.parse import urlencode
 from .utils import loads_json,get_logger,HttpError
-from .env import SEKAI_API_BASE_PATH, SEKAI_ASSET_BASE_PATH
+from src.common.env import SEKAI_API_BASE_PATH, SEKAI_ASSET_BASE_PATH
 
 logger = get_logger("Request")
 

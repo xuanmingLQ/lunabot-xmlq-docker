@@ -23,10 +23,10 @@ import io
 import colour
 import struct
 
-from .config import *
+from src.common.config import *
+from src.common.process_pool import *
 from .img_utils import adjust_image_alpha_inplace
-from .process_pool import *
-from .data import get_data_path
+from src.common.data import get_data_path
 
 def debug_print(*args, **kwargs):
     if global_config.get('painter.debug', False):
@@ -298,7 +298,7 @@ class FontCacheEntry:
     font: Font
     last_used: datetime
 
-FONT_CACHE_MAX_NUM = 128
+FONT_CACHE_MAX_NUM_CFG = global_config.item('painter.font_cache_num')
 font_cache: dict[str, FontCacheEntry] = {}
 font_std_size_cache: dict[Font, Size] = {}
 
@@ -385,7 +385,7 @@ def get_font(path: str, size: int) -> Font:
             last_used=datetime.now(),
         )
         # 清理过期的字体缓存
-        while len(font_cache) > FONT_CACHE_MAX_NUM:
+        while len(font_cache) > FONT_CACHE_MAX_NUM_CFG.get():
             oldest_key = min(font_cache, key=lambda k: font_cache[k].last_used)
             removed = font_cache.pop(oldest_key)
             font_std_size_cache.pop(removed.font, None)
@@ -1672,6 +1672,6 @@ class Painter:
         self.img.paste(bg, self.offset)
 
 
-if PAINTER_PROCESS_NUM > 0:
+if PAINTER_PROCESS_NUM > 0 and is_main_process():
     _painter_pool: ProcessPool = ProcessPool(PAINTER_PROCESS_NUM, name='draw')
 

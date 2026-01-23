@@ -1120,9 +1120,9 @@ async def _(ctx: SekaiHandlerContext):
         refresh = True
         save = False
         
-    try:
+    if args:
         event = await parse_search_single_event_args(ctx, args)
-    except:
+    else:
         event = await get_current_event(ctx, fallback='next_first')
     await ctx.block_region(str(event['id']))
 

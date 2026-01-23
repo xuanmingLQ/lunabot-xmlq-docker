@@ -30,7 +30,7 @@ func (he *HttpError) Error() string {
 	if he == nil {
 		return "未知错误"
 	}
-	return fmt.Sprintf("访问 %s 异常：%d %s", he.Url, he.Status, he.Detail[:100])
+	return fmt.Sprintf("访问 %s 异常：%d %s", he.Url, he.Status, he.Detail)
 }
 
 var HTTP_ERROR = &HttpError{}
