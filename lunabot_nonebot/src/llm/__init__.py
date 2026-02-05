@@ -291,12 +291,14 @@ class ChatSession:
 # -------------------------------- TextEmbedding相关 -------------------------------- #
 
 # 获取文本嵌入
-async def get_text_embedding(texts: List[str]) -> List[List[float]]:
+async def get_text_embedding(texts: List[str], model_name: str = 'sf-bge-m3') -> List[List[float]]:
     logger.info(f"获取文本嵌入: {texts}")
 
-    model = config.get('text_embedding_model')
-    provider = api_provider_mgr.get_provider(model['provider'])
+    models = config.get('text_embedding_models')
+    model = find_by(models, 'name', model_name)
+    assert model is not None, f"文本嵌入模型 {model_name} 不存在"
 
+    provider = api_provider_mgr.get_provider(model['provider'])
     response = await provider.get_client().embeddings.create(
         input=texts, 
         model=model['id'],
@@ -481,7 +483,11 @@ def get_text_retriever(name) -> TextRetriever:
 # TTS
 async def tts(text, save_path: str):
     logger.info(f"TTS: {text}")
-    model = config.get('tts_model')
+
+    models = config.get('tts_models')
+    model = find_by(models, 'name', 'default')
+    assert model is not None, f"TTS模型 default 不存在"
+
     provider = api_provider_mgr.get_provider(model['provider'])
     provider.check_qps_limit()
     response = await provider.get_client().audio.speech.create(

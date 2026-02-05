@@ -207,6 +207,37 @@ async def check_expired_tasks():
                     logger.print_exc(f"检查过期任务 {group_id}_{task['id']} 失败: {e}")
 
 
+# 列出所有任务
+def get_all_tasks() -> list[dict]:
+    all_tasks = []
+    for key in file_db.keys():
+        if key.startswith("tasks_"):
+            group_id = int(key.split("_")[-1])
+            group_tasks = file_db.get(key, [])
+            for task in group_tasks:
+                all_tasks.append(deepcopy(task))
+    return all_tasks
+
+
+@on_collect_quited_group
+def _on_collect_quited_group(groups: CurrentGroupInfoDict):
+    quited_groups = []
+    for task in get_all_tasks():
+        group_id = int(task['group_id'])
+        if group_id not in groups:
+            quited_groups.append(group_id)
+    return QuitedGroupUserInfo(quited_group_ids=quited_groups)
+
+@on_clean_quited_group
+async def _on_clean_quited_group(groups: CurrentGroupInfoDict):
+    for task in get_all_tasks():
+        group_id = int(task['group_id'])
+        if group_id not in groups:
+            await del_cron_job(group_id, task['id'])
+            del_cron_task_from_file_db(group_id, task['id'])
+            logger.info(f"删除已退出的群聊 {group_id} 中的任务 {task['id']}")
+
+
 # 添加cron任务
 cron_add = CmdHandler(["/cron", "/添加提醒", "/cron_add", "/cron add"], logger)
 cron_add.check_cdrate(cd).check_wblist(gbl).check_group()

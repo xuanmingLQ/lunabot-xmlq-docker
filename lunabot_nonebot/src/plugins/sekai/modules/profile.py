@@ -62,6 +62,8 @@ PROFILE_VERTICAL_KEYWORDS = ('竖屏', '竖向', '竖版', '纵向',)
 
 # ======================= 卡牌逻辑（防止循环依赖） ======================= #
 
+CARD_ICON_CACHE_RES = 128 * 128
+
 # 判断卡牌是否有after_training模式
 def has_after_training(card):
     return card['cardRarityType'] in ["rarity_3", "rarity_4"]
@@ -71,11 +73,14 @@ def only_has_after_training(card):
     return card.get('initialSpecialTrainingStatus') == 'done'
 
 # 获取角色卡牌缩略图
-async def get_card_thumbnail(ctx: SekaiHandlerContext, cid: int, after_training: bool):
+async def get_card_thumbnail(ctx: SekaiHandlerContext, cid: int, after_training: bool, high_res: bool=False):
     image_type = "after_training" if after_training else "normal"
     card = await ctx.md.cards.find_by_id(cid)
     assert_and_reply(card, f"找不到ID为{cid}的卡牌")
-    return await ctx.rip.img(f"thumbnail/chara_rip/{card['assetbundleName']}_{image_type}.png", use_img_cache=True)
+    img_cache_kwargs = {}
+    if not high_res:
+        img_cache_kwargs = {'use_img_cache': True, 'img_cache_max_res': CARD_ICON_CACHE_RES }
+    return await ctx.rip.img(f"thumbnail/chara_rip/{card['assetbundleName']}_{image_type}.png", **img_cache_kwargs)
 
 # 获取角色卡牌完整缩略图（包括边框、星级等）
 async def get_card_full_thumbnail(
@@ -84,6 +89,7 @@ async def get_card_full_thumbnail(
     after_training: bool=None, 
     pcard: Dict=None, 
     custom_text: str=None,
+    high_res: bool=False,
 ):
     if isinstance(card_or_card_id, int):
         card = await ctx.md.cards.find_by_id(card_or_card_id)
@@ -106,9 +112,9 @@ async def get_card_full_thumbnail(
         try: return open_image(cache_path)
         except: pass
 
-    img = await get_card_thumbnail(ctx, cid, after_training)
+    img = await get_card_thumbnail(ctx, cid, after_training, high_res=high_res)
     ok_to_cache = (img != UNKNOWN_IMG)
-    img = img.copy()
+    img = img.resize((128, 128), Image.BICUBIC)
 
     def draw(img: Image.Image, card):
         attr = card['attr']
@@ -233,6 +239,10 @@ def get_player_bind_id(ctx: SekaiHandlerContext, qid: int = None, check_bind=Tru
         if ctx.uid_arg.startswith('u'):
             index = int(ctx.uid_arg[1:]) - 1
             uid = get_uid_by_index(str(ctx.user_id), index)
+        elif ctx.uid_arg.startswith('@'):
+            assert_and_reply(is_super, "仅bot管理可直接@指定QQ号")
+            at_qid = int(ctx.uid_arg[1:])
+            uid = get_player_bind_id(ctx, at_qid, check_bind)
         else:
             assert_and_reply(is_super, "仅bot管理可直接指定游戏ID")
             uid = ctx.uid_arg
@@ -507,7 +517,7 @@ async def get_basic_profile(ctx: SekaiHandlerContext, uid: int, use_cache=True, 
         return profile
     except Exception as e:
         if use_cache and os.path.exists(cache_path):
-            logger.print_exc(f"获取{uid}基本信息失败，使用缓存数据")
+            logger.print_exc(f"获取 {ctx.region} {uid} 基本信息失败，使用缓存数据")
             profile = load_json(cache_path)
             return profile
         raise e
@@ -544,7 +554,7 @@ async def get_player_avatar_info_by_basic_profile(ctx: SekaiHandlerContext, basi
     for pcard in pcards:
         pcard['after_training'] = pcard['defaultImage'] == "special_training" and pcard['specialTrainingStatus'] == "done"
     card_id = pcards[0]['cardId']
-    avatar_img = await get_card_thumbnail(ctx, card_id, pcards[0]['after_training'])
+    avatar_img = await get_card_thumbnail(ctx, card_id, pcards[0]['after_training'], high_res=True)
     cid = (await ctx.md.cards.find_by_id(card_id))['characterId']
     unit = await get_unit_by_card_id(ctx, card_id)
     return PlayerAvatarInfo(card_id, cid, unit, avatar_img)
@@ -582,6 +592,7 @@ async def get_detailed_profile(
     filter: tuple[str]|list[str]|set[str]|None=None
 ) -> Tuple[dict, str]:
     cache_path = None
+    uid = None
     try:
         # 获取绑定的游戏id
         try:
@@ -591,13 +602,13 @@ async def get_detailed_profile(
             raise e
         # 检测是否隐藏抓包信息
         if not ignore_hide and is_user_hide_suite(ctx, qid):
-            logger.info(f"获取 {qid} {ctx.region}抓包数据失败: 用户已隐藏抓包信息")
+            logger.info(f"获取 {qid} {ctx.region} {uid} 抓包数据失败: 用户已隐藏抓包信息")
             raise ReplyException(f"你已隐藏抓包信息，发送\"/{ctx.region}展示抓包\"可重新展示")
         
         try:
             profile = await get_suite(ctx.region, uid, filter)
         except HttpError as e:
-            logger.info(f"获取 {qid} {ctx.region}抓包数据失败: {get_exc_desc(e)}")
+            logger.info(f"获取 {qid} {ctx.region} {uid} 抓包数据失败: {get_exc_desc(e)}")
             if e.status_code == 404:
                 msg = f"获取你的{ctx.region.name}Suite抓包数据失败，发送\"/抓包\"指令可获取帮助\n"
                 # if local_err is not None: msg += f"[本地数据] {local_err}\n"
@@ -606,27 +617,27 @@ async def get_detailed_profile(
             else:
                 raise
         except Exception as e:
-            logger.info(f"获取 {qid} {ctx.region}抓包数据失败: {get_exc_desc(e)}")
+            logger.info(f"获取 {qid} {ctx.region} {uid} 抓包数据失败: {get_exc_desc(e)}")
             raise e
             
         if not profile:
-            logger.info(f"获取 {qid} {ctx.region}抓包数据失败: 找不到ID为 {uid} 的玩家")
+            logger.info(f"获取 {qid} {ctx.region} {uid} 抓包数据失败: 找不到该玩家")
             raise ReplyException(f"找不到ID为 {uid} 的玩家")
         
         # 缓存数据（目前已不缓存）
         cache_path = f"{SEKAI_PROFILE_DIR}/suite_cache/{ctx.region}/{uid}.json"
         # if not upload_time_only:
         #     dump_json(profile, cache_path)
-        logger.info(f"获取 {qid} {ctx.region}抓包数据成功，数据已缓存")
+        logger.info(f"获取 {qid} {ctx.region} {uid} 抓包数据成功，数据已缓存")
         
     except Exception as e:
         # 获取失败的情况，尝试读取缓存
         if cache_path and os.path.exists(cache_path):
             profile = load_json(cache_path)
-            logger.info(f"从缓存获取 {qid} {ctx.region}抓包数据")
+            logger.info(f"从缓存获取 {qid} {ctx.region} {uid} 抓包数据")
             return profile, get_exc_desc(e) + "(使用先前的缓存数据)"
         else:
-            logger.info(f"未找到 {qid} 的缓存{ctx.region}抓包数据")
+            logger.info(f"未找到 {qid} {ctx.region} {uid} 的缓存抓包数据")
 
         if raise_exc:
             raise e
@@ -646,7 +657,7 @@ async def get_player_avatar_info_by_detailed_profile(ctx: SekaiHandlerContext, d
     for pcard in pcards:
         pcard['after_training'] = pcard['defaultImage'] == "special_training" and pcard['specialTrainingStatus'] == "done"
     card_id = pcards[0]['cardId']
-    avatar_img = await get_card_thumbnail(ctx, card_id, pcards[0]['after_training'])
+    avatar_img = await get_card_thumbnail(ctx, card_id, pcards[0]['after_training'], high_res=True)
     cid = (await ctx.md.cards.find_by_id(card_id))['characterId']
     unit = await get_unit_by_card_id(ctx, card_id)
     return PlayerAvatarInfo(card_id, cid, unit, avatar_img)
@@ -735,7 +746,7 @@ async def compose_profile_image(ctx: SekaiHandlerContext, basic_profile: dict, v
             card_ids = [pcard['cardId'] for pcard in pcards]
             cards = await ctx.md.cards.collect_by_ids(card_ids)
             card_imgs = [
-                await get_card_full_thumbnail(ctx, card, pcard=pcard)
+                await get_card_full_thumbnail(ctx, card, pcard=pcard, high_res=True)
                 for card, pcard in zip(cards, pcards)
             ]
             for i in range(len(card_imgs)):

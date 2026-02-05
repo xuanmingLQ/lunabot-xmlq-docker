@@ -140,6 +140,7 @@ class Widget:
         self.offset_xanchor = 'l'
         self.offset_yanchor = 't'
         self.allow_draw_outside = False
+        self.set_size_policy('fixed', 'fixed')
 
         self._calc_w = None
         self._calc_h = None
@@ -273,6 +274,15 @@ class Widget:
         self.omit_parent_bg = omit
         return self
     
+    def set_size_policy(self, w_policy: str | None = None, h_policy: str | None = None):
+        if w_policy:
+            assert w_policy in ('fixed', 'fit')
+            self.w_size_policy = w_policy
+        if h_policy:
+            assert h_policy in ('fixed', 'fit')
+            self.h_size_policy = h_policy
+        return self
+
     def set_allow_draw_outside(self, allow: bool):
         self.allow_draw_outside = allow
         return self
@@ -293,6 +303,10 @@ class Widget:
                     content_h = min(content_h, content_h_limit)
             self._calc_w = content_w_limit + self.hmargin * 2 + self.hpadding * 2
             self._calc_h = content_h_limit + self.vmargin * 2 + self.vpadding * 2
+            if self.w_size_policy == 'fit':
+                self._calc_w = min(self._calc_w, content_w + self.hmargin * 2 + self.hpadding * 2)
+            if self.h_size_policy == 'fit':
+                self._calc_h = min(self._calc_h, content_h + self.vmargin * 2 + self.vpadding * 2)
         return (int(self._calc_w), int(self._calc_h))
 
     def _get_content_pos(self):
@@ -430,6 +444,11 @@ class HSplit(Widget):
         self.item_halign, self.item_valign = ALIGN_MAP[align]
         return self
 
+    def set_content_and_item_align(self, align: str):
+        self.set_content_align(align)
+        self.set_item_align(align)
+        return self
+
     def set_sep(self, sep: int):
         self.sep = sep  
         return self
@@ -523,6 +542,11 @@ class VSplit(Widget):
         self.item_halign, self.item_valign = ALIGN_MAP[align]
         return self
     
+    def set_content_and_item_align(self, align: str):
+        self.set_content_align(align)
+        self.set_item_align(align)
+        return self
+
     def set_sep(self, sep: int):
         self.sep = sep  
         return self
@@ -596,7 +620,17 @@ class VSplit(Widget):
     
 
 class Grid(Widget):
-    def __init__(self, items: List[Widget]=None, row_count=None, col_count=None, item_size_mode='fixed', item_align='c', hsep=DEFAULT_SEP, vsep=DEFAULT_SEP, vertical=False):
+    def __init__(
+        self, 
+        items: List[Widget]=None, 
+        row_count=None, 
+        col_count=None, 
+        item_size_mode='fixed', 
+        item_align='c', 
+        hsep=DEFAULT_SEP, 
+        vsep=DEFAULT_SEP, 
+        vertical=False,
+    ):
         super().__init__()
         self.items = items or []
         for item in self.items:
@@ -604,15 +638,16 @@ class Grid(Widget):
         self.row_count = row_count
         self.col_count = col_count
         assert not (self.row_count and self.col_count), 'Either row_count or col_count should be None'
-        assert item_size_mode in ('expand', 'fixed')
-        self.item_size_mode = item_size_mode
+        self.set_item_size_mode(item_size_mode)
         self.hsep = hsep
         self.vsep = vsep
-        if item_align not in ALIGN_MAP:
-            raise ValueError('Invalid align')
-        self.item_halign, self.item_valign = ALIGN_MAP[item_align]
+        self.set_item_align(item_align)
         self.item_bg = None
         self.vertical = vertical
+
+        self._grid_rc = None
+        self._col_ws = None
+        self._row_hs = None
 
     def set_vertical(self, vertical: bool):
         self.vertical = vertical
@@ -622,6 +657,11 @@ class Grid(Widget):
         if align not in ALIGN_MAP:
             raise ValueError('Invalid align')
         self.item_halign, self.item_valign = ALIGN_MAP[align]
+        return self
+
+    def set_content_and_item_align(self, align: str):
+        self.set_content_align(align)
+        self.set_item_align(align)
         return self
 
     def set_sep(self, hsep=None, vsep=None):
@@ -642,7 +682,7 @@ class Grid(Widget):
         return self
 
     def set_item_size_mode(self, mode: str):
-        assert mode in ('expand', 'fixed')
+        assert mode in ('expand', 'fixed', 'flex')
         self.item_size_mode = mode
         return self
 
@@ -650,61 +690,96 @@ class Grid(Widget):
         self.item_bg = bg
         return self
 
-    def _get_grid_rc_and_size(self):
-        r, c = self.row_count, self.col_count
-        assert r and not c or c and not r, 'Either row_count or col_count should be None'
-        if not r: r = (len(self.items) + c - 1) // c
-        if not c: c = (len(self.items) + r - 1) // r
-        if self.item_size_mode == 'expand':
-            assert self.w is not None and self.h is not None, 'Expand mode requires width and height'
-            gw = (self.w - self.hsep * (c - 1) - self.hpadding * 2) / c
-            gh = (self.h - self.vsep * (r - 1) - self.vpadding * 2) / r
-        else:
-            gw, gh = 0, 0
-            for item in self.items:
-                iw, ih = item._get_self_size()
-                gw = max(gw, iw)
-                gh = max(gh, ih)
-        return (int(r), int(c)), (int(gw), int(gh))
+    def _calc_grid_rc_and_sizes(self) -> tuple[tuple[int, int], list[int], list[int]]:
+        if self._grid_rc is None:
+            # 计算行列数
+            r, c = self.row_count, self.col_count
+            assert r and not c or c and not r, 'Either row_count or col_count should be None'
+            if not r: r = (len(self.items) + c - 1) // c
+            if not c: c = (len(self.items) + r - 1) // r
+            self._grid_rc = (r, c)
+            # 计算每列宽度和每行高度
+            if self.item_size_mode == 'expand':
+                # 固定大小，按比例分配
+                assert self.w is not None and self.h is not None, 'Expand mode requires width and height'
+                gw = (self.w - self.hsep * (c - 1) - self.hpadding * 2) / c
+                gh = (self.h - self.vsep * (r - 1) - self.vpadding * 2) / r
+                self._col_ws = [int(gw) for _ in range(c)]
+                self._row_hs = [int(gh) for _ in range(r)]
+            elif self.item_size_mode == 'fixed':
+                # 固定大小，取最大值
+                gw, gh = 0, 0
+                for item in self.items:
+                    iw, ih = item._get_self_size()
+                    gw = max(gw, iw)
+                    gh = max(gh, ih)
+                self._col_ws = [int(gw) for _ in range(c)]
+                self._row_hs = [int(gh) for _ in range(r)]
+            elif self.item_size_mode == 'flex':
+                # 可变大小，每行每列各自取最大值
+                self._col_ws = [0 for _ in range(c)]
+                self._row_hs = [0 for _ in range(r)]
+                for idx, item in enumerate(self.items):
+                    if not self.vertical:
+                        i, j = idx // c, idx % c
+                    else:
+                        i, j = idx % r, idx // r
+                    iw, ih = item._get_self_size()
+                    self._col_ws[j] = max(self._col_ws[j], iw)
+                    self._row_hs[i] = max(self._row_hs[i], ih)
+            else:
+                raise ValueError(f'Invalid item_size_mode: {self.item_size_mode}')
+        return self._grid_rc, self._col_ws, self._row_hs
     
     def _get_content_size(self):
-        (r, c), (gw, gh) = self._get_grid_rc_and_size()
-        return (int(c * gw + self.hsep * (c - 1)), int(r * gh + self.vsep * (r - 1)))
+        (r, c), ws, hs = self._calc_grid_rc_and_sizes()
+        return (int(sum(ws) + self.hsep * (c - 1)), int(sum(hs) + self.vsep * (r - 1)))
     
     def _draw_content(self, p: Painter):
-        (r, c), (gw, gh) = self._get_grid_rc_and_size()
+        (r, c), ws, hs = self._calc_grid_rc_and_sizes()
+        cur_x, cur_y = 0, 0
         for idx, item in enumerate(self.items):
+            # 计算行列号
             if not self.vertical:
                 i, j = idx // c, idx % c
             else:
                 i, j = idx % r, idx // r
-            x = j * (gw + self.hsep)
-            y = i * (gh + self.vsep)
+            # 绘制grid位置
+            gw, gh = ws[j], hs[i]
+            x, y = cur_x, cur_y
             p.move_region((x, y), (gw, gh))
             if self.item_bg and not item.omit_parent_bg:
                 if callable(self.item_bg):
                     self.item_bg(i, j, item).draw(p)
                 else:
                     self.item_bg.draw(p)
-            x, y = 0, 0
+            # 计算item位置
             iw, ih = item._get_self_size()
-            if self.item_halign == 'l':
-                x += 0
-            elif self.item_halign == 'r':
-                x += gw - iw
-            elif self.item_halign == 'c':
-                x += (gw - iw) // 2
-            if self.item_valign == 't':
-                y += 0
-            elif self.item_valign == 'b':
-                y += gh - ih
-            elif self.item_valign == 'c':
-                y += (gh - ih) // 2
-            p.move_region((x, y), (iw, ih))
+            match self.item_halign:
+                case 'l': dx = 0
+                case 'r': dx = gw - iw
+                case 'c': dx = (gw - iw) // 2
+            match self.item_valign:
+                case 't': dy = 0
+                case 'b': dy = gh - ih
+                case 'c': dy = (gh - ih) // 2
+            # 绘制item
+            p.move_region((dx, dy), (iw, ih))
             item.draw(p)
             p.restore_region(2)
-
-
+            # 更新当前坐标
+            if not self.vertical:
+                cur_x += gw + self.hsep
+                if idx % c == c - 1:
+                    cur_x = 0
+                    cur_y += gh + self.vsep
+            else:
+                cur_y += gh + self.vsep
+                if idx % r == r - 1:
+                    cur_y = 0
+                    cur_x += gw + self.hsep
+            
+            
 class Flow(Widget):
     def __init__(
         self, 
@@ -738,15 +813,25 @@ class Flow(Widget):
         self.vertical = vertical
         self.keep_empty_row_or_col = keep_empty_row_or_col
         self.set_item_align(item_align)
+        self.item_bg = None
 
         self.layout: list[list[int]] = None
         self.total_size: tuple[int, int] = None
         self.item_positions: list[tuple[int, int]] = None
 
+    def set_item_bg(self, bg: WidgetBg | Callable[[int, Widget], WidgetBg]):
+        self.item_bg = bg
+        return self
+
     def set_item_align(self, align: str):
         if align not in ALIGN_MAP:
             raise ValueError('Invalid align')
         self.item_halign, self.item_valign = ALIGN_MAP[align]
+        return self
+
+    def set_content_and_item_align(self, align: str):
+        self.set_content_align(align)
+        self.set_item_align(align)
         return self
 
     def set_vertical(self, vertical: bool):
@@ -1002,6 +1087,13 @@ class Flow(Widget):
         for idx, item in enumerate(self.items):
             x, y = item_pos[idx]
             iw, ih = item._get_self_size()
+
+            if self.item_bg and not item.omit_parent_bg:
+                if callable(self.item_bg):
+                    self.item_bg(idx, item).draw(p)
+                else:
+                    self.item_bg.draw(p)
+
             p.move_region((x, y), (iw, ih))
             item.draw(p)
             p.restore_region()

@@ -56,8 +56,8 @@ async def rpc_get_new_msgs():
         msg=msg['msg'],
     ) for msg in msgs]
 
-async def rpc_query_embeddings(texts: list[str]) -> list[list[float]]:
-    return await rpc_session.call('query_embedding', texts)
+async def rpc_query_embeddings(texts: list[str], model_name: str) -> list[list[float]]:
+    return await rpc_session.call('query_embedding', texts, model_name)
 
 
 
@@ -322,7 +322,19 @@ async def chat(msg: Message):
         if recent_summary == "":
             warning("生成聊天记录摘要失败，放弃聊天处理")
             return
-        recent_emb = (await rpc_query_embeddings([recent_summary]))[0]
+
+        last_long_msg = None
+        for m in reversed(recent_msgs):
+            msg_text = get_plain_text(m)
+            if len(msg_text) >= 4:
+                last_long_msg = msg_text
+                break
+
+        texts_to_embed = [recent_summary]
+        if last_long_msg:
+            texts_to_embed.append(last_long_msg)
+        query_embs = await rpc_query_embeddings(texts_to_embed, config.get('chat.llm.emb_model'))
+        recent_emb = query_embs[0]
             
     except:
         error(f"处理消息时失败，放弃聊天处理")
@@ -338,8 +350,8 @@ async def chat(msg: Message):
         em_text = ""
         short_ems, long_ems = [], []
         if short_em_num + long_em_num > 0:
-            short_ems = mem.em_query(recent_emb, short_em_num, 'short_term', config.get('chat.mem.em_time_decay_per_hour'))
-            long_ems = mem.em_query(recent_emb, long_em_num, 'long_term')
+            short_ems = mem.em_query(query_embs, short_em_num, 'short_term', config.get('chat.mem.em_time_decay_per_hour'))
+            long_ems = mem.em_query(query_embs, long_em_num, 'long_term')
             info(f"获取短期事件记忆共 {len(short_ems)} 条: {[e.id for e in short_ems]}")
             info(f"获取长期事件记忆共 {len(long_ems)} 条: {[e.id for e in long_ems]}")
             if short_ems or long_ems:
@@ -365,22 +377,37 @@ async def chat(msg: Message):
         # 获取用户记忆
         um_num = config.get('chat.mem.um_num')
         um_text = ""
+        top_user_ids = []
         if um_num > 0:
             user_msg_counts = {}
             for m in recent_msgs:
                 user_msg_counts[m.user_id] = user_msg_counts.get(m.user_id, 0) + 1
-            top_users = sorted(user_msg_counts.items(), key=lambda x: x[1], reverse=True)[:um_num]
-            ums: dict[int, UserMemory] = {}
-            for user_id, _ in top_users:
+            top_users = sorted(user_msg_counts.items(), key=lambda x: x[1], reverse=True)
+            candidate_uids = [uid for uid, _ in top_users]
+            # 包含消息中提到名称的用户（更优先）
+            full_msg = "".join(get_plain_text(m) for m in recent_msgs)
+            mentioned_uids = mem.um_query_uid_by_name_in_message(full_msg)
+            for uid in mentioned_uids:
+                if uid not in candidate_uids:
+                    candidate_uids.insert(0, uid)
+            # 限制数量
+            candidate_uids = candidate_uids[:um_num]
+            # 格式化 UserMemory
+            ums_content = []
+            for user_id in candidate_uids:
+                top_user_ids.append(user_id)
                 if um := mem.um_get(user_id):
-                    ums[user_id] = um
-            info(f"获取用户记忆共 {len(ums)} 条: {list(ums.keys())}")
-            if ums:
+                    u_info = f"用户ID: {user_id}\n"
+                    if um.names: u_info += f"  - 曾用名: {', '.join(um.names)}\n"
+                    if um.profile: u_info += f"  - 简介: {um.profile}\n"
+                    if um.recent_events:
+                        u_info += "  - 最近事件:\n"
+                        for t, txt in um.recent_events:
+                            u_info += f"    [{get_readable_datetime(datetime.fromtimestamp(t))}]: {txt}\n"
+                    ums_content.append(u_info)
+            if ums_content:
                 um_text += "你对聊天中的部分用户的记忆:\n"
-                um_text += "```\n"
-                for user_id, um in ums.items():
-                    um_text += f"{user_id}: {um.text}\n"
-                um_text += "```\n"
+                um_text += "```\n" + "\n".join(ums_content) + "```\n"
 
     except:
         error(f"获取记忆时失败，放弃聊天处理")
@@ -418,6 +445,7 @@ async def chat(msg: Message):
             with open(save_dir, 'w', encoding='utf-8') as f:
                 f.write(full_prompt)
         
+        info(f"开始请求LLM生成回复，输入长度 {len(full_prompt)} 字符")
         llm_response = await rpc_query_llm(
             model=config.get('chat.llm.model'),
             prompt=full_prompt,
@@ -428,6 +456,7 @@ async def chat(msg: Message):
                 'json_reply': True,
                 'json_key_restraints': [
                     { 'key': 'reply', 'type': 'str' },
+                    { 'key': 'user_updates', 'type': 'list' },
                 ],
             }
         )
@@ -435,8 +464,7 @@ async def chat(msg: Message):
 
         reply_text = llm_response['reply']
         reply_text2 = llm_response.get('reply2', '')
-        update_um_id = llm_response.get('update_um_id', '')
-        update_um_text = llm_response.get('update_um_text', '')
+        user_updates = llm_response.get('user_updates', [])
 
     except:
         error(f"请求LLM生成回复时失败，放弃聊天处理")
@@ -524,17 +552,31 @@ async def chat(msg: Message):
         )
 
         # 添加用户记忆
-        try:
-            update_um_id = int(update_um_id)
-        except:
-            update_um_id = None
-        if update_um_id and update_um_text:
-            mem.um_update(
-                user_id=update_um_id,
-                um=UserMemory(
-                    text=update_um_text,
-                ),
-            )
+        if isinstance(user_updates, list):
+            for update in user_updates:
+                try:
+                    uid = int(update.get('user_id'))
+                    # 安全检查：只允许更新当前上下文中存在的用户，防止LLM幻觉
+                    if uid not in top_user_ids and uid != msg.user_id:
+                        continue
+                    new_names = []
+                    if update.get('new_name'):
+                        new_names.append(update.get('new_name'))
+                    for msg in reversed(recent_msgs):
+                        if msg.user_id == uid:
+                            new_names.append(msg.nickname)
+                            break
+                    mem.um_update(
+                        user_id=uid,
+                        new_names=new_names,
+                        wrong_names=update.get('wrong_names'),
+                        profile_update=update.get('profile'),
+                        event_update=update.get('new_event'),
+                        max_events=config.get('chat.mem.um_max_events'),
+                        max_names=config.get('chat.mem.um_max_names'),
+                    )
+                except Exception as e:
+                    warning(f"解析用户记忆更新失败: {update}, err={get_exc_desc(e)}")
             
         # 添加自身记忆
         for msg_id, text in send_msg_id_texts:

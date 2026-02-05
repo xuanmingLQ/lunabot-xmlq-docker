@@ -38,6 +38,7 @@ scipy
 sekai-deck-recommend-cpp
 svgwrite
 setproctitle
+<<<<<<< HEAD
 tenacity
 tencentcloud-sdk-python
 uvloop
@@ -46,3 +47,21 @@ yt-dlp>=2025.12.8
 zhconv
 zhon
 zstandard
+=======
+bypy
+colour-science
+opencv-python-headless
+zstandard
+aiosqlite
+rapidfuzz
+sekai_deck_recommend_cpp
+pydub
+audioop-lts
+yappi
+brotli
+scipy
+mistune
+psutil<7.0.0
+
+# easyocr   # optional for llm.translator
+>>>>>>> origin/xmlq

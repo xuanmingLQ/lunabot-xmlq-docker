@@ -23,6 +23,7 @@ from .music import (
     get_music_cover_thumb,
     get_valid_musics,
     get_music_diff_info,
+    musicmetas_json,
 )
 from sekai_deck_recommend_cpp import (
     DeckRecommendOptions, 
@@ -47,12 +48,6 @@ BOOST_BONUS_DICT: Dict[int, int] = {
     9: 33,
     10: 35,
 }
-
-musicmetas_json = WebJsonRes(
-    name="MusicMeta", 
-    url = config.get("deck.music_meta_url"),
-    update_interval=timedelta(hours=1),
-)
 
 RECOMMEND_TIMEOUT_CFG = config.item('deck.timeout.default')
 NO_EVENT_RECOMMEND_TIMEOUT_CFG = config.item('deck.timeout.no_event')

@@ -135,6 +135,17 @@ class SekaiCmdHandler(CmdHandler):
                 if uid_match:
                     uid_arg = uid_match.group(1)
                     args = args.replace(uid_match.group(0), '', 1).strip()
+                # 匹配 @QQ号
+                qq_match = re.search(r'@(\d{9,13})', args)
+                if qq_match:
+                    uid_arg = f"@{qq_match.group(1)}"
+                    args = args.replace(qq_match.group(0), '', 1).strip()
+                # 匹配 at用户
+                for seg in context.get_msg():
+                    stype, sdata = seg['type'], seg.get('data', {})
+                    if stype == "at" and sdata.get('qq'):
+                        uid_arg = f"@{sdata['qq']}"
+                        break
         
         with ProfileTimer("sekaihandler.construct_ctx"):
             # 构造新的上下文

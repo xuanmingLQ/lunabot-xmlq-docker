@@ -160,9 +160,9 @@ async def handle_query_llm(cid: str, model: str | list[str], text: str, images: 
 
 # 请求获取文本嵌入
 @rpc_method(RPC_SERVICE, 'query_embedding')
-async def handle_query_embedding(cid: str, texts: list[str]):
+async def handle_query_embedding(cid: str, texts: list[str], model_name: str):
     logger.info(f"自动聊天RPC客户端 {cid} 请求 {len(texts)} 条文本嵌入")
-    embeddings = await get_text_embedding(texts)
+    embeddings = await get_text_embedding(texts, model_name)
     return embeddings
 
 # 获取新消息，获取后清空

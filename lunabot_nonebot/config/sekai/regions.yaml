@@ -1,47 +1,54 @@
 jp:
-  - "日服" # 中文名，必填，必须是字符串，必须放在第一位
-  - Asia/Tokyo # 时区名 必填，必须放在第二位
-  - enable # 即使不填，也默认是启用的
-  - need_translate # 需要翻译
-  - fifth_anniversary # 已过五周年
-  - mysekai # 允许烤森订阅
-  - ad_result # 允许广告奖励
-  - friend_code # 可以查询好友码
-  - masterdata # 获取masterdata
-  - asset # 获取asset
+  name: 日服  # 中文名
+  timezone: Asia/Tokyo  # 时区
+  enable: true  # 启用这个服务器
+  options:
+    - need_translate # 需要翻译
+    - fifth_anniversary # 已过五周年
+    - mysekai # 允许烤森订阅
+    - ad_result # 允许广告奖励
+    - friend_code # 可以查询好友码
+    - masterdata # 获取masterdata
+    - asset # 获取asset
 
 cn:
-  - "国服" # 中文名，必填
-  - Asia/Shanghai
-  - enable
-  - local # 这个字段，用于指示本地时区，其它服务器的时间会被换算到本地时间
-  - translated # 已翻译过
-  - compact_data # 朝夕光年服的特殊设置
-  - mysekai
-  - bd_mysekai # 朝夕光年服不允许烤森
-  - masterdata
-  - asset
+  name: 国服 
+  timezone: Asia/Shanghai
+  enable: true
+  options:
+    # 关于这个local，可以直接用系统时区
+    - local # 这个字段，用于指示本地时区，其它服务器的时间会被换算到本地时间
+    - translated # 已翻译过
+    - compact_data # 朝夕光年服的特殊设置
+    - mysekai
+    - bd_mysekai # 朝夕光年服不允许烤森
+    - masterdata
+    - asset
 
 tw:
-  - "台服" # 中文名，必填
-  - Asia/Taipei
-  - disable # 如果填了disable，就禁用这个服务器
-  - mysekai
-  - bd_mysekai
-  - compact_data
+  name: 台服
+  timezone: Asia/Taipei
+  enable: false # 为false，就禁用这个服务器
+  options:
+    - translated # 已翻译过
+    - mysekai
+    - bd_mysekai
+    - compact_data
 
 kr:
-  - "韩服" # 中文名，必填
-  - Asia/Seoul
-  - disable # 如果填了disable，就禁用这个服务器
-  - need_translate
-  - mysekai
-  - bd_mysekai
-  - compact_data
+  name: 韩服
+  timezone: Asia/Seoul
+  enable: false # 为false，就禁用这个服务器
+  options:
+    - need_translate
+    - mysekai
+    - bd_mysekai
+    - compact_data
 
 en:
-  - "国际服" # 中文名，必填
-  - America/Los_Angeles
-  - disable # 如果填了disable，就禁用这个服务器
-  - need_translate
-  - mysekai
+  name: 国际服
+  timezone: America/Los_Angeles
+  enable: false # 为false，就禁用这个服务器
+  options:
+    - need_translate
+    - mysekai

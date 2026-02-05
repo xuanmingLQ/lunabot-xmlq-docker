@@ -32,6 +32,12 @@ music_name_retriever = get_text_retriever(f"music_name")
 music_cn_titles = WebJsonRes("曲名中文翻译", "https://i18n-json.sekai.best/zh-CN/music_titles.json", update_interval=timedelta(days=1))
 music_en_titles = WebJsonRes("曲名英文翻译", "https://i18n-json.sekai.best/en/music_titles.json", update_interval=timedelta(days=1))
 
+musicmetas_json = WebJsonRes(
+    name="MusicMeta", 
+    url = config.get("deck.music_meta_url"),
+    update_interval=timedelta(hours=1),
+)
+
 
 DIFF_NAMES = [
     ("easy", "Easy", "EASY", "ez", "EZ"),
@@ -687,6 +693,197 @@ def get_music_constants_info_widget(font_size: int = 20, padding: int = 16, addi
     return w
 
 
+# ======================= 歌曲分数排行榜 ======================= #
+
+LEADERBOARD_TARGET_KEYS = {
+    'score': '{live_type}_score',
+    'pt': '{live_type}_pt',
+    'pt/time': '{live_type}_pt_per_hour',
+    'tps': 'tps',
+    'time': 'music_time',
+}
+LEADERBOARD_ALL_LIVE_TYPES = (
+    'solo',
+    'auto',
+    'multi',
+)
+LEADERBOARD_DIFF_PRIORITY = {
+    "master": 6,
+    "append": 5,
+    "expert": 4,
+    "hard": 3,
+    "normal": 2,
+    "easy": 1,
+}
+
+# 获取歌曲分数排行榜数据
+async def get_music_leaderboard_data(
+    skills: list[float],
+    skill_strategy: str,
+    deck_bonus: float,
+    play_interval: float,
+    power: int,
+    keep_one_diff_per_music: bool,
+    ascend: bool,
+    target: str | list[str] = 'all',
+    live_type: str | list[str] = 'all',
+) -> list[dict]:
+    musicmetas = await musicmetas_json.get(raise_on_no_data=False)
+    if not musicmetas:
+        return []
+
+    if target == 'all':
+        target_keys = LEADERBOARD_TARGET_KEYS
+    else:
+        if isinstance(target, str):
+            target = [target]
+        target_keys = {t: LEADERBOARD_TARGET_KEYS[t] for t in target if t in LEADERBOARD_TARGET_KEYS}
+
+    if live_type == 'all':
+        live_types = LEADERBOARD_ALL_LIVE_TYPES
+    else:
+        if isinstance(live_type, str):
+            live_type = [live_type]
+        live_types = [lt for lt in live_type if lt in LEADERBOARD_ALL_LIVE_TYPES]
+
+    if skill_strategy == 'max':
+        sorted_skills = sorted(skills, reverse=True)
+    elif skill_strategy == 'min':
+        sorted_skills = sorted(skills)
+    elif skill_strategy == 'avg':
+        avg_skill = sum(skills) / len(skills)
+        sorted_skills = [avg_skill] * 5
+
+    # 计算各歌曲数据
+    rows: list[dict] = []
+    for meta in musicmetas:
+        mid = meta['music_id']
+        diff = meta['difficulty']
+        music_time = meta['music_time']
+        tap_count = meta['tap_count']
+        event_rate = meta['event_rate']
+        base_score = meta['base_score']
+        base_score_auto = meta['base_score_auto']
+        skill_score_solo = meta['skill_score_solo']
+        skill_score_auto = meta['skill_score_auto']
+        skill_score_multi = meta['skill_score_multi']
+        fever_score = meta['fever_score']
+
+        tps = tap_count / music_time
+
+        best_skill_order_solo = list(range(5))
+        best_skill_order_solo.sort(key=lambda x: skill_score_solo[x], reverse=True)
+        
+        solo_skill = 0.0
+        sorted_skill_score_solo = sorted(skill_score_solo[:5], reverse=True)
+        for i in range(5):
+            solo_skill += sorted_skill_score_solo[i] * sorted_skills[i]
+        solo_skill += skill_score_solo[5] * skills[0]
+
+        auto_skill = 0.0
+        sorted_skill_score_auto = sorted(skill_score_auto[:5], reverse=True)
+        for i in range(5):
+            auto_skill += sorted_skill_score_auto[i] * sorted_skills[i]
+        auto_skill += skill_score_auto[5] * skills[0]
+
+        multi_skill = 0.0
+        sorted_skill_score_multi = sorted(skill_score_multi[:5], reverse=True)
+        for i in range(5):
+            multi_skill += sorted_skill_score_multi[i] * sorted_skills[i]
+        multi_skill += skill_score_multi[5] * skills[0]
+
+        solo_score = base_score + solo_skill
+        auto_score = base_score_auto + auto_skill
+        multi_score = base_score + multi_skill + fever_score * 0.5 + 0.01875
+
+        solo_skill_account = solo_skill / solo_score
+        auto_skill_account = auto_skill / auto_score
+        multi_skill_account = multi_skill / multi_score
+
+        def calc_real_score_and_pt(d: dict, live_type: str, power: int):
+            active_bonus = 0.0
+            if live_type == 'multi':
+                active_bonus = 5 * 0.015 * power
+            d[f'{live_type}_real_score'] = int(d[f'{live_type}_score'] * power * 4 + active_bonus)
+
+            event_rate = d['event_rate'] / 100.0
+            deck_rate = deck_bonus / 100.0 + 1
+
+            match live_type:
+                case 'solo':
+                    base = 100 + int(d['solo_real_score'] / 20000)
+                    d['solo_pt'] = int(base * event_rate * deck_rate)
+                case 'auto':
+                    base = 100 + int(d['auto_real_score'] / 20000)
+                    d['auto_pt'] = int(base * event_rate * deck_rate)
+                case 'multi':
+                    other_score = d['multi_real_score'] * 4
+                    base = 110 + int(d['multi_real_score'] / 17000) + min(13, int(other_score / 340000))
+                    d['multi_pt'] = int(base * event_rate * deck_rate)
+
+            play_time = d['music_time'] + play_interval
+            d['play_count_per_hour'] = 60 * 60 / play_time
+            d[f'{live_type}_pt_per_hour'] = d[f'{live_type}_pt'] * d['play_count_per_hour']
+            
+        data = {
+            'music_id': mid,
+            'difficulty': diff,
+            'diff_priority': LEADERBOARD_DIFF_PRIORITY[diff] * (-1 if ascend else 1),
+            'music_time': music_time,
+            'tps': tps,
+            'event_rate': event_rate,
+            'solo_score': solo_score,
+            'auto_score': auto_score,
+            'multi_score': multi_score,
+            'solo_skill_account': solo_skill_account,
+            'auto_skill_account': auto_skill_account,
+            'multi_skill_account': multi_skill_account,
+        }
+
+        for live_type_key in live_types:
+            calc_real_score_and_pt(data, live_type_key, power)
+        rows.append(data)
+
+    # 排序并记录排名
+    def sort_rows(target: str, live_type: str):
+        sort_key = target_keys[target]
+        if '{live_type}' in sort_key:
+            sort_key = sort_key.format(live_type=live_type)
+        rows.sort(key=lambda x: (x[sort_key], x['diff_priority']), reverse=not ascend)
+        rank_key = f"{live_type}_{target}_rank"
+        if keep_one_diff_per_music:
+            seen_mids, cur_rank = set(), 1
+            for row in rows:
+                mid = row['music_id']
+                if mid in seen_mids:
+                    row[rank_key] = None
+                else:
+                    seen_mids.add(mid)
+                    row[rank_key] = cur_rank
+                    cur_rank += 1
+        else:
+            for i, row in enumerate(rows):
+                row[rank_key] = i + 1
+
+    for live_type in live_types:
+        for target in target_keys.keys():
+            sort_rows(target, live_type)
+
+    return rows
+
+# 用于歌曲详情中排行榜的缓存
+_last_musicmeta_hash = None
+_last_music_leaderboard_info: dict[tuple[str, str, int], dict] = {}
+
+# 用于歌曲详情中排行榜的参数
+LEADERBOARD_TARGET_NAMES = { 'score': "分数", 'pt': "PT", 'pt/time': "时速" }
+LEADERBOARD_LIVETYPE_NAMES = { 'solo': "单人", 'multi': "多人", 'auto': "AUTO" }
+LEADERBOARD_LIVETYPE_PLAY_INTERVAL = { 'solo': 28.0, 'auto': 28.0, 'multi': 45.2 }
+LEADERBOARD_LIVETYPE_SKILLS = { 'solo': [1.2] * 5, 'auto': [1.2] * 5, 'multi': [2.0] * 5 }
+LEADERBOARD_DECK_BONUS = 400.0
+LEADERBOARD_POWER = 300000
+
+
 # ======================= 处理逻辑 ======================= #
 
 # 获取歌曲限定时间
@@ -728,7 +925,7 @@ async def get_valid_musics(ctx: SekaiHandlerContext, leak=False) -> List[Dict]:
 
 # 在所有服务器根据id检索歌曲（优先在ctx.region)
 async def find_music_by_id_all_region(ctx: SekaiHandlerContext, mid: int) -> Optional[Dict]:
-    regions = get_regions(RegionAttributes.ENABLE).copy()
+    regions = get_regions(RegionAttributes.ENABLE)
     regions.remove(ctx.region)
     regions.insert(0, ctx.region)
     for region in regions:
@@ -742,7 +939,7 @@ async def get_music_cover_thumb(ctx: SekaiHandlerContext, mid: int) -> Image.Ima
     music = await ctx.md.musics.find_by_id(mid)
     assert_and_reply(music, f"歌曲ID={mid}不存在")
     asset_name = music['assetbundleName']
-    return await ctx.rip.img(f"music/jacket/{asset_name}_rip/{asset_name}.png", use_img_cache=True)
+    return await ctx.rip.img(f"music/jacket/{asset_name}_rip/{asset_name}.png", use_img_cache=True, img_cache_max_res=80*80)
 
 # 获取曲目翻译名 lang in ['cn', 'en']
 async def get_music_trans_title(mid: int, lang: str, default: str=None) -> str:
@@ -909,7 +1106,46 @@ async def compose_music_detail_image(ctx: SekaiHandlerContext, mid: int, title: 
         caption_vocals[caption].append(vocal)
 
     limited_times = await get_music_limited_times(ctx, mid)
-        
+
+    # 更新歌曲排行缓存
+    global _last_musicmeta_hash, _last_music_leaderboard_info
+    musicmeta_hash = await musicmetas_json.get_hash()
+    live_type_keys = list(LEADERBOARD_LIVETYPE_NAMES.keys())
+    target_keys = list(LEADERBOARD_TARGET_NAMES.keys())
+    if musicmeta_hash and musicmeta_hash != _last_musicmeta_hash:
+        _last_musicmeta_hash = musicmeta_hash
+        _last_music_leaderboard_info = {}
+        for live_type in live_type_keys:
+            for target in target_keys:
+                leaderboard = await get_music_leaderboard_data(
+                    skills=LEADERBOARD_LIVETYPE_SKILLS[live_type],
+                    skill_strategy='avg',
+                    deck_bonus=LEADERBOARD_DECK_BONUS,
+                    play_interval=LEADERBOARD_LIVETYPE_PLAY_INTERVAL[live_type],
+                    power=LEADERBOARD_POWER,
+                    keep_one_diff_per_music=True,
+                    ascend=False,
+                    target=target,
+                    live_type=live_type,
+                )
+                for item in leaderboard:
+                    rank = item.get(f"{live_type}_{target}_rank", None)
+                    if rank:
+                        info = { 'rank': rank, 'diff': item['difficulty'] }
+                        match target:
+                            case 'score':   info['value'] = f"{item[f'{live_type}_score']*100:.1f}%"
+                            case 'pt':      info['value'] = str(item[f'{live_type}_pt'])
+                            case 'pt/time': info['value'] = f"{item[f'{live_type}_pt_per_hour']/10000:.2f}w/h"
+                        _last_music_leaderboard_info[(live_type, target, item['music_id'])] = info
+    
+    leaderboard_music_num = len(_last_music_leaderboard_info) // (len(LEADERBOARD_LIVETYPE_NAMES) * len(LEADERBOARD_TARGET_NAMES))
+    leaderboard_matrix: list[list[dict | None]] = []
+    for live_type in live_type_keys:
+        leaderboard_matrix.append([])
+        for target in target_keys:
+            leaderboard_matrix[-1].append(_last_music_leaderboard_info.get((live_type, target, mid), None))
+            
+    # 绘图
     with Canvas(bg=SEKAI_BLUE_BG).set_padding(BG_PADDING) as canvas:
         with VSplit().set_content_align('lt').set_item_align('lt').set_sep(16).set_item_bg(roundrect_bg()):
             with VSplit().set_content_align('lt').set_item_align('lt').set_sep(8).set_padding(16).set_item_bg(roundrect_bg()):
@@ -968,27 +1204,60 @@ async def compose_music_detail_image(ctx: SekaiHandlerContext, mid: int, title: 
                             for start, end in limited_times:
                                 TextBox(f"{start.strftime('%Y-%m-%d %H:%M')} ~ {end.strftime('%Y-%m-%d %H:%M')}", 
                                         TextStyle(font=DEFAULT_FONT, size=24, color=(70, 70, 70)))
-                    
-                # 难度等级/物量
-                hs, vs, gw = 8, 12, 180 if not has_append else 150
-                with HSplit().set_content_align('c').set_item_align('c').set_sep(vs).set_padding(32):
-                    with Grid(col_count=(6 if has_append else 5), item_size_mode='fixed').set_sep(hsep=hs, vsep=vs):
-                        # 难度等级
-                        light_diff_color = []
-                        for i, (diff, color) in enumerate(DIFF_COLORS.items()):
-                            if diff_lvs[i] is not None:
-                                t = TextBox(f"{diff.upper()} {diff_lvs[i]}", TextStyle(font=DEFAULT_BOLD_FONT, size=22, color=WHITE))
-                                t.set_bg(roundrect_bg(fill=color, radius=6)).set_size((gw, 40)).set_content_align('c').set_overflow('clip')
-                            if not isinstance(color, LinearGradient):
-                                light_diff_color.append(adjust_color(lerp_color(color, WHITE, 0.5), a=100))
-                            else:
-                                light_diff_color.append(adjust_color(lerp_color(color.c2, WHITE, 0.5), a=100))       
-                        # 物量
-                        for i, count in enumerate(diff_counts):
-                            if count is None: continue
-                            t = TextBox(f"{count} combo", TextStyle(font=DEFAULT_BOLD_FONT, size=18, color=(80, 80, 80, 255)), line_count=1)
-                            t.set_size((gw, 40)).set_content_align('c').set_bg(roundrect_bg(fill=light_diff_color[i], radius=6))        
+                
+                with HSplit().set_content_align('c').set_item_align('c').set_sep(8).set_omit_parent_bg(True).set_item_bg(roundrect_bg()):
+                    # 难度等级/物量
+                    vs = 4
+                    hs = 8 if has_append else 20
+                    with HSplit().set_content_align('c').set_item_align('c').set_sep(vs).set_padding(32):
+                        with Grid(col_count=(6 if has_append else 5), item_size_mode='fixed').set_sep(hsep=hs, vsep=vs):
+                            # 难度等级
+                            for i, (diff, color) in enumerate(DIFF_COLORS.items()):
+                                if diff_lvs[i] is not None:
+                                    t = TextBox(f"{diff_lvs[i]}", TextStyle(font=DEFAULT_BOLD_FONT, size=32, color=WHITE))
+                                    t.set_bg(roundrect_bg(fill=color, radius=12)).set_size((64, 64)).set_content_align('c').set_overflow('clip')     
+                            # 物量
+                            for i, (count, color) in enumerate(zip(diff_counts, DIFF_COLORS.values())):
+                                if count is None: continue
+                                style = TextStyle(DEFAULT_BOLD_FONT, 18, (80, 80, 80, 255), use_shadow=True, 
+                                                  shadow_offset=1, shadow_color=color.c1 if isinstance(color, LinearGradient) else color)
+                                with VSplit().set_content_align('c').set_item_align('c').set_sep(1):
+                                    TextBox(f"{count}", style).set_size((64, None)).set_content_align('c').set_overflow('clip')
+                                    TextBox("combo", style.replace(size=14)).set_size((64, None)).set_content_align('c').set_overflow('clip')
 
+                    # 排行榜
+                    with Grid(row_count=len(live_type_keys)+1, item_size_mode='flex').set_sep(4, 4).set_padding(16).set_content_align('c').set_item_align('c'):
+                        th_w, th_h = 80, 36
+                        tr_w, tr_h = 130, 36
+                        # 表头
+                        Spacer(w=th_w, h=th_h).set_bg(FillBg((255, 255, 255, 100)))
+                        for target in target_keys:
+                            TextBox(LEADERBOARD_TARGET_NAMES[target], TextStyle(DEFAULT_BOLD_FONT, 18, (50, 50, 50))) \
+                                .set_bg(FillBg((255, 255, 255, 100))).set_size((tr_w, th_h)).set_content_align('c')
+                        # 内容
+                        for i, live_type in enumerate(live_type_keys):
+                            TextBox(LEADERBOARD_LIVETYPE_NAMES[live_type], TextStyle(DEFAULT_BOLD_FONT, 18, (50, 50, 50))) \
+                                .set_bg(FillBg((255, 255, 255, 50))).set_size((th_w, th_h)).set_content_align('c')
+                            for j, target in enumerate(target_keys):
+                                info = leaderboard_matrix[i][j]
+                                if info:
+                                    rank_ratio = (info['rank'] - 1) / (leaderboard_music_num - 1)
+                                    text1, text2 = f"#{info['rank']}", info['value']
+                                    text_color = DIFF_COLORS[info['diff']]
+                                else:
+                                    rank_ratio = 0.5
+                                    text1, text2 = "-", None
+                                    text_color = (50, 50, 50)
+
+                                green, yellow, red = (200, 255, 200, 75), (255, 200, 150, 75), (255, 150, 150, 50)
+                                bg_color = lerp_color(green, yellow, rank_ratio) if rank_ratio <= 0.5 else lerp_color(yellow, red, rank_ratio - 0.5)
+
+                                with Frame().set_bg(FillBg(bg_color)).set_size((tr_w, tr_h)).set_content_align('c'):
+                                    with HSplit().set_content_align('b').set_item_align('b').set_sep(2):
+                                        TextBox(text1, TextStyle(DEFAULT_BOLD_FONT, 18, text_color, use_shadow=True))
+                                        if text2:
+                                            TextBox(text2, TextStyle(DEFAULT_FONT, 12, (50, 50, 50))).set_offset((0, -1))
+                        
                 # 别名
                 aliases = MusicAliasDB.get_instance().get_aliases(mid)
                 if aliases:
@@ -996,39 +1265,38 @@ async def compose_music_detail_image(ctx: SekaiHandlerContext, mid: int, title: 
                     font_size = max(10, 24 - get_str_display_length(alias_text) // 40 * 1)
                     with HSplit().set_content_align('l').set_item_align('l').set_sep(16).set_padding(16):
                         TextBox("歌曲别名", TextStyle(font=DEFAULT_HEAVY_FONT, size=24, color=(50, 50, 50)))
-                        aw = 800
-                        TextBox(alias_text, TextStyle(font=DEFAULT_FONT, size=font_size, color=(70, 70, 70)), use_real_line_count=True).set_w(aw)    
+                        TextBox(alias_text, TextStyle(font=DEFAULT_FONT, size=font_size, color=(70, 70, 70)), use_real_line_count=True).set_w(840)    
 
-                def draw_vocal():
+                def draw_vocal(width: int):
                     # 歌手
-                    with VSplit().set_content_align('lt').set_item_align('lt').set_sep(8).set_padding(16):
+                    with Flow().set_content_align('lt').set_item_align('lt').set_sep(8, 8).set_padding(16).set_w(width):
                         for caption, vocals in sorted(caption_vocals.items(), key=lambda x: len(x[1])):
                             with HSplit().set_padding(0).set_sep(4).set_content_align('c').set_item_align('c'):
                                 TextBox(caption + "  ver.", TextStyle(font=DEFAULT_HEAVY_FONT, size=24, color=(50, 50, 50)))
-                                Spacer(w=16)
+                                Spacer(w=8)
                                 for vocal in vocals:
-                                    with HSplit().set_content_align('c').set_item_align('c').set_sep(4).set_padding(4).set_bg(roundrect_bg(fill=(255, 255, 255, 150), radius=8)):
+                                    with HSplit().set_content_align('c').set_item_align('c').set_sep(2).set_padding(4) \
+                                        .set_bg(roundrect_bg(fill=(255, 255, 255, 75), radius=8)):
                                         if vocal_name := vocal.get('vocal_name'):
                                             font_size = int(24 * min(1.0, 50 / get_str_display_length(vocal_name)))
                                             TextBox(vocal['vocal_name'], TextStyle(font=DEFAULT_FONT, size=font_size, color=(70, 70, 70)))
                                         else:
                                             for img in vocal['chara_imgs']:
                                                 ImageBox(img, size=(32, 32), use_alphablend=True)
-                                    Spacer(w=8)
                 def draw_event():
                     # 活动
-                    with HSplit().set_sep(8):
-                        with VSplit().set_content_align('c').set_item_align('c').set_sep(8).set_padding(16):
+                    with HSplit().set_sep(8).set_content_align('c').set_item_align('c').set_padding(16):
+                        with VSplit().set_content_align('c').set_item_align('c').set_sep(8):
                             TextBox("关联活动", TextStyle(font=DEFAULT_HEAVY_FONT, size=24, color=(50, 50, 50)))
                             TextBox(f"ID: {event_id}", TextStyle(font=DEFAULT_FONT, size=24, color=(70, 70, 70)))
-                        ImageBox(event_banner, size=(None, 100)).set_padding(16)        
+                        ImageBox(event_banner, size=(None, 100))
 
                 if event:
                     with HSplit().set_omit_parent_bg(True).set_item_bg(roundrect_bg()).set_padding(0).set_sep(16):
-                        draw_vocal()
+                        draw_vocal(600)
                         draw_event()
                 else:
-                    draw_vocal()
+                    draw_vocal(964)
                     
     add_watermark(canvas)
     return await canvas.get_img()    
@@ -1242,28 +1510,32 @@ async def get_music_audio_mp3_path(ctx: SekaiHandlerContext, mid: int) -> Option
 
 # 获取歌曲长度并缓存
 async def get_music_audio_length(ctx: SekaiHandlerContext, mid: int) -> Optional[timedelta]:
-    music_audio_lengths = file_db.get("music_audio_lengths", {})
-    key = f"{ctx.region}_{mid}"
-    if key in music_audio_lengths:
-        return timedelta(seconds=music_audio_lengths[key])
-    path = await get_music_audio_mp3_path(ctx, mid)
-    if not path:
-        jp_ctx = SekaiHandlerContext.from_region("jp")
-        path = await get_music_audio_mp3_path(jp_ctx, mid)
-    if not path:
-        return None
-    # 获取音频长度
-    music = await ctx.md.musics.find_by_id(mid)
-    assert_and_reply(music, f'曲目 {mid} 不存在')
-    filler_sec = music.get('fillerSec', 0)
-    import pydub
-    audio = pydub.AudioSegment.from_mp3(path)
-    length = len(audio) / 1000 - filler_sec
-    music_audio_lengths[key] = length
-    file_db.set("music_audio_lengths", music_audio_lengths)
+    # 尝试从缓存获取
+    key = f"music_audio_lengths.jp_{mid}"
+    if length := file_db.get(key, None):
+        return timedelta(seconds=length)
+    # 尝试从music_meta获取
+    music_metas = await musicmetas_json.get(raise_on_no_data=False)
+    if music_metas and (item := find_by(music_metas, 'music_id', mid)):
+        length = item['music_time']
+    else:
+        # 尝试从音频文件获取
+        path = await get_music_audio_mp3_path(ctx, mid)
+        if not path:
+            jp_ctx = SekaiHandlerContext.from_region("jp")
+            path = await get_music_audio_mp3_path(jp_ctx, mid)
+        if not path:
+            return None
+        music = await ctx.md.musics.find_by_id(mid)
+        assert_and_reply(music, f'曲目 {mid} 不存在')
+        filler_sec = music.get('fillerSec', 0)
+        import pydub
+        audio = pydub.AudioSegment.from_mp3(path)
+        length = len(audio) / 1000 - filler_sec
+    file_db.set(key, length)
     return timedelta(seconds=length)
 
-# 获取谱面时长（还有bug）
+# 获取谱面时长
 async def get_music_chart_length(ctx: SekaiHandlerContext, music_id: int, difficulty: str) -> Optional[timedelta]:
     music = await ctx.md.musics.find_by_id(music_id)
     assert_and_reply(music, f'曲目 {music_id} 不存在')
@@ -1273,7 +1545,8 @@ async def get_music_chart_length(ctx: SekaiHandlerContext, music_id: int, diffic
         return None
     from src.pjsekai import scores as pjsekai_scores
     score = pjsekai_scores.Score.open(sus_path, encoding='UTF-8')
-    return timedelta(seconds=float(score.timed_events[-1][0]))
+    bar = max(note.bar for note in score.notes)
+    return timedelta(seconds=float(score.get_time(bar)))
 
 # 合成简要歌曲列表图片
 async def compose_music_brief_list_image(

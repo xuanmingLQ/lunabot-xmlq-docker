@@ -5,10 +5,11 @@ from enum import StrEnum
 
 regions_config = Config("sekai.regions")
 
+class SekaiRegionError(Exception):
+    pass
 # 服务器参数
 class RegionAttributes(StrEnum):
     ENABLE = 'enable'
-    DISABLE = 'disable'
     LOCAL = "local"
     NEED_TRANSLATE = 'need_translate'
     TRANSLATED = 'translated'
@@ -37,31 +38,28 @@ class SekaiRegion(str):
     friend_code: bool = False
     masterdata: bool = False
     asset:bool = False
-    def __new__(cls, region_id: str, *args):
+    def __new__(cls, region_id: str, **kwargs):
+        if not region_id:
+            raise SekaiRegionError("region_id不得为空")
         return super().__new__(cls, region_id)
-    def __init__(self, region_id:str, *args):
+    def __init__(self, region_id:str, **kwargs):
         super().__init__()
         self.id = region_id
-        if len(args) < 2:
-            raise RuntimeError(f"{region_id} 参数数量不足")
-        self.name = args[0]
-        if not isinstance(self.name, str):
-            raise RuntimeError("第一个参数必须为服务器中文名")
-        self.timezone = ZoneInfo(args[1])
-        
-        # 初始化其它属性
-        self.enable = True
-        for attr in RegionAttributes:
-            if attr == RegionAttributes.ENABLE:
-                self.enable = True
-                continue
-            setattr(self, attr, False)
-        
-        for arg in args[2:]:
-            if arg in RegionAttributes:
-                setattr(self, arg, True)
-            if arg == RegionAttributes.DISABLE:
-                self.enable = False
+        self.name = kwargs.get("name", None)
+        if not self.name:
+            raise SekaiRegionError(f"{self.id}没有设置中文名")
+        self.timezone = kwargs.get("timezone", None)
+        if not self.timezone:
+            raise SekaiRegionError(f"{self.id}没有设置时区")
+        self.timezone = ZoneInfo(self.timezone)
+        if kwargs.get("enable", False):
+            self.enable = True
+        options = kwargs.get("options", [])
+        if not isinstance(options, list):
+            return
+        for opt in options:
+            if opt in RegionAttributes:
+                setattr(self, opt, True)
     def hour2local(self, hour: int) -> int:
         r"""将指定区服上的小时转换为本地小时 （例如日服烤森刷新5点, 转换为本地则返回4点）"""
         if self.local:
@@ -76,7 +74,7 @@ class SekaiRegion(str):
             return dt
         return dt.replace(tzinfo=self.timezone).astimezone(LOCAL_REGION.timezone).replace(tzinfo=dt.tzinfo)
 
-REGIONS = [SekaiRegion(region_id, *args) for region_id, args in regions_config.get_all().items() if RegionAttributes.DISABLE not in args]        
+REGIONS = [SekaiRegion(region_id, **kwargs) for region_id, kwargs in regions_config.get_all().items() if kwargs.get("enable", True)]
 LOCAL_REGION: SekaiRegion
 for region in REGIONS:
     if region.local:
@@ -84,9 +82,6 @@ for region in REGIONS:
         break
 else:
     LOCAL_REGION = REGIONS[0]
-
-class SekaiRegionError(Exception):
-    pass
 
 def get_region_by_id(id:str, *condition:str|RegionAttributes)->SekaiRegion:
     r"""get_region_by_id

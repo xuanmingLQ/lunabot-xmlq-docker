@@ -343,7 +343,7 @@ def start_repeat_with_interval(
                 try:
                     if every_output:
                         logger.debug(f'开始执行 {name}')
-                    await func()
+                    await call_common_or_async(func)
                     if every_output:
                         logger.info(f'执行 {name} 成功')
                     if error_output and error_count > 0:
@@ -387,7 +387,7 @@ def start_async_task(func: Callable, logger: 'Logger', name: str, delay=None):
         await asyncio.sleep(delay)
         try:
             logger.info(f'开始异步执行 {name} 任务', flush=True)
-            await func()
+            await call_common_or_async(func)
         except Exception as e:
             logger.print_exc(f'异步执行 {name} 任务失败')
     _pending_startup_tasks.append(task)
@@ -416,6 +416,15 @@ async def _create_pending_startup_tasks():
     for task in _pending_startup_tasks:
         asyncio.create_task(task())
     _pending_startup_tasks.clear()
+
+async def call_common_or_async(func: Callable, *args, **kwargs):
+    """
+    调用一个可能是异步的函数
+    """
+    if asyncio.iscoroutinefunction(func):
+        return await func(*args, **kwargs)
+    else:
+        return func(*args, **kwargs)
 
 
 # ============================ 字符串 ============================ #
@@ -807,10 +816,12 @@ class FileDB:
         """
         assert isinstance(key, str), f'key: "{key}" 必须是字符串，当前类型: {type(key)}'
         self._ensure_load()
+        key = key.replace("\.", "&#46;")
         keys = key.split('.')
         last_dict = self.data
         last_key = keys.pop()
         for k in keys:
+            k = k.replace("&#46;", ".")
             if k not in last_dict or not isinstance(last_dict[k], dict):
                 if create_path:
                     last_dict[k] = {}
@@ -929,7 +940,7 @@ _playwright_instance: Playwright | None = None
 _browser_type: BrowserType | None = NotImplementedError
 _playwright_browser: Browser | None = None
 
-MAX_CONTEXTS = global_config.get("playwright_context_num")
+MAX_CONTEXTS = global_config.get("playwright.context_num")
 _context_semaphore = asyncio.Semaphore(MAX_CONTEXTS)
 
 class PlaywrightPage:
@@ -951,18 +962,33 @@ class PlaywrightPage:
             if _playwright_instance is None: 
                 # 启动async_playwright实例
                 _playwright_instance = await async_playwright().start()
-                _browser_type = _playwright_instance.chromium
                 utils_logger.info("初始化 Playwright 异步 API")
                 pass
-            # 清除临时文件
-            if os.system("rm -rf /tmp/rust_mozprofile*") != 0:
-                utils_logger.error(f"清空WebDriver临时文件失败")
-            #启动浏览器
-            _playwright_browser = await _browser_type.launch(
-                headless=True,
-                args=['--no-sandbox', '--disable-setuid-sandbox'] 
-            )
-            utils_logger.info(f"启动 Playwright Browser")
+            
+            # 获取配置
+            pw_cfg = global_config.get("playwright", {})
+            remote_url :str = pw_cfg.get("remote_url", "")
+            browser_type_str = pw_cfg.get("browser_type", "chromium")
+            
+            _browser_type = getattr(_playwright_instance, browser_type_str)
+
+            if remote_url:
+                utils_logger.info(f"正在连接远程 Playwright 浏览器: {remote_url}")
+                if remote_url.startswith("ws://") or remote_url.startswith("wss://"):
+                    _playwright_browser = await _browser_type.connect(remote_url, timeout=30000)
+                else:
+                    _playwright_browser = await _browser_type.connect_over_cdp(remote_url, timeout=30000)
+                utils_logger.info(f"成功连接至远程浏览器")
+            else:
+                # 清除本地临时文件
+                if os.system("rm -rf /tmp/rust_mozprofile*") != 0:
+                    utils_logger.error(f"清空WebDriver临时文件失败")
+                # 启动浏览器
+                _playwright_browser = await _browser_type.launch(
+                    headless=True,
+                    args=['--no-sandbox', '--disable-setuid-sandbox'],
+                )
+                utils_logger.info(f"启动本地 Playwright Browser")
             pass
         # 限制context的数量
         await _context_semaphore.acquire()
@@ -1009,6 +1035,8 @@ from src.draw.plot import *
 from src.draw.img_utils import *
 import ffmpeg
 
+def get_image_pixel_hash(img: Image.Image):
+    return hashlib.md5(img.tobytes()).hexdigest()
 
 def get_image_b64(image: Image.Image) -> str:
     """
@@ -1282,46 +1310,6 @@ def _shutdown_process_pools():
     ProcessPool.shutdown_all()
 
 
-class SubHelper:
-    def __init__(self, name: str, db: FileDB, logger: Logger, key_fn=None, val_fn=None):
-        self.name = name
-        self.db = db
-        self.logger = logger
-        self.key_fn = key_fn or (lambda x: str(x))
-        self.val_fn = val_fn or (lambda x: x)
-        self.key = f'{self.name}_sub_list'
-
-    def is_subbed(self, *args):
-        uid = self.key_fn(*args)
-        return uid in self.db.get(self.key, [])
-
-    def sub(self, *args):
-        uid = self.key_fn(*args)
-        lst = self.db.get(self.key, [])
-        if uid in lst:
-            return False
-        lst.append(uid)
-        self.db.set(self.key, lst)
-        self.logger.log(f'{uid}订阅{self.name}')
-        return True
-
-    def unsub(self, *args):
-        uid = self.key_fn(*args)
-        lst = self.db.get(self.key, [])
-        if uid not in lst:
-            return False
-        lst.remove(uid)
-        self.db.set(self.key, lst)
-        self.logger.log(f'{uid}取消订阅{self.name}')
-        return True
-
-    def get_all(self):
-        return [self.val_fn(item) for item in self.db.get(self.key, [])]
-
-    def clear(self):
-        self.db.delete(self.key)
-        self.logger.log(f'{self.name}清空订阅')
-
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(1), reraise=True)
 async def asend_mail(
     subject: str,
@@ -1331,8 +1319,9 @@ async def asend_mail(
     port: int,
     username: str,
     password: str,
+    from_email: str,
     logger: 'Logger',
-    use_tls: bool = True,
+    use_tls: bool,
 ):
     """
     异步发送邮件
@@ -1341,7 +1330,7 @@ async def asend_mail(
     from email.message import EmailMessage
     import aiosmtplib
     message = EmailMessage()
-    message["From"] = username
+    message["From"] = from_email
     message["To"] = recipient
     message["Subject"] = subject
     message.set_content(body)
@@ -1374,6 +1363,8 @@ async def asend_exception_mail(title: str, content: str, logger: 'Logger'):
                 port=mail_config['port'],
                 username=mail_config['user'],
                 password=mail_config['pass'],
+                from_email=mail_config.get('from', mail_config['user']),
+                use_tls=mail_config.get('use_tls', False),
                 logger=logger,
             )
         except Exception as e:

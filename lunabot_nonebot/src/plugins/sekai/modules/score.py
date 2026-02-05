@@ -3,7 +3,7 @@ from ..common import *
 from ..handler import *
 from ..asset import *
 from ..draw import *
-from .deck import musicmetas_json, BOOST_BONUS_DICT
+from .deck import BOOST_BONUS_DICT
 from .music import (
     get_music_cover_thumb, 
     search_music, 
@@ -13,6 +13,8 @@ from .music import (
     get_music_diff_level,
     is_valid_music,
     get_music_diff_info,
+    musicmetas_json,
+    get_music_leaderboard_data,
 )
 from decimal import Decimal, ROUND_DOWN
 import pandas as pd
@@ -213,6 +215,9 @@ async def compose_score_control_image(ctx: SekaiHandlerContext, target_point: in
                 TextBox(f"友情提醒：控分前请核对加成和体力设置", style3)
                 TextBox(f"特别注意核对加成不能有小数", style3)
                 TextBox(f'若有上传抓包可用"/控分组卡"加速配队', style1)
+                if target_point <= 120:
+                    TextBox(f"由于待控PT太小，候选项目较少", style3)
+                    TextBox(f"可使用\"/自定义房间控分\"获取更多控分方法", style3)
             
             # 数据
             with HSplit().set_content_align('lt').set_item_align('lt').set_sep(8).set_omit_parent_bg(True).set_item_bg(roundrect_bg()) as data_hs:
@@ -464,7 +469,7 @@ async def compose_music_board_image(
     ctx: SekaiHandlerContext, 
     live_type: str,
     target: str,
-    strategy: str,
+    skill_strategy: str,
     skills: list[float],
     power: int,
     deck_bonus: float,
@@ -477,7 +482,7 @@ async def compose_music_board_image(
     ascend: bool = False,
 ) -> Image.Image:
     assert live_type in ('auto', 'solo', 'multi')
-    assert strategy in ('max', 'min', 'avg')
+    assert skill_strategy in ('max', 'min', 'avg')
     assert target in ('score', 'pt', 'pt/time', 'tps', 'time')
     assert len(spec_mid_diffs) < page_size
     assert len(skills) == 5
@@ -490,117 +495,23 @@ async def compose_music_board_image(
         assert level_filter_op in ('<', '>', '=', '<=' ,'>=', '==')
         level_filter_level = int(level_filter.lstrip('<>='))
 
-    if strategy == 'max':
-        sorted_skills = sorted(skills, reverse=True)
-    elif strategy == 'min':
-        sorted_skills = sorted(skills)
-    else:
-        avg_skill = sum(skills) / len(skills)
-        sorted_skills = [avg_skill] * 5
-
     # 计算分数信息
-    rows: list[dict] = []
-    for meta in await musicmetas_json.get():
-        mid = meta['music_id']
-        diff = meta['difficulty']
-        music_time = meta['music_time']
-        tap_count = meta['tap_count']
-        event_rate = meta['event_rate']
-        base_score = meta['base_score']
-        base_score_auto = meta['base_score_auto']
-        skill_score_solo = meta['skill_score_solo']
-        skill_score_auto = meta['skill_score_auto']
-        skill_score_multi = meta['skill_score_multi']
-        fever_score = meta['fever_score']
-
-        if target == 'time' and diff != 'master':
-            continue
-
-        tps = tap_count / music_time
-
-        best_skill_order_solo = list(range(5))
-        best_skill_order_solo.sort(key=lambda x: skill_score_solo[x], reverse=True)
-        
-        solo_skill = 0.0
-        sorted_skill_score_solo = sorted(skill_score_solo[:5], reverse=True)
-        for i in range(5):
-            solo_skill += sorted_skill_score_solo[i] * sorted_skills[i]
-        solo_skill += skill_score_solo[5] * skills[0]
-
-        auto_skill = 0.0
-        sorted_skill_score_auto = sorted(skill_score_auto[:5], reverse=True)
-        for i in range(5):
-            auto_skill += sorted_skill_score_auto[i] * sorted_skills[i]
-        auto_skill += skill_score_auto[5] * skills[0]
-
-        multi_skill = 0.0
-        sorted_skill_score_multi = sorted(skill_score_multi[:5], reverse=True)
-        for i in range(5):
-            multi_skill += sorted_skill_score_multi[i] * sorted_skills[i]
-        multi_skill += skill_score_multi[5] * skills[0]
-
-        solo_score = base_score + solo_skill
-        auto_score = base_score_auto + auto_skill
-        multi_score = base_score + multi_skill + fever_score * 0.5 + 0.01875
-
-        solo_skill_account = solo_skill / solo_score
-        auto_skill_account = auto_skill / auto_score
-        multi_skill_account = multi_skill / multi_score
-
-        def calc_real_score_and_pt(d: dict, live_type: str, power: int):
-            active_bonus = 0.0
-            if live_type == 'multi':
-                active_bonus = 5 * 0.015 * power
-            d[f'{live_type}_real_score'] = int(d[f'{live_type}_score'] * power * 4 + active_bonus)
-
-            event_rate = d['event_rate'] / 100.0
-            deck_rate = deck_bonus / 100.0 + 1
-
-            match live_type:
-                case 'solo':
-                    base = 100 + int(d['solo_real_score'] / 20000)
-                    d['solo_pt'] = int(base * event_rate * deck_rate)
-                case 'auto':
-                    base = 100 + int(d['auto_real_score'] / 20000)
-                    d['auto_pt'] = int(base * event_rate * deck_rate)
-                case 'multi':
-                    other_score = d['multi_real_score'] * 4
-                    base = 110 + int(d['multi_real_score'] / 17000) + min(13, int(other_score / 340000))
-                    d['multi_pt'] = int(base * event_rate * deck_rate)
-
-            play_time = d['music_time'] + play_interval
-            d['play_count_per_hour'] = 60 * 60 / play_time
-            d[f'{live_type}_pt_per_hour'] = d[f'{live_type}_pt'] * d['play_count_per_hour']
-            
-        data = {
-            'music_id': mid,
-            'difficulty': diff,
-            'music_time': music_time,
-            'tps': tps,
-            'event_rate': event_rate,
-            'solo_score': solo_score,
-            'auto_score': auto_score,
-            'multi_score': multi_score,
-            'solo_skill_account': solo_skill_account,
-            'auto_skill_account': auto_skill_account,
-            'multi_skill_account': multi_skill_account,
-        }
-
-        for live_type_key in ('solo', 'auto', 'multi'):
-            calc_real_score_and_pt(data, live_type_key, power)
-
-        rows.append(data)
-
-    # 排序
-    match target:
-        case 'score':   sort_key = f"{live_type}_score"
-        case 'pt':      sort_key = f"{live_type}_pt"
-        case 'pt/time': sort_key = f"{live_type}_pt_per_hour"
-        case 'tps':     sort_key = f"tps"
-        case 'time':    sort_key = f"music_time"
-    rows.sort(key=lambda x: x[sort_key], reverse=not ascend)
-    for i, row in enumerate(rows):
-        row['rank'] = i + 1
+    keep_one_diff_per_music = (target == 'time')
+    rows = await get_music_leaderboard_data(
+        skills=skills,
+        skill_strategy=skill_strategy,
+        deck_bonus=deck_bonus,
+        play_interval=play_interval,
+        power=power,
+        keep_one_diff_per_music=keep_one_diff_per_music,
+        ascend=ascend,
+        live_type=live_type,
+        target=target,
+    )
+    for row in rows:
+        row['rank'] = row[f'{live_type}_{target}_rank']
+    if keep_one_diff_per_music:
+        rows = [r for r in rows if r['rank'] is not None]
 
     # 添加指定歌曲
     show_rows = []
@@ -675,7 +586,7 @@ async def compose_music_board_image(
             if target in ('score', 'pt', 'pt/time'):
                 if live_type != 'multi':
                     skill_text = "五张卡牌的技能: " + ' '.join([f'{s*100:.0f}' for s in skills])
-                    match strategy:
+                    match skill_strategy:
                         case "max": strategy_text = "技能顺序: 🌟最优情况"
                         case "min": strategy_text = "技能顺序: 🥀最差情况"
                         case "avg": strategy_text = "技能顺序: ⚖️平均情况"
@@ -867,6 +778,7 @@ async def _(ctx: SekaiHandlerContext):
     mids = []
     for seg in args:
         res = await search_music(ctx, seg, options=MusicSearchOptions(use_emb=False))
+        assert_and_reply(res.music, f"未找到匹配的歌曲: {seg}")
         mids.append(res.music['id'])
 
     img_cq = await get_image_cq(
@@ -941,9 +853,9 @@ async def _(ctx: SekaiHandlerContext):
     # 技能组
     args = args.replace('技能', '').replace('实效', '')
     match live_type:
-        case 'solo': skills = [1.0] * 5
+        case 'solo': skills = [1.2] * 5
         case 'multi': skills = [2.0] * 5
-        case 'auto': skills = [1.0] * 5
+        case 'auto': skills = [1.2] * 5
     args = args.strip()
     segs = args.split()
     numbers, number_segs = [], []
@@ -1048,7 +960,7 @@ async def _(ctx: SekaiHandlerContext):
                 ctx=ctx,
                 live_type=live_type,
                 target=target,
-                strategy=strategy,
+                skill_strategy=strategy,
                 skills=skills,
                 power=power,
                 deck_bonus=deck_bonus,

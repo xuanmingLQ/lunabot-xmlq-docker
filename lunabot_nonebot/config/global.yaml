@@ -2,6 +2,8 @@ log_level: "INFO"
 superuser:
   - 12345678
 
+confirm_actions_timeout_seconds: 300
+
 startup_task_delay_seconds:
   min: 0
   max: 3
@@ -58,14 +60,14 @@ cd_verbose_interval: 30   # 间隔多少秒输出一次"当前正在冷却"提�
 exception_mail:   # 发送异常消息邮件的配置
   host: "smtp.qq.com"          # 邮箱服务器地址
   port: 587                    # 邮箱服务器端口
-  user: "xxx@qq.com"      # 邮箱发送者用户名
-  pass: "xxx"     # 邮箱密码
+  user: "xxx@qq.com"           # SMTP 认证用户名
+  pass: "xxx"                  # SMTP 认证密码
+  from: "xxx@qq.com"           # 发件邮箱 (如果使用QQ邮箱则和user一致)
+  use_tls: true                # 是否使用 TLS 加密连接
   receivers:                   # 邮箱接收者列表
     - xxx@qq.com
 
-default_thread_pool_size: 8
-
-playwright_context_num: 8
+default_thread_pool_size: 4   # 默认线程池大小，较大值可能会大幅增加内存占用
 
 safety_check:
   enabled: false
@@ -88,3 +90,10 @@ painter:
   emoji:
     offset: [0, 2]
     scale: 1.1
+
+
+playwright:
+  # 如使用 Docker，请共享 data/utils/tmp/ 文件夹到与 Playwright 容器内目录一致
+  context_num: 8
+  remote_url: "" # 远程 Playwright WS 端点 (例如 "ws://localhost:3000")。留空则启动本地浏览器。
+  browser_type: "chromium" # chromium, firefox, webkit
