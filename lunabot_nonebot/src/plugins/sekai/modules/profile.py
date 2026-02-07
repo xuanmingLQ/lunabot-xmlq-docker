@@ -30,6 +30,7 @@ class PlayerAvatarInfo:
     img: Image.Image
 
 DEFAULT_DATA_MODE = 'latest'
+VALID_DATA_MODES = ['latest', 'default', 'local', 'haruki']
 
 
 @dataclass
@@ -561,6 +562,9 @@ async def get_player_avatar_info_by_basic_profile(ctx: SekaiHandlerContext, basi
 
 # 查询抓包数据获取模式
 def get_user_data_mode(ctx: SekaiHandlerContext, qid: int) -> str:
+    if ctx.data_mode_arg:
+        assert_and_reply(ctx.data_mode_arg in VALID_DATA_MODES, f"错误的抓包数据获取模式: {ctx.data_mode_arg}")
+        return ctx.data_mode_arg
     data_modes = profile_db.get("data_modes", {})
     return data_modes.get(ctx.region, {}).get(str(qid), DEFAULT_DATA_MODE)
 
@@ -588,8 +592,14 @@ async def get_detailed_profile(
     qid: int, 
     raise_exc=False, 
     mode=None, 
+<<<<<<< HEAD
     ignore_hide=False,
     filter: tuple[str]|list[str]|set[str]|None=None
+=======
+    ignore_hide=False, 
+    filter: list[str] | set[str] | None=None,
+    strict: bool=True,
+>>>>>>> origin/xmlq
 ) -> Tuple[dict, str]:
     cache_path = None
     uid = None
@@ -643,6 +653,14 @@ async def get_detailed_profile(
             raise e
         else:
             return None, get_exc_desc(e)
+
+    if strict and filter:
+        missing_keys = [k for k in filter if k not in profile]
+        if missing_keys:
+            source = profile.get('source', '?')
+            update_time = datetime.fromtimestamp(profile['upload_time'] / 1000).strftime('%m-%d %H:%M:%S')
+            raise ReplyException(f"你的{get_region_name(ctx.region)}Suite抓包数据中缺少必要的字段: {', '.join(missing_keys)}"
+                                 f" (数据来源: {source} 更新时间: {update_time})")
         
     return profile, ""
 # 获取包含了玩家详细信息的简单卡片控件所需要的filter
@@ -712,6 +730,7 @@ async def compose_profile_image(ctx: SekaiHandlerContext, basic_profile: dict, v
     detail_profile, _ = await get_detailed_profile(
         ctx, ctx.user_id, raise_exc=False, ignore_hide=True, 
         filter=['upload_time', 'userPlayerFrames'],
+        strict=False,
     )
     uid = str(basic_profile['user']['userId'])
 
@@ -1497,7 +1516,7 @@ async def _(ctx: SekaiHandlerContext):
         qid = ctx.user_id
     
     args = ctx.get_args().strip().lower()
-    assert_and_reply(args in ["default", "latest", "local", "haruki"], help_text)
+    assert_and_reply(args in VALID_DATA_MODES, help_text)
 
     if ctx.region not in data_modes:
         data_modes[ctx.region] = {}

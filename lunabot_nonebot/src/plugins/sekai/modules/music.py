@@ -22,10 +22,10 @@ from src.api.assets.music import get_music_alias
 import pandas as pd
 
 
-music_group_sub = SekaiGroupSubHelper("music", "新曲通知", get_regions(RegionAttributes.ENABLE))
-music_user_sub = SekaiUserSubHelper("music", "新曲@提醒", get_regions(RegionAttributes.ENABLE), related_group_sub=music_group_sub)
-apd_group_sub = SekaiGroupSubHelper("apd", "新APD通知", get_regions(RegionAttributes.ENABLE))
-apd_user_sub = SekaiUserSubHelper("apd", "新APD@提醒", get_regions(RegionAttributes.ENABLE), related_group_sub=apd_group_sub)
+music_group_sub = SekaiGroupSubHelper("music", "新曲通知", RegionAttributes.ENABLE)
+music_user_sub = SekaiUserSubHelper("music", "新曲@提醒", RegionAttributes.ENABLE, related_group_sub=music_group_sub)
+apd_group_sub = SekaiGroupSubHelper("apd", "新APD通知", RegionAttributes.ENABLE)
+apd_user_sub = SekaiUserSubHelper("apd", "新APD@提醒", RegionAttributes.ENABLE, related_group_sub=apd_group_sub)
 
 music_name_retriever = get_text_retriever(f"music_name") 
 

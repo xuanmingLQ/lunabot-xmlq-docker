@@ -1441,6 +1441,7 @@ async def compose_deck_recommend_image(
                     'userChallengeLiveSoloResults',
                     'userMusicResults',
                 ),
+                strict=False,
                 raise_exc=True, ignore_hide=True)
             uid = profile['userGamedata']['userId']
 

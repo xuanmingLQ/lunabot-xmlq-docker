@@ -3,6 +3,7 @@ jp:
   timezone: Asia/Tokyo  # 时区
   enable: true  # 启用这个服务器
   options:
+    - default # 默认服务器
     - need_translate # 需要翻译
     - fifth_anniversary # 已过五周年
     - mysekai # 允许烤森订阅
@@ -10,6 +11,7 @@ jp:
     - friend_code # 可以查询好友码
     - masterdata # 获取masterdata
     - asset # 获取asset
+    - snowy # snowy 允许的服务器
 
 cn:
   name: 国服 
@@ -24,6 +26,7 @@ cn:
     - bd_mysekai # 朝夕光年服不允许烤森
     - masterdata
     - asset
+    - snowy # snowy 允许的服务器
 
 tw:
   name: 台服

@@ -1,6 +1,6 @@
 from src.utils import *
 from os.path import join as pjoin
-from .regions import SekaiRegion, REGIONS, RegionAttributes, get_region_by_id, get_regions, SekaiRegionError
+from .regions import SekaiRegion, REGIONS, RegionAttributes, get_region_by_id, get_regions, DEFAULT_REGION, SekaiRegionError
 
 # ======================= 基础路径 ======================= #
 

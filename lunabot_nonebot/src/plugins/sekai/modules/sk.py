@@ -1679,7 +1679,7 @@ SK_PYBD_VERBOSE_CFG = config.item('sk.backup.pybd_verbose')
 @repeat_with_interval(SK_COMPRESS_INTERVAL_CFG, '备份榜线数据', logger)
 async def compress_ranking_data():
     # 压缩过期榜线数据库
-    for region in REGIONS:
+    for region in get_regions(RegionAttributes.ENABLE):
         ctx = SekaiHandlerContext.from_region(region)
         db_path = SEKAI_DATA_DIR + f"/db/sk_{region}/*_ranking.db"
         db_files = glob.glob(db_path)
@@ -1722,7 +1722,7 @@ async def compress_ranking_data():
 
     # 上传往期数据到百度云
     if SK_PYBD_UPLOAD_ENABLED_CFG.get():
-        for region in REGIONS:
+        for region in get_regions(RegionAttributes.ENABLE):
             src_dir = SEKAI_DATA_DIR + f"/db/sk_{region}/"
             local_dir = SEKAI_DATA_DIR + f"/tmp/sk_backup_{region}"
             remote_dir = SK_PYBD_UPLOAD_REMOTE_DIR_CFG.get() + f"/{region}"

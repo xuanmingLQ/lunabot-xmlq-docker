@@ -11,6 +11,7 @@ class SekaiRegionError(Exception):
 class RegionAttributes(StrEnum):
     ENABLE = 'enable'
     LOCAL = "local"
+    DEFAULT = "default"
     NEED_TRANSLATE = 'need_translate'
     TRANSLATED = 'translated'
     COMPACT_DATA = 'compact_data'
@@ -21,12 +22,14 @@ class RegionAttributes(StrEnum):
     FRIEND_CODE = "friend_code"
     MASTERDATA = "masterdata"
     ASSET = "asset"
+    SNOWY = "snowy"
 
 class SekaiRegion(str):
     id: str
     name: str
     timezone: ZoneInfo
     enable: bool = True
+    default: bool = False
     local: bool = False
     need_translate: bool = False
     translated: bool = False
@@ -38,6 +41,7 @@ class SekaiRegion(str):
     friend_code: bool = False
     masterdata: bool = False
     asset:bool = False
+    snowy:bool = False
     def __new__(cls, region_id: str, **kwargs):
         if not region_id:
             raise SekaiRegionError("region_id不得为空")
@@ -73,8 +77,10 @@ class SekaiRegion(str):
         if self.local:
             return dt
         return dt.replace(tzinfo=self.timezone).astimezone(LOCAL_REGION.timezone).replace(tzinfo=dt.tzinfo)
-
+# 在这里就已经排除了enable = False的服务器，其实不需要再判断是否启用
 REGIONS = [SekaiRegion(region_id, **kwargs) for region_id, kwargs in regions_config.get_all().items() if kwargs.get("enable", True)]
+
+# 设置本地服务器，是用来设置本地时区的，其实可以用系统时区
 LOCAL_REGION: SekaiRegion
 for region in REGIONS:
     if region.local:
@@ -82,6 +88,14 @@ for region in REGIONS:
         break
 else:
     LOCAL_REGION = REGIONS[0]
+# 设置默认服务器，主要是用来获取static_img的
+DEFAULT_REGION: SekaiRegion
+for region in REGIONS:
+    if region.default:
+        DEFAULT_REGION = region
+        break
+else:
+    DEFAULT_REGION = REGIONS[0]
 
 def get_region_by_id(id:str, *condition:str|RegionAttributes)->SekaiRegion:
     r"""get_region_by_id

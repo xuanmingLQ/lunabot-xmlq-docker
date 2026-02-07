@@ -2802,3 +2802,71 @@ async def _(ctx: HandlerContext):
 
     await add_need_confirm_action(ctx, clean, additional_msg=msg)
     
+
+exec_code = CmdHandler(['/exec', '/执行'], utils_logger)
+exec_code.check_superuser()
+@exec_code.handle()
+async def _(ctx: HandlerContext):
+    if not global_config.get("allow_code_exec", False):
+        return await ctx.asend_reply_msg("该功能未在配置中启用")
+    code = ctx.get_args().strip()
+    assert_and_reply(code, "请输入要运行的代码")
+    try:
+        # 将代码包装在异步函数中执行，最后一行作为返回值
+        lines = code.rstrip().split('\n')
+        if not lines:
+            result = None
+        else:
+            # 检查最后一行是否是表达式
+            # 表达式特征：不以语句关键字开头，且不是赋值语句
+            last_line = lines[-1].strip()
+            statement_keywords = ('def ', 'class ', 'if ', 'for ', 'while ', 'with ', 'try ', 'except ', 
+                                 'finally:', 'else:', 'elif ', 'import ', 'from ', 'return ', 'break ', 
+                                 'continue ', 'pass ', 'raise ', 'assert ', 'del ', 'global ', 'nonlocal ')
+            
+            # 检查是否是赋值语句（简单判断：包含 = 且不在字符串中）
+            is_assignment = False
+            if '=' in last_line:
+                # 排除 ==, !=, <=, >=, +=, -= 等情况
+                import re
+                # 查找单独的 = 号（前后不是 =）
+                if re.search(r'[^=<>!+\-*/%]=[^=]', last_line.split('#')[0]):
+                    is_assignment = True
+            
+            is_expression = (
+                last_line and 
+                not any(last_line.startswith(kw) for kw in statement_keywords) and
+                not is_assignment
+            )
+            
+            if is_expression:
+                # 最后一行是表达式，将其作为返回值
+                body_lines = lines[:-1]
+                last_expr_content = lines[-1].strip()
+                # 为所有行添加一级缩进（函数体缩进）
+                if body_lines:
+                    indented_body = '\n'.join('    ' + line for line in body_lines)
+                    wrapped_code = f'{indented_body}\n    return {last_expr_content}'
+                else:
+                    wrapped_code = f'    return {last_expr_content}'
+            else:
+                # 最后一行是语句，执行但不返回
+                wrapped_code = '\n'.join('    ' + line for line in lines)
+            
+            # 创建异步函数并执行
+            async_func_code = f'async def _exec_code_func():\n{wrapped_code}'
+            utils_logger.info(f"执行代码:\n{async_func_code}")
+            local_vars = {}
+            exec(async_func_code, globals(), local_vars)
+            result = await local_vars['_exec_code_func']()
+        
+        result = str(result)
+        OUTPUT_LIMIT = 2048
+        if len(result) > OUTPUT_LIMIT:
+            omit_len = len(result) - OUTPUT_LIMIT
+            result = result[:OUTPUT_LIMIT] + f"...(输出过长，已省略{omit_len}字符)"
+        await ctx.asend_fold_msg_adaptive(f"执行代码成功:\n{result}")
+
+    except Exception as e:
+        await ctx.asend_fold_msg_adaptive(f"执行代码失败\n{traceback.format_exc()}")
+

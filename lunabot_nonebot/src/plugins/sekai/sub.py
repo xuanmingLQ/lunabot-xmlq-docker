@@ -7,17 +7,17 @@ from .handler import *
 class SekaiGroupSubHelper:
     all_subs: List['SekaiGroupSubHelper'] = []
 
-    def __init__(self, id: str, name: str, regions: List[SekaiRegion], hide: bool = False):
+    def __init__(self, id: str, name: str, *condition:str|RegionAttributes, hide: bool = False):
         self.id = id
         self.name = name
-        self.regions = regions
+        self.regions = get_regions(*condition)
         self.hide = hide
         self.subs = {
             region: GroupSubHelper(
                 f"{name}({region.name})_群聊",
                 file_db,
                 logger,
-            ) for region in regions
+            ) for region in self.regions
         }
         SekaiGroupSubHelper.all_subs.append(self)
 
@@ -137,10 +137,10 @@ async def _(ctx: SekaiHandlerContext):
 class SekaiUserSubHelper:
     all_subs: List['SekaiUserSubHelper'] = []
 
-    def __init__(self, id: str, name: str, regions: List[SekaiRegion], related_group_sub: SekaiGroupSubHelper = None, only_one_group=False, hide=False):
+    def __init__(self, id: str, name: str, *condition:str|RegionAttributes, related_group_sub: SekaiGroupSubHelper = None, only_one_group=False, hide=False):
         self.id = id
         self.name = name
-        self.regions = regions
+        self.regions = get_regions((condition))
         self.related_group_sub = related_group_sub
         self.hide = hide
         self.subs = {
@@ -148,7 +148,7 @@ class SekaiUserSubHelper:
                 f"{name}({region.name})_用户",
                 file_db,
                 logger,
-            ) for region in regions
+            ) for region in self.regions
         }
         self.only_one_group = only_one_group
         SekaiUserSubHelper.all_subs.append(self)

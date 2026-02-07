@@ -26,7 +26,6 @@ class UserMemory:
     profile: str = ""
     recent_events: List[tuple[float, str]] = field(default_factory=list)
 
-
 @dataclass
 class SelfMemory:
     id: str
