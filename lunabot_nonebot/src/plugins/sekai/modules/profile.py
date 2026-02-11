@@ -592,14 +592,9 @@ async def get_detailed_profile(
     qid: int, 
     raise_exc=False, 
     mode=None, 
-<<<<<<< HEAD
-    ignore_hide=False,
-    filter: tuple[str]|list[str]|set[str]|None=None
-=======
     ignore_hide=False, 
     filter: list[str] | set[str] | None=None,
     strict: bool=True,
->>>>>>> origin/xmlq
 ) -> Tuple[dict, str]:
     cache_path = None
     uid = None
@@ -659,7 +654,7 @@ async def get_detailed_profile(
         if missing_keys:
             source = profile.get('source', '?')
             update_time = datetime.fromtimestamp(profile['upload_time'] / 1000).strftime('%m-%d %H:%M:%S')
-            raise ReplyException(f"你的{get_region_name(ctx.region)}Suite抓包数据中缺少必要的字段: {', '.join(missing_keys)}"
+            raise ReplyException(f"你的{ctx.region.name}Suite抓包数据中缺少必要的字段: {', '.join(missing_keys)}"
                                  f" (数据来源: {source} 更新时间: {update_time})")
         
     return profile, ""

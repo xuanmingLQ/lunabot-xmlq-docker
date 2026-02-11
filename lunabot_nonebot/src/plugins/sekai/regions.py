@@ -80,7 +80,7 @@ class SekaiRegion(str):
 # 在这里就已经排除了enable = False的服务器，其实不需要再判断是否启用
 REGIONS = [SekaiRegion(region_id, **kwargs) for region_id, kwargs in regions_config.get_all().items() if kwargs.get("enable", True)]
 
-# 设置本地服务器，是用来设置本地时区的，其实可以用系统时区
+# 设置本地服务器，是用来设置本地时区的，其实可以直接用系统时区
 LOCAL_REGION: SekaiRegion
 for region in REGIONS:
     if region.local:

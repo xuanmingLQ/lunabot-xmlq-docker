@@ -6,13 +6,8 @@ from ..draw import *
 from ..sub import SekaiUserSubHelper, SekaiGroupSubHelper
 from .resbox import get_res_box_info
 
-<<<<<<< HEAD
-vlive_group_sub = SekaiGroupSubHelper("live", "虚拟Live通知", get_regions(RegionAttributes.ENABLE))
-vlive_user_sub = SekaiUserSubHelper("live", "虚拟Live@提醒", get_regions(RegionAttributes.ENABLE), related_group_sub=vlive_group_sub)
-=======
 vlive_group_sub = SekaiGroupSubHelper("live", "虚拟Live通知", RegionAttributes.ENABLE)
 vlive_user_sub = SekaiUserSubHelper("live", "虚拟Live@提醒", RegionAttributes.ENABLE, related_group_sub=vlive_group_sub)
->>>>>>> origin/xmlq
 
 # ======================= 处理逻辑 ======================= #
 

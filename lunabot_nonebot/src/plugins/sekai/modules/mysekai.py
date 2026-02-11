@@ -28,16 +28,11 @@ from src.api.game.user import get_mysekai,get_mysekai_photo,get_mysekai_upload_t
 from src.api.subscribe.pjsk import set_msr_sub
 from ...imgtool import shrink_image
 
-<<<<<<< HEAD
 MYSEKAI_REGIONS = get_regions(RegionAttributes.MYSEKAI)
 BD_MYSEKAI_REGIONS = get_regions(RegionAttributes.MYSEKAI, RegionAttributes.BD_MYSEKAI)
 
-bd_msr_sub = SekaiGroupSubHelper("msr", "msr指令权限", get_regions(RegionAttributes.MYSEKAI, RegionAttributes.BD_MYSEKAI), hide=True)
-msr_sub = SekaiUserSubHelper("msr", "烤森资源查询自动推送", get_regions(RegionAttributes.MYSEKAI), only_one_group=True, hide=True)
-=======
-bd_msr_sub = SekaiGroupSubHelper("msr", "msr指令权限", RegionAttributes.BD_MYSEKAI)
-msr_sub = SekaiUserSubHelper("msr", "烤森资源查询自动推送", RegionAttributes.MYSEKAI, only_one_group=True)
->>>>>>> origin/xmlq
+bd_msr_sub = SekaiGroupSubHelper("msr", "msr指令权限", RegionAttributes.MYSEKAI, RegionAttributes.BD_MYSEKAI, hide=True)
+msr_sub = SekaiUserSubHelper("msr", "烤森资源查询自动推送", RegionAttributes.MYSEKAI, only_one_group=True, hide=True)
 
 class MsrIdNotMatchException(ReplyException):
     pass
@@ -2242,7 +2237,7 @@ async def _(ctx: SekaiHandlerContext):
 # MSR自动推送 & MSR订阅更新 关了吧
 # @repeat_with_interval(config.get('mysekai.msr_push_interval_seconds'), 'MSR自动推送', logger)
 async def msr_auto_push():
-    for region in get_regions(RegionAttributes.MYSEKAI):
+    for region in MYSEKAI_REGIONS:
         region_name = region.name
         ctx = SekaiHandlerContext.from_region(region)
         if region not in msr_sub.regions: continue

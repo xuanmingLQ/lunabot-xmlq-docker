@@ -38,16 +38,6 @@ scipy
 sekai-deck-recommend-cpp
 svgwrite
 setproctitle
-<<<<<<< HEAD
-tenacity
-tencentcloud-sdk-python
-uvloop
-wordcloud>=1.9.4
-yt-dlp>=2025.12.8
-zhconv
-zhon
-zstandard
-=======
 bypy
 colour-science
 opencv-python-headless
@@ -64,4 +54,3 @@ mistune
 psutil<7.0.0
 
 # easyocr   # optional for llm.translator
->>>>>>> origin/xmlq

@@ -297,7 +297,6 @@ async def get_cnskp_msg(ctx: SekaiHandlerContext, args: str) -> str:
 #     msg += "数据来源：SnowyBot"
 #     return await ctx.asend_msg(msg)
 
-<<<<<<< HEAD
 
 UNIT_NAMES_TO_TAB_ID = {
     'light_sound': 'tab-L/n',
@@ -307,13 +306,11 @@ UNIT_NAMES_TO_TAB_ID = {
     'school_refusal': 'tab-25时',
     'piapro': 'tab-VS',
 }
-=======
 SNOWY_ALLOW_REGIONS = get_regions(RegionAttributes.SNOWY)
->>>>>>> origin/xmlq
 
 # 获取个人信息截图
 async def get_sekaiprofile_image(region: str, uid: str, unit:str|None = None) -> Image.Image:
-    assert_and_reply(region in get_regions(RegionAttributes.ENABLE), f"不支持的服务器 {region}，当前支持的服务器：{"，".join(r.name for r in get_regions(RegionAttributes.ENABLE))}")
+    assert_and_reply(region in SNOWY_ALLOW_REGIONS, f"不支持的服务器 {region}，当前支持的服务器：{"，".join(r.name for r in SNOWY_ALLOW_REGIONS)}")
     base_url:str = snowy_config.get("sekaiprofile.base_url")
     assert_and_reply(base_url, "缺少sekaiprofile.base_url")
     token:str = snowy_config.get("sekaiprofile.token")

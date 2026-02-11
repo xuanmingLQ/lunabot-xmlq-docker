@@ -140,7 +140,7 @@ class SekaiUserSubHelper:
     def __init__(self, id: str, name: str, *condition:str|RegionAttributes, related_group_sub: SekaiGroupSubHelper = None, only_one_group=False, hide=False):
         self.id = id
         self.name = name
-        self.regions = get_regions((condition))
+        self.regions = get_regions(*condition)
         self.related_group_sub = related_group_sub
         self.hide = hide
         self.subs = {
