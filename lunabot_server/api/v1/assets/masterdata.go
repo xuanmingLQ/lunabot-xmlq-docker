@@ -75,7 +75,7 @@ func (*MasterdataApi) GetVersion(c *gin.Context) {
 // @Router /masterdata/download [get]
 func (*MasterdataApi) DownloadMasterdata(c *gin.Context) {
 	var requestMasterdata request.Masterdata
-	if err := c.ShouldBindQuery(&requestMasterdata); err != nil {
+	if err := requestMasterdata.BindQuery(c); err != nil {
 		global.LOG.Error("参数校验不通过！", zap.Error(err))
 		response.FailWithMessage("参数校验不通过", c)
 		return
