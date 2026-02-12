@@ -10,12 +10,26 @@ def get_masterdata_version(*region:str):
     )
 
 def download_masterdata(region:str,source:str, *name:str):
-    return server(
-        path="/masterdata/download",
-        method="get",
-        query={
-            "region":region,
-            "source":source,
-            "name":name
-        }
-    )
+    if len(name) > 1:
+        resp = {}
+        for n in name:
+            resp[n]= server(
+                        path="/masterdata/download",
+                        method="get",
+                        query={
+                            "region":region,
+                            "source":source,
+                            "name":n
+                        }
+                    )
+        return resp
+    else:
+        return server(
+            path="/masterdata/download",
+            method="get",
+            query={
+                "region":region,
+                "source":source,
+                "name":name
+            }
+        )
