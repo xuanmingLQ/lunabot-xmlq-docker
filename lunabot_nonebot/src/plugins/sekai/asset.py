@@ -61,7 +61,7 @@ class RegionMasterDbManager:
                 version_data = version_datas[source_name]
                 source_versions.append(RegionMasterDbSource(
                     name = source_name, 
-                    version = str(get_multi_keys(version_data, ['cdnVersion', 'data_version', 'dataVersion'])),
+                    version = str(get_multi_keys(version_data, ['data_version', 'dataVersion'])),
                     asset_version = get_multi_keys(version_data, ['asset_version', 'assetVersion'])
                 ))
         except Exception as e:

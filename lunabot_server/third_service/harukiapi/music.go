@@ -18,7 +18,7 @@ type MusicService struct{}
 
 func (*MusicService) GetMusicAlias(ctx context.Context, MusicIds []string) (v map[string]interface{}, err error) {
 	if global.CONFIG.HarukiApi.MusicAlias == "" {
-		return nil, errors.New("没有配置Haruki Sekai Api Music Alias Base Url")
+		return nil, errors.New("没有配置Haruki Api Music Alias Url")
 	}
 	v = make(map[string]interface{}, len(MusicIds))
 	// 用来防止并发写入的锁

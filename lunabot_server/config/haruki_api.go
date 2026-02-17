@@ -4,7 +4,7 @@ type HarukiApi struct {
 	Token         string          `mapstructure:"token" json:"token" yaml:"token"`
 	SuiteApi      HarukiSuiteApi  `mapstructure:"suite-api" json:"suite-api" yaml:"suite-api"`
 	PublicApi     HarukiPublicApi `mapstructure:"public-api" json:"public-api" yaml:"public-api"`
-	MusicAlias    string          `mapstructure:"base-url" json:"base-url" yaml:"base-url"`
+	MusicAlias    string          `mapstructure:"music-alias" json:"music-alias" yaml:"music-alias"`
 	BatchInterval int             `mapstructure:"batch-interval" json:"batch-interval" yaml:"batch-interval"`
 	BatchSize     int             `mapstructure:"batch-size" json:"batch-size" yaml:"batch-size"`
 	Timeout       int             `mapstructure:"timeout" json:"timeout" yaml:"timeout"`

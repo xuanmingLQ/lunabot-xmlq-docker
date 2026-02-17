@@ -686,6 +686,8 @@ async def _(ctx: HandlerContext):
         assert_and_reply(text, "请输入要翻译的文本，或回复要翻译的文本/图片")
         return await ctx.asend_fold_msg_adaptive(await translate_text(text, cache=False))
 
+    raise ReplyException("图片翻译器已废弃，请直接使用聊天功能翻译图片")
+
     args = ctx.get_args().strip()
     debug = False
     if 'debug' in args:

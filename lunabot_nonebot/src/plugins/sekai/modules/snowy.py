@@ -73,8 +73,8 @@ def get_board_score_str(score: int, width: int = None) -> str:
     return ret
 
 # 获取有数据的活动列表
-async def get_sekairanking_events(region: str)->Tuple[Any, datetime]:
-    assert_and_reply(region == "cn", "只能获取简中服活动列表")
+async def get_sekairanking_events(region: SekaiRegion)->Tuple[Any, datetime]:
+    assert_and_reply(region.snowy, f"只能获取{get_regions(RegionAttributes.SNOWY)}活动列表")
     # 先从缓存中获取
     duration = snowy_config.get("sekairanking.cache_duration", 300)
     try:
@@ -95,12 +95,12 @@ async def get_sekairanking_events(region: str)->Tuple[Any, datetime]:
     return events_cache['data'], events_cache['update_time']
 
 # 获取最新的活动id
-async def get_sekairanking_latest_event_id(region: str) -> int:
+async def get_sekairanking_latest_event_id(region: SekaiRegion) -> int:
     events, _  = await get_sekairanking_events(region)
     return events[0]['id']
 
 # 获取预测数据
-async def get_sekairanking_predictions(region: str, event_id: int) -> Tuple[Dict, datetime]:
+async def get_sekairanking_predictions(region: SekaiRegion, event_id: int) -> Tuple[Dict, datetime]:
     events, _ = await get_sekairanking_events(region)
     assert_and_reply(any(event['id'] == event_id for event in events), f"活动：{event_id}的数据不存在，请使用\"/cnske\"来查找有数据的活动")
     # 先从缓存中获取
@@ -123,7 +123,7 @@ async def get_sekairanking_predictions(region: str, event_id: int) -> Tuple[Dict
     return predictions_cache['data'], predictions_cache['update_time']
 
 # 获取历史预测时间序列
-async def get_sekairanking_history(region: str, event_id: int, rank: int) -> Tuple[Dict, datetime]:
+async def get_sekairanking_history(region: SekaiRegion, event_id: int, rank: int) -> Tuple[Dict, datetime]:
     assert_and_reply(rank in ALL_SEKAIRANKING_RANKS, f"不支持的排名：{rank}\n只能获取排名为：\n{', '.join(str(r) for r in ALL_SEKAIRANKING_RANKS)}\n的预测数据")
     events, _ = await get_sekairanking_events(region)
     assert_and_reply(any(event['id'] == event_id for event in events), f"活动：{event_id}的数据不存在，请使用\"/cnske\"来查找有数据的活动")
@@ -229,7 +229,7 @@ async def compose_history_image(predictions_history: dict, start_time: datetime,
 
 # 返回预测数据的回复信息
 async def get_cnskp_msg(ctx: SekaiHandlerContext, args: str) -> str:
-    assert_and_reply(ctx.region == "cn", "只能获取简中服预测数据")
+    assert_and_reply(ctx.region.snowy, f"只能获取{get_regions(RegionAttributes.SNOWY)}预测数据")
     event_id = None
     rank = None
     for arg in args.split():
@@ -309,8 +309,8 @@ UNIT_NAMES_TO_TAB_ID = {
 SNOWY_ALLOW_REGIONS = get_regions(RegionAttributes.SNOWY)
 
 # 获取个人信息截图
-async def get_sekaiprofile_image(region: str, uid: str, unit:str|None = None) -> Image.Image:
-    assert_and_reply(region in SNOWY_ALLOW_REGIONS, f"不支持的服务器 {region}，当前支持的服务器：{"，".join(r.name for r in SNOWY_ALLOW_REGIONS)}")
+async def get_sekaiprofile_image(region: SekaiRegion, uid: str, unit: str) -> Image.Image:
+    assert_and_reply(region.snowy, f"不支持的服务器 {region}，当前支持的服务器：{SNOWY_ALLOW_REGIONS}")
     base_url:str = snowy_config.get("sekaiprofile.base_url")
     assert_and_reply(base_url, "缺少sekaiprofile.base_url")
     token:str = snowy_config.get("sekaiprofile.token")
