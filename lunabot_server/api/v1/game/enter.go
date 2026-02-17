@@ -31,7 +31,7 @@ func resultError(err error) string {
 		return fmt.Sprintf("%d: %s", hae.Status, hae.Message)
 	}
 	if he, ok := err.(*utils.HttpError); ok {
-		return fmt.Sprintf("%d: %s", he.Status, he.Detail)
+		return fmt.Sprintf("%d: %s", he.StatusCode, he.Detail)
 	}
 	return err.Error()
 }

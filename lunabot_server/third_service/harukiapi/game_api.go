@@ -18,6 +18,12 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	DataTypeNone = iota
+	DataTypeJson
+	DataTypeBytes
+)
+
 type GameApiService struct{}
 
 func (hrk *GameApiService) GetProfile(ctx context.Context, Region string, UserId string) (v interface{}, err error) {
@@ -35,7 +41,7 @@ func (hrk *GameApiService) GetProfile(ctx context.Context, Region string, UserId
 	}
 	v, err = hrk.get(ctx,
 		Url,
-		utils.DataTypeJson,
+		DataTypeJson,
 	)
 	////
 	return
@@ -70,7 +76,7 @@ func (hrk *GameApiService) GetRanking(ctx context.Context, Region, EventId strin
 	}
 	vBorder, err := hrk.get(ctx,
 		Url,
-		utils.DataTypeJson,
+		DataTypeJson,
 	)
 	if err != nil {
 		return
@@ -82,7 +88,7 @@ func (hrk *GameApiService) GetRanking(ctx context.Context, Region, EventId strin
 	}
 	vTop100, err := hrk.get(ctx,
 		Url,
-		utils.DataTypeJson,
+		DataTypeJson,
 	)
 	if err != nil {
 		return
@@ -157,7 +163,7 @@ func (hrk *GameApiService) GetSuite(ctx context.Context, Region, UserId string, 
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(global.CONFIG.HarukiApi.Timeout)*time.Second)
 	v, err := hrk.get(ctx,
 		URL.String(),
-		utils.DataTypeJson,
+		DataTypeJson,
 	)
 	cancel()
 	result, ok := v.(map[string]interface{})
@@ -248,7 +254,7 @@ func (hrk *GameApiService) GetMysekai(ctx context.Context, Region, UserId string
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(global.CONFIG.HarukiApi.Timeout)*time.Second)
 	v, err := hrk.get(ctx,
 		URL.String(),
-		utils.DataTypeJson,
+		DataTypeJson,
 	)
 	cancel()
 	result, ok := v.(map[string]interface{})
@@ -298,16 +304,27 @@ func (*GameApiService) request(ctx context.Context, Method string, Url string, D
 	}
 	req.Header.Set("X-Haruki-Sekai-Token", global.CONFIG.HarukiApi.Token)
 	req.Header.Set("Connection", "keep-alive")
-	v, err = utils.HttpRequest(req,
-		DataType,
-	)
-
-	if err != nil && errors.Is(err, utils.HTTP_ERROR) {
-		httpError := err.(*utils.HttpError)
+	switch DataType {
+	case DataTypeNone:
+		break
+	case DataTypeJson, DataTypeBytes:
+		req.Header.Set("accept-encoding", "zstd, br, gzip")
+	default:
+		err = fmt.Errorf("未知的数据类型：%d", DataType)
+	}
+	httpResult := utils.HttpRequest(req)
+	if httpResult.Error != nil {
 		var harukiError HarukiApiError
-		_ = json.Unmarshal([]byte(httpError.Detail), &harukiError)
-		httpError.Url = Url
+		_ = json.Unmarshal([]byte(httpResult.Error.Detail), &harukiError)
 		err = &harukiError
+	}
+	switch DataType {
+	case DataTypeNone:
+		v = httpResult.Resp
+	case DataTypeBytes:
+		v, err = httpResult.Bytes()
+	case DataTypeJson:
+		err = httpResult.Json(&v)
 	}
 	return
 }

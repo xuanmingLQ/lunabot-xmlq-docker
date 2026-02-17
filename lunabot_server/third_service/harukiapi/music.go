@@ -54,17 +54,21 @@ func (*MusicService) GetMusicAlias(ctx context.Context, MusicIds []string) (v ma
 			}
 			req.Header.Set("Accept-Language", "en")
 			req.Header.Set("Connection", "keep-alive")
-			result, err := utils.HttpRequest(
-				req,
-				utils.DataTypeJson,
-			)
+			req.Header.Set("accept-encoding", "zstd, br, gzip")
+			httpResult := utils.HttpRequest(req)
+			if httpResult.Error != nil {
+				global.LOG.Error(fmt.Sprintf("获取歌曲 %s 的别名失败", MusicId), zap.Error(httpResult.Error))
+				return
+			}
+			var alias interface{}
+			err = httpResult.Json(&alias)
 			if err != nil {
-				global.LOG.Error(fmt.Sprintf("获取歌曲 %s 的别名失败", MusicId), zap.Error(err))
+				global.LOG.Error(fmt.Sprintf("json解析歌曲 %s 的别名失败", MusicId), zap.Error(err))
 				return
 			}
 			// 防止并发写入
 			mu.Lock()
-			v[MusicId] = result
+			v[MusicId] = alias
 			mu.Unlock()
 		}(musicId)
 		// 防止同时发出过多请求

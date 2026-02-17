@@ -53,11 +53,8 @@ func (uni *AssetsService) DownloadAssets(ctx context.Context, BaseUrl, Path stri
 	}
 	req.Header.Set("Accept-Language", "en")
 	req.Header.Set("Connection", "keep-alive")
-	result, err := utils.HttpRequest(req,
-		utils.DataTypeNone,
-	)
-	if err == nil {
-		resp = result.(*http.Response)
-	}
-	return
+	// 需要将响应体返回上去，此处不设置accept-encoding
+	// 这里的httpResult.Body将会和resp.Body是同一个，会由上面Close
+	httpResult := utils.HttpRequest(req)
+	return httpResult.Resp, httpResult.Error
 }
