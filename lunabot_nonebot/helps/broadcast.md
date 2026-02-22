@@ -63,6 +63,7 @@
 🛠️ `/bc send`
 > 发送广播消息到指定的广播组
 
+- `/bc send all Hello World!` 发送消息 "Hello World!" 到所有群聊
 - `/bc send ABC Hello World!` 发送消息 "Hello World!" 到广播组ABC
 - `(回复一条消息) /bc send ABC` 回复的消息将被发送到广播组ABC
 

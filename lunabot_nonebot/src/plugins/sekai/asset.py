@@ -17,8 +17,8 @@ DEFAULT_SORT_KEYS = []
 
 def get_multi_keys(data: dict, keys: List[Any]):
     for key in keys:
-        if key in data:
-            return data[key]
+        if (val:= data.get(key, None)):
+            return val
     raise KeyError(f"None of the keys {keys} found in dict")
 
 def get_version_order(version: str) -> tuple:
@@ -61,7 +61,7 @@ class RegionMasterDbManager:
                 version_data = version_datas[source_name]
                 source_versions.append(RegionMasterDbSource(
                     name = source_name, 
-                    version = str(get_multi_keys(version_data, ['data_version', 'dataVersion'])),
+                    version = str(get_multi_keys(version_data, ['cdnVersion', 'data_version', 'dataVersion'])),
                     asset_version = get_multi_keys(version_data, ['asset_version', 'assetVersion'])
                 ))
         except Exception as e:
@@ -1038,19 +1038,24 @@ class StaticImageRes:
 # ================================ 网页Json资源 ================================ #
 
 class WebJsonRes:
-    def __init__(self, name: str, url: str, update_interval: timedelta = None):
+    def __init__(self, name: str, url: str, update_interval: timedelta = None, file_cache: bool = True):
         self.name = name
         self.url = url
         self.update_interval = update_interval
         self.data: Any = None
         self.update_time: datetime = None
         self.hash: str = None
+        self.file_cache_path: str | None = None
+        if file_cache:
+            self.file_cache_path = f"{SEKAI_DATA_DIR}/webjson/{self.name}.json"
     
     async def _download(self):
         self.data = await download_json(self.url)
         self.hash = get_md5(dumps_json(self.data, indent=False).encode('utf-8'))
         self.update_time = datetime.now()
         logger.info(f"网页Json资源 [{self.name}] 更新成功")
+        if self.file_cache_path:
+            dump_json(self.data, self.file_cache_path, indent=False)
     
     async def _check_before_get(self, timeout: float, raise_on_no_data: bool):
         if not self.data or not self.update_interval or datetime.now() - self.update_time > self.update_interval:
@@ -1059,6 +1064,10 @@ class WebJsonRes:
             except Exception as e:
                 if self.data:
                     logger.warning(f"更新网页Json资源 [{self.name}] 失败: {get_exc_desc(e)}，继续使用旧数据")
+                elif self.file_cache_path:
+                    self.data = load_json(self.file_cache_path)
+                    self.hash = get_md5(dumps_json(self.data, indent=False).encode('utf-8'))
+                    logger.warning(f"更新网页Json资源 [{self.name}] 失败: {get_exc_desc(e)}，从本地文件缓存中加载")
                 else:
                     if raise_on_no_data:
                         raise Exception(f"更新网页Json资源 [{self.name}] 失败: {get_exc_desc(e)}")

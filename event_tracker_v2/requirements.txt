@@ -1,0 +1,8 @@
+aiohttp
+uvloop
+orjson
+pyyaml
+setproctitle
+aiosqlite
+sqlalchemy[asyncio]
+tenacity

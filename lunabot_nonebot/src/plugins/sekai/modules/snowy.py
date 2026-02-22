@@ -297,7 +297,6 @@ async def get_cnskp_msg(ctx: SekaiHandlerContext, args: str) -> str:
 #     msg += "数据来源：SnowyBot"
 #     return await ctx.asend_msg(msg)
 
-
 UNIT_NAMES_TO_TAB_ID = {
     'light_sound': 'tab-L/n',
     'idol': 'tab-MMJ',

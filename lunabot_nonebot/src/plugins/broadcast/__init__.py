@@ -154,36 +154,52 @@ async def _(ctx: HandlerContext):
         name = ctx.get_args().strip()
     else:
         name, smsg = ctx.get_args().strip().split(None, 1)
+
+
     assert_and_reply(name, '请输入要发送的广播名称')
-    assert_and_reply(name in bc, f'没有名为 {name} 的广播')
     assert_and_reply(smsg, '请输入要发送的消息')
-    sended_list = []
-    failed_list = []
+
+    if name == 'all':
+        guids = [f'group_{g["group_id"]}' for g in await get_all_bot_group_list()]
+    else:
+        assert_and_reply(name in bc, f'没有名为 {name} 的广播')
+        guids = bc[name]
+
+    group_num = len([g for g in guids if g.startswith('group_')])
+    user_num = len([g for g in guids if g.startswith('private_')])
+
     if reply_msg:
         smsg.insert(0, {'type': 'text', 'data': {'text': f'【广播组{name}的消息】\n'}})
     else:
         smsg = f"【广播组{name}的消息】\n{smsg.strip()}"
-    for guid in bc[name]:
-        try:
-            await send_msg_to(ctx, guid, smsg)
-            sended_list.append(guid)
-        except Exception as e:
-            logger.error(f"发送广播 {name} 失败: {e}")
-            failed_list.append((guid, str(e)))
+    msg_to_send = smsg
 
-    if reply_msg:
-        msg = f"在广播组{name}中广播回复的消息\n"
-    else:
-        msg = f"在广播组{name}中广播消息\n"
-    if sended_list:
-        msg += f"以下发送成功:\n"
-        for guid in sended_list:
-            msg += f"{await get_desc_by_guid(ctx, guid)}\n"
-    if failed_list:
-        msg += f"以下发送失败:\n"
-        for guid, err in failed_list:
-            msg += f"{await get_desc_by_guid(ctx, guid)}: {err}\n"
-    return await ctx.asend_reply_msg(msg.strip())
+    async def send(ctx: HandlerContext):
+        sended_list = []
+        failed_list = []
+        for guid in guids:
+            try:
+                await send_msg_to(ctx, guid, msg_to_send)
+                sended_list.append(guid)
+            except Exception as e:
+                logger.error(f"发送广播 {name} 失败: {e}")
+                failed_list.append((guid, str(e)))
+
+        if reply_msg:
+            msg = f"在广播组{name}中广播回复的消息\n"
+        else:
+            msg = f"在广播组{name}中广播消息\n"
+        if sended_list:
+            msg += f"以下发送成功:\n"
+            for guid in sended_list:
+                msg += f"{await get_desc_by_guid(ctx, guid)}\n"
+        if failed_list:
+            msg += f"以下发送失败:\n"
+            for guid, err in failed_list:
+                msg += f"{await get_desc_by_guid(ctx, guid)}: {err}\n"
+        return await ctx.asend_reply_msg(msg.strip())
+
+    await add_need_confirm_action(ctx, send, additional_msg=f"即将在广播组{name}({group_num}个群聊, {user_num}个用户)中广播消息:\n{smsg}\n")
 
 
 bc_listsub = CmdHandler(['/broadcast listsub', '/bc listsub'], logger)
